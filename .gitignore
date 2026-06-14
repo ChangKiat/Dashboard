@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Environment and local config
+.env
+finance.config.json
+
+# Build output
+dist-client/
+dist-server/
+
+# Logs and debug
+*.log
+npm-debug.log*
+.cursor/
+
+# Vite
+.vite/
+
+# OS and editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.sw?
+
+# TypeScript
+*.tsbuildinfo
