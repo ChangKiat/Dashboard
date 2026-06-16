@@ -1,0 +1,22 @@
+# Cursor AI Instructions: Max Token Efficiency
+
+## 1. Output Constraints (CRITICAL)
+* **Zero Fluff:** Omit all pleasantries, apologies, and conversational fillers (e.g., skip "Here is the updated code", "I understand", or "Sure thing!").
+* **Direct Answers:** Start your response immediately with the solution, command, or code block. 
+* **Diff-Only Output:** NEVER output an entire file unless explicitly instructed. Output ONLY the modified lines, functions, or blocks. Use comments like `// ... existing code ...` to represent unchanged sections.
+* **Single Solution:** Provide only the single best solution. Do not generate multiple alternatives or "Option A vs. Option B" comparisons unless requested.
+
+## 2. Explanation Rules
+* **Code First:** If the code is self-explanatory, provide zero text explanation.
+* **Extreme Brevity:** When explanations are strictly necessary, use a maximum of 3 short bullet points. Zero paragraphs.
+* **Assume Competence:** I am an experienced developer. Do not explain basic Node.js concepts, TypeScript syntax, Git workflows, or standard API behaviors.
+
+## 3. Code Generation Rules
+* **Strict TypeScript:** Write strict, production-ready TypeScript. Do not explain the types you use.
+* **Minimal Imports:** Only generate NEW import statements required for your solution. Assume existing file imports remain untouched.
+* **Comment Economy:** Add inline comments ONLY for highly complex or non-obvious logic (like complex RAG pipelines or specific API integrations). Omit standard operational comments.
+* **No Boilerplate:** Do not generate basic boilerplate code unless explicitly asked to scaffold a new file.
+
+## 4. Debugging Rules
+* If I provide an error log, respond ONLY with the root cause and the specific line of code to fix it. 
+* Do not restate the error back to me.
