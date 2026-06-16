@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 
 import type { ExpenseTransaction } from '../api';
 import { deleteExpenseTransaction, updateExpenseTransaction } from '../api';
+import { usePagination } from '../hooks/usePagination';
 import RecordModal from './RecordModal';
 import RowActions from './RowActions';
+import TablePagination from './TablePagination';
 
 interface Props {
     entries: ExpenseTransaction[];
@@ -36,6 +38,8 @@ export default function ExpenseTransactionsTable({
             (e) => e.category.toLowerCase() === categoryFilter.toLowerCase()
         );
     }, [entries, categoryFilter]);
+
+    const { page, setPage, pageItems, totalPages, totalItems } = usePagination(filteredEntries);
 
     useEffect(() => {
         setCategoryFilter('all');
@@ -117,36 +121,44 @@ export default function ExpenseTransactionsTable({
             {filteredEntries.length === 0 ? (
                 <p className="muted">No transactions match this category.</p>
             ) : (
-                <div className="table-scroll">
-                    <table className="data-table">
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>Category</th>
-                                <th>Amount</th>
-                                <th>Description</th>
-                                <th className="actions-col">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredEntries.map((entry) => (
-                                <tr key={entry.id}>
-                                    <td>{entry.date}</td>
-                                    <td>{entry.category}</td>
-                                    <td>{formatAmount(entry.amount)}</td>
-                                    <td className="notes-cell">{entry.description}</td>
-                                    <td>
-                                        <RowActions
-                                            onEdit={() => openEdit(entry)}
-                                            onDelete={() => handleDelete(entry)}
-                                            deleteLabel="this transaction"
-                                        />
-                                    </td>
+                <>
+                    <div className="table-scroll">
+                        <table className="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Category</th>
+                                    <th>Amount</th>
+                                    <th>Description</th>
+                                    <th className="actions-col">Actions</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
+                            </thead>
+                            <tbody>
+                                {pageItems.map((entry) => (
+                                    <tr key={entry.id}>
+                                        <td>{entry.date}</td>
+                                        <td>{entry.category}</td>
+                                        <td>{formatAmount(entry.amount)}</td>
+                                        <td className="notes-cell">{entry.description}</td>
+                                        <td>
+                                            <RowActions
+                                                onEdit={() => openEdit(entry)}
+                                                onDelete={() => handleDelete(entry)}
+                                                deleteLabel="this transaction"
+                                            />
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    <TablePagination
+                        page={page}
+                        totalPages={totalPages}
+                        totalItems={totalItems}
+                        onPageChange={setPage}
+                    />
+                </>
             )}
             <RecordModal
                 title="Edit transaction"

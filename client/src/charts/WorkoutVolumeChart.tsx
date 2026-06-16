@@ -2,35 +2,36 @@ import {
     Bar,
     BarChart,
     CartesianGrid,
+    Legend,
     ResponsiveContainer,
     Tooltip,
     XAxis,
     YAxis,
 } from 'recharts';
 
+interface DataPoint {
+    date: string;
+    sessions: number;
+    sets: number;
+}
+
 interface Props {
-    data: { date: string; value: number }[];
-    color?: string;
-    valueFormatter?: (v: number) => string;
-    label?: string;
-    height?: number | `${number}%`;
+    data: DataPoint[];
 }
 
 function shortDate(date: string) {
     return date.slice(5);
 }
 
-export default function DailyBarChart({
-    data,
-    color = '#60a5fa',
-    valueFormatter = (v) => String(v),
-    label = 'Value',
-    height = 280,
-}: Props) {
+export default function WorkoutVolumeChart({ data }: Props) {
     const chartData = data.map((d) => ({ ...d, shortDate: shortDate(d.date) }));
 
+    if (chartData.length === 0) {
+        return <p className="empty-chart">No workout data in this range.</p>;
+    }
+
     return (
-        <ResponsiveContainer width="100%" height={height}>
+        <ResponsiveContainer width="100%" height={280}>
             <BarChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2a2f3a" />
                 <XAxis
@@ -46,12 +47,11 @@ export default function DailyBarChart({
                         borderRadius: 8,
                     }}
                     labelStyle={{ color: '#e8eaed' }}
-                    formatter={(value: number) => [valueFormatter(value), label]}
-                    labelFormatter={(_, payload) =>
-                        payload?.[0]?.payload?.date ?? ''
-                    }
+                    labelFormatter={(_, payload) => payload?.[0]?.payload?.date ?? ''}
                 />
-                <Bar dataKey="value" fill={color} radius={[4, 4, 0, 0]} />
+                <Legend wrapperStyle={{ fontSize: 12, color: '#9aa0a6' }} />
+                <Bar dataKey="sessions" fill="#a78bfa" radius={[4, 4, 0, 0]} name="Sessions" />
+                <Bar dataKey="sets" fill="#60a5fa" radius={[4, 4, 0, 0]} name="Sets" />
             </BarChart>
         </ResponsiveContainer>
     );

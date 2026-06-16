@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import type { MealEntry } from '../api';
 import { deleteMeal, updateMeal } from '../api';
+import { usePagination } from '../hooks/usePagination';
 import {
     formatCell,
     parseOptionalNumber,
@@ -9,15 +10,22 @@ import {
 } from '../utils/tableFormat';
 import RecordModal from './RecordModal';
 import RowActions from './RowActions';
+import TablePagination from './TablePagination';
 
 interface Props {
     entries: MealEntry[];
     onChanged: () => void;
+    compact?: boolean;
 }
 
 const UNCATEGORIZED_FILTER = '__uncategorized__';
 
-export default function MealHistoryTable({ entries, onChanged }: Props) {
+function formatMealSummary(entry: MealEntry): string {
+    const cal = entry.calories != null ? `${entry.calories} kcal` : '— kcal';
+    return `${cal} · ${entry.proteinG}g protein`;
+}
+
+export default function MealHistoryTable({ entries, onChanged, compact = false }: Props) {
     const [mealTypeFilter, setMealTypeFilter] = useState('all');
     const [editing, setEditing] = useState<MealEntry | null>(null);
     const [form, setForm] = useState({
@@ -52,6 +60,8 @@ export default function MealHistoryTable({ entries, onChanged }: Props) {
         }
         return entries.filter((e) => e.mealType === mealTypeFilter);
     }, [entries, mealTypeFilter]);
+
+    const { page, setPage, pageItems, totalPages, totalItems } = usePagination(filteredEntries);
 
     useEffect(() => {
         setMealTypeFilter('all');
@@ -119,7 +129,124 @@ export default function MealHistoryTable({ entries, onChanged }: Props) {
     };
 
     if (entries.length === 0) {
-        return <p className="muted">No meals logged in this range.</p>;
+        return <p className="muted">{compact ? 'No meals logged this day.' : 'No meals logged in this range.'}</p>;
+    }
+
+    const displayEntries = compact ? filteredEntries : pageItems;
+
+    const editModal = (
+        <RecordModal
+            title="Edit meal"
+            open={editing != null}
+            saving={saving}
+            error={modalError}
+            onClose={closeEdit}
+            onSave={handleSave}
+        >
+            <div className="form-field">
+                <label htmlFor="meal-date">Date</label>
+                <input
+                    id="meal-date"
+                    type="date"
+                    value={form.date}
+                    onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+                />
+            </div>
+            <div className="form-field">
+                <label htmlFor="meal-type">Meal type</label>
+                <input
+                    id="meal-type"
+                    type="text"
+                    placeholder="e.g. breakfast, lunch"
+                    value={form.mealType}
+                    onChange={(e) => setForm((f) => ({ ...f, mealType: e.target.value }))}
+                />
+            </div>
+            <div className="form-field">
+                <label htmlFor="meal-description">Description</label>
+                <input
+                    id="meal-description"
+                    type="text"
+                    value={form.description}
+                    onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                />
+            </div>
+            <div className="form-field">
+                <label htmlFor="meal-protein">Protein (g)</label>
+                <input
+                    id="meal-protein"
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={form.proteinG}
+                    onChange={(e) => setForm((f) => ({ ...f, proteinG: e.target.value }))}
+                />
+            </div>
+            <div className="form-field">
+                <label htmlFor="meal-carbs">Carbs (g)</label>
+                <input
+                    id="meal-carbs"
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={form.carbsG}
+                    onChange={(e) => setForm((f) => ({ ...f, carbsG: e.target.value }))}
+                />
+            </div>
+            <div className="form-field">
+                <label htmlFor="meal-fat">Fat (g)</label>
+                <input
+                    id="meal-fat"
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={form.fatG}
+                    onChange={(e) => setForm((f) => ({ ...f, fatG: e.target.value }))}
+                />
+            </div>
+            <div className="form-field">
+                <label htmlFor="meal-calories">Calories</label>
+                <input
+                    id="meal-calories"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={form.calories}
+                    onChange={(e) => setForm((f) => ({ ...f, calories: e.target.value }))}
+                />
+            </div>
+        </RecordModal>
+    );
+
+    if (compact) {
+        if (filteredEntries.length === 0) {
+            return <p className="muted">No meals match this type.</p>;
+        }
+
+        return (
+            <>
+                {actionError && <p className="error">{actionError}</p>}
+                <ul className="day-entry-list">
+                    {displayEntries.map((entry) => (
+                        <li key={entry.id} className="day-entry-card">
+                            <div className="day-entry-main">
+                                <span className="day-entry-title">{entry.description}</span>
+                                <span className="day-entry-sub">
+                                    {entry.mealType ? `${entry.mealType} · ` : ''}
+                                    {formatMealSummary(entry)}
+                                </span>
+                            </div>
+                            <RowActions
+                                onEdit={() => openEdit(entry)}
+                                onDelete={() => handleDelete(entry)}
+                                deleteLabel={`"${entry.description}"`}
+                            />
+                        </li>
+                    ))}
+                </ul>
+                {editModal}
+            </>
+        );
     }
 
     return (
@@ -147,125 +274,53 @@ export default function MealHistoryTable({ entries, onChanged }: Props) {
                 {filteredEntries.length === 0 ? (
                     <p className="muted">No meals match this type.</p>
                 ) : (
-                    <div className="table-scroll">
-                        <table className="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Date</th>
-                                    <th>Type</th>
-                                    <th>Description</th>
-                                    <th>Protein (g)</th>
-                                    <th>Carbs (g)</th>
-                                    <th>Fat (g)</th>
-                                    <th>Calories</th>
-                                    <th className="actions-col">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {filteredEntries.map((entry) => (
-                                    <tr key={entry.id}>
-                                        <td>{entry.date}</td>
-                                        <td>{formatCell(entry.mealType)}</td>
-                                        <td>{entry.description}</td>
-                                        <td>{formatCell(entry.proteinG)}</td>
-                                        <td>{formatCell(entry.carbsG)}</td>
-                                        <td>{formatCell(entry.fatG)}</td>
-                                        <td>{formatCell(entry.calories)}</td>
-                                        <td>
-                                            <RowActions
-                                                onEdit={() => openEdit(entry)}
-                                                onDelete={() => handleDelete(entry)}
-                                                deleteLabel={`"${entry.description}"`}
-                                            />
-                                        </td>
+                    <>
+                        <div className="table-scroll">
+                            <table className="data-table data-table--meals">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                        <th>Protein (g)</th>
+                                        <th className="col-carbs">Carbs (g)</th>
+                                        <th className="col-fat">Fat (g)</th>
+                                        <th>Calories</th>
+                                        <th className="actions-col">Actions</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                                </thead>
+                                <tbody>
+                                    {pageItems.map((entry) => (
+                                        <tr key={entry.id}>
+                                            <td>{entry.date}</td>
+                                            <td>{formatCell(entry.mealType)}</td>
+                                            <td>{entry.description}</td>
+                                            <td>{formatCell(entry.proteinG)}</td>
+                                            <td className="col-carbs">{formatCell(entry.carbsG)}</td>
+                                            <td className="col-fat">{formatCell(entry.fatG)}</td>
+                                            <td>{formatCell(entry.calories)}</td>
+                                            <td>
+                                                <RowActions
+                                                    onEdit={() => openEdit(entry)}
+                                                    onDelete={() => handleDelete(entry)}
+                                                    deleteLabel={`"${entry.description}"`}
+                                                />
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        <TablePagination
+                            page={page}
+                            totalPages={totalPages}
+                            totalItems={totalItems}
+                            onPageChange={setPage}
+                        />
+                    </>
                 )}
             </div>
-            <RecordModal
-                title="Edit meal"
-                open={editing != null}
-                saving={saving}
-                error={modalError}
-                onClose={closeEdit}
-                onSave={handleSave}
-            >
-                <div className="form-field">
-                    <label htmlFor="meal-date">Date</label>
-                    <input
-                        id="meal-date"
-                        type="date"
-                        value={form.date}
-                        onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
-                    />
-                </div>
-                <div className="form-field">
-                    <label htmlFor="meal-type">Meal type</label>
-                    <input
-                        id="meal-type"
-                        type="text"
-                        placeholder="e.g. breakfast, lunch"
-                        value={form.mealType}
-                        onChange={(e) => setForm((f) => ({ ...f, mealType: e.target.value }))}
-                    />
-                </div>
-                <div className="form-field">
-                    <label htmlFor="meal-description">Description</label>
-                    <input
-                        id="meal-description"
-                        type="text"
-                        value={form.description}
-                        onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                    />
-                </div>
-                <div className="form-field">
-                    <label htmlFor="meal-protein">Protein (g)</label>
-                    <input
-                        id="meal-protein"
-                        type="number"
-                        min="0"
-                        step="0.1"
-                        value={form.proteinG}
-                        onChange={(e) => setForm((f) => ({ ...f, proteinG: e.target.value }))}
-                    />
-                </div>
-                <div className="form-field">
-                    <label htmlFor="meal-carbs">Carbs (g)</label>
-                    <input
-                        id="meal-carbs"
-                        type="number"
-                        min="0"
-                        step="0.1"
-                        value={form.carbsG}
-                        onChange={(e) => setForm((f) => ({ ...f, carbsG: e.target.value }))}
-                    />
-                </div>
-                <div className="form-field">
-                    <label htmlFor="meal-fat">Fat (g)</label>
-                    <input
-                        id="meal-fat"
-                        type="number"
-                        min="0"
-                        step="0.1"
-                        value={form.fatG}
-                        onChange={(e) => setForm((f) => ({ ...f, fatG: e.target.value }))}
-                    />
-                </div>
-                <div className="form-field">
-                    <label htmlFor="meal-calories">Calories</label>
-                    <input
-                        id="meal-calories"
-                        type="number"
-                        min="0"
-                        step="1"
-                        value={form.calories}
-                        onChange={(e) => setForm((f) => ({ ...f, calories: e.target.value }))}
-                    />
-                </div>
-            </RecordModal>
+            {editModal}
         </>
     );
 }

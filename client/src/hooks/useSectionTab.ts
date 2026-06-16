@@ -1,14 +1,17 @@
 import { useCallback, useState } from 'react';
 
-export type TabId = 'expenses' | 'workouts' | 'meals';
+export type TabId = 'expenses' | 'health';
 
 const STORAGE_KEY = 'dashboard-active-tab';
 
-const VALID_TABS: TabId[] = ['expenses', 'workouts', 'meals'];
+const VALID_TABS: TabId[] = ['expenses', 'health'];
 
 function readStoredTab(): TabId {
     try {
         const stored = sessionStorage.getItem(STORAGE_KEY);
+        if (stored === 'workouts' || stored === 'meals') {
+            return 'health';
+        }
         if (stored && VALID_TABS.includes(stored as TabId)) {
             return stored as TabId;
         }
@@ -20,14 +23,12 @@ function readStoredTab(): TabId {
 
 export const TAB_LABELS: Record<TabId, string> = {
     expenses: 'Expenses',
-    workouts: 'Workouts',
-    meals: 'Meals',
+    health: 'Health',
 };
 
 export const TAB_SUBTITLES: Record<TabId, string> = {
     expenses: 'Monthly budget overview',
-    workouts: 'Workout sessions',
-    meals: 'Meal macros',
+    health: 'Workouts & meals',
 };
 
 export function useSectionTab() {

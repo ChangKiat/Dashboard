@@ -2,8 +2,10 @@ import { useState } from 'react';
 
 import type { FixedExpenseConfig } from '../api';
 import { deleteFixedExpense, updateFixedExpense } from '../api';
+import { usePagination } from '../hooks/usePagination';
 import RecordModal from './RecordModal';
 import RowActions from './RowActions';
+import TablePagination from './TablePagination';
 
 interface Props {
     rows: FixedExpenseConfig[];
@@ -12,6 +14,7 @@ interface Props {
 }
 
 export default function FixedExpensesTable({ rows, formatAmount, onChanged }: Props) {
+    const { page, setPage, pageItems, totalPages, totalItems } = usePagination(rows);
     const [editing, setEditing] = useState<FixedExpenseConfig | null>(null);
     const [form, setForm] = useState({
         description: '',
@@ -112,7 +115,7 @@ export default function FixedExpensesTable({ rows, formatAmount, onChanged }: Pr
                                 </td>
                             </tr>
                         ) : (
-                            rows.map((row) => (
+                            pageItems.map((row) => (
                                 <tr key={row.id}>
                                     <td>{row.description}</td>
                                     <td>{row.category}</td>
@@ -131,6 +134,12 @@ export default function FixedExpensesTable({ rows, formatAmount, onChanged }: Pr
                     </tbody>
                 </table>
             </div>
+            <TablePagination
+                page={page}
+                totalPages={totalPages}
+                totalItems={totalItems}
+                onPageChange={setPage}
+            />
             <RecordModal
                 title="Edit fixed expense"
                 open={editing != null}

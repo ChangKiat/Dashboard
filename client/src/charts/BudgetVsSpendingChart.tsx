@@ -9,6 +9,7 @@ import {
     XAxis,
     YAxis,
 } from 'recharts';
+import { getBudgetStatus } from '../utils/budgetStatus';
 
 interface Row {
     category: string;
@@ -21,15 +22,25 @@ interface Props {
     valueFormatter?: (v: number) => string;
 }
 
+const SPENDING_COLORS = {
+    ok: '#34d399',
+    warning: '#fbbf24',
+    over: '#f87171',
+} as const;
+
 export default function BudgetVsSpendingChart({
     rows,
     valueFormatter = (v) => String(v),
 }: Props) {
-    const data = rows.map((row) => ({
-        category: row.category,
-        budget: row.monthlyBudget,
-        spending: row.spending,
-    }));
+    const data = rows.map((row) => {
+        const status = getBudgetStatus(row.spending, row.monthlyBudget);
+        return {
+            category: row.category,
+            budget: row.monthlyBudget,
+            spending: row.spending,
+            spendingColor: SPENDING_COLORS[status],
+        };
+    });
 
     if (data.length === 0) {
         return <p className="empty-chart">No budget categories configured.</p>;
@@ -67,9 +78,23 @@ export default function BudgetVsSpendingChart({
                 <Line
                     type="monotone"
                     dataKey="spending"
-                    stroke="#f87171"
+                    stroke="#6b7280"
                     strokeWidth={2}
-                    dot={{ fill: '#f87171', r: 4 }}
+                    dot={(props) => {
+                        const { cx, cy, payload } = props;
+                        if (cx == null || cy == null) return null;
+                        const color = payload?.spendingColor ?? SPENDING_COLORS.ok;
+                        return (
+                            <circle
+                                key={`dot-${payload?.category}`}
+                                cx={cx}
+                                cy={cy}
+                                r={5}
+                                fill={color}
+                                stroke={color}
+                            />
+                        );
+                    }}
                     name="spending"
                 />
             </ComposedChart>

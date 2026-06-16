@@ -1,18 +1,14 @@
 import { useEffect, useState } from 'react';
 import { fetchHealth } from './api';
-import DateRangePicker from './components/DateRangePicker';
 import ExpensesSection from './components/ExpensesSection';
+import HealthSection from './components/HealthSection';
 import MonthPicker from './components/MonthPicker';
-import NutritionSection from './components/NutritionSection';
 import SectionTabs from './components/SectionTabs';
-import WorkoutsSection from './components/WorkoutsSection';
-import { useDateRange } from './hooks/useDateRange';
 import { useMonth } from './hooks/useMonth';
 import { TAB_SUBTITLES, useSectionTab } from './hooks/useSectionTab';
 import './App.css';
 
 export default function App() {
-    const { range, preset, setPreset, setCustom } = useDateRange('30d');
     const { month, setMonth } = useMonth();
     const { activeTab, setActiveTab } = useSectionTab();
     const [health, setHealth] = useState<{ ok: boolean; database: string; telegramUser: string } | null>(null);
@@ -35,17 +31,7 @@ export default function App() {
                     <p className="subtitle">{TAB_SUBTITLES[activeTab]}</p>
                 </div>
                 <div className="header-controls">
-                    {activeTab === 'expenses' ? (
-                        <MonthPicker month={month} onChange={setMonth} />
-                    ) : (
-                        <DateRangePicker
-                            preset={preset}
-                            start={range.start}
-                            end={range.end}
-                            onPresetChange={setPreset}
-                            onCustomChange={setCustom}
-                        />
-                    )}
+                    <MonthPicker month={month} onChange={setMonth} />
                     <SectionTabs active={activeTab} onChange={setActiveTab} />
                 </div>
             </header>
@@ -59,8 +45,7 @@ export default function App() {
 
             <main className="main">
                 {activeTab === 'expenses' && <ExpensesSection month={month} />}
-                {activeTab === 'workouts' && <WorkoutsSection range={range} />}
-                {activeTab === 'meals' && <NutritionSection range={range} />}
+                {activeTab === 'health' && <HealthSection month={month} />}
             </main>
         </div>
     );
