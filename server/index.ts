@@ -5,6 +5,7 @@ config({ path: resolve(__dirname, '../.env') });
 
 import cors from 'cors';
 import express from 'express';
+import { loadExpenseCategories } from '../../AI Agent/src/config/expenseCategories';
 import expensesRouter from './routes/expenses';
 import workoutsRouter from './routes/workouts';
 import nutritionRouter from './routes/nutrition';
@@ -29,16 +30,23 @@ app.use('/api/expenses', expensesRouter);
 app.use('/api/workouts', workoutsRouter);
 app.use('/api/nutrition', nutritionRouter);
 
-const server = app.listen(PORT, () => {
-    console.log(`Dashboard API running at http://localhost:${PORT}`);
-});
+loadExpenseCategories()
+    .then(() => {
+        const server = app.listen(PORT, () => {
+            console.log(`Dashboard API running at http://localhost:${PORT}`);
+        });
 
-server.on('error', (err: NodeJS.ErrnoException) => {
-    if (err.code === 'EADDRINUSE') {
-        console.error(
-            `Port ${PORT} is already in use by another process. Stop the old Dashboard API (e.g. prior npm run dev) and restart.`
-        );
+        server.on('error', (err: NodeJS.ErrnoException) => {
+            if (err.code === 'EADDRINUSE') {
+                console.error(
+                    `Port ${PORT} is already in use by another process. Stop the old Dashboard API (e.g. prior npm run dev) and restart.`
+                );
+                process.exit(1);
+            }
+            throw err;
+        });
+    })
+    .catch((err) => {
+        console.error('Failed to load expense categories:', err);
         process.exit(1);
-    }
-    throw err;
-});
+    });

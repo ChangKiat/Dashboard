@@ -2,21 +2,23 @@ import { useEffect, useMemo, useState } from 'react';
 
 import type { ExpenseTransaction } from '../api';
 import { deleteExpenseTransaction, updateExpenseTransaction } from '../api';
+import { buildExpenseCategoryOptions } from '../utils/expenseCategories';
 import { usePagination } from '../hooks/usePagination';
+import ExpenseCategorySelect from './ExpenseCategorySelect';
 import RecordModal from './RecordModal';
 import RowActions from './RowActions';
 import TablePagination from './TablePagination';
 
 interface Props {
     entries: ExpenseTransaction[];
-    categories: string[];
+    variableCategories: string[];
     formatAmount: (amount: number) => string;
     onChanged: () => void;
 }
 
 export default function ExpenseTransactionsTable({
     entries,
-    categories,
+    variableCategories,
     formatAmount,
     onChanged,
 }: Props) {
@@ -27,10 +29,10 @@ export default function ExpenseTransactionsTable({
     const [modalError, setModalError] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
 
-    const categoryOptions = useMemo(() => {
-        const fromEntries = entries.map((e) => e.category);
-        return [...new Set([...categories, ...fromEntries])].sort();
-    }, [categories, entries]);
+    const categoryOptions = useMemo(
+        () => buildExpenseCategoryOptions(variableCategories, entries.map((e) => e.category)),
+        [variableCategories, entries]
+    );
 
     const filteredEntries = useMemo(() => {
         if (categoryFilter === 'all') return entries;
@@ -179,17 +181,13 @@ export default function ExpenseTransactionsTable({
                 </div>
                 <div className="form-field">
                     <label htmlFor="tx-category">Category</label>
-                    <select
+                    <ExpenseCategorySelect
                         id="tx-category"
                         value={form.category}
-                        onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-                    >
-                        {categoryOptions.map((cat) => (
-                            <option key={cat} value={cat}>
-                                {cat}
-                            </option>
-                        ))}
-                    </select>
+                        variableCategories={variableCategories}
+                        usedCategories={entries.map((e) => e.category)}
+                        onChange={(category) => setForm((f) => ({ ...f, category }))}
+                    />
                 </div>
                 <div className="form-field">
                     <label htmlFor="tx-amount">Amount</label>

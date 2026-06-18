@@ -5,34 +5,16 @@ Charts for daily expenses, workouts, and meal macros. Reads data from your [AI A
 ## Setup
 
 1. Install dependencies:
-
-   ```bash
+  ```bash
    npm install
-   ```
-
+  ```
 2. Copy environment variables:
-
-   ```bash
+  ```bash
    cp .env.example .env
-   ```
-
+  ```
 3. Fill in `.env`:
-   - `DATABASE_URL` — copy from your AI Agent `.env`
-   - `TELEGRAM_USER_ID` — your Telegram user ID (`ctx.from.id` from the bot)
-
-4. Copy and edit the finance config:
-
-   ```bash
-   cp finance.config.example.json finance.config.json
-   ```
-
-   Set `salaryAfterTax` and per-category `monthlyBudget` values in `finance.config.json`.
-
-   To find your Telegram user ID, send a message to your bot and check logs, or run in Supabase:
-
-   ```sql
-   SELECT DISTINCT telegram_user_id FROM workouts LIMIT 5;
-   ```
+  - `DATABASE_URL` — copy from your AI Agent `.env`
+  - `TELEGRAM_USER_ID` — your Telegram user ID (`ctx.from.id` from the bot)
 
 ## Run (development)
 
@@ -49,31 +31,33 @@ npm run dev:server   # http://localhost:3001
 npm run dev:client   # http://localhost:5173 (proxies /api to server)
 ```
 
-Open http://localhost:5173
+Open [http://localhost:5173](http://localhost:5173)
 
 ## API endpoints
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/health` | Config status |
-| `GET /api/expenses/daily?start=&end=` | Daily spending series |
-| `GET /api/expenses/categories?start=&end=` | Category breakdown |
-| `GET /api/expenses/overview?month=` | Monthly budget overview (tables, charts, totals) |
-| `GET /api/expenses/transactions?month=` | Transaction log for the selected month |
-| `PATCH /api/expenses/transactions/:id` | Update a variable expense transaction |
-| `DELETE /api/expenses/transactions/:id` | Delete a variable expense transaction |
-| `GET /api/expenses/fixed` | Active fixed/recurring expenses |
-| `PATCH /api/expenses/fixed/:id` | Update a fixed expense |
-| `DELETE /api/expenses/fixed/:id` | Deactivate a fixed expense |
-| `GET /api/workouts/daily?start=&end=` | Sessions and sets per day |
-| `GET /api/workouts/exercises?start=&end=` | Top exercises and weight trend |
-| `GET /api/workouts/prs` | All-time personal records (max weight per exercise) |
-| `GET /api/workouts/history?start=&end=` | Detailed workout log for date range |
-| `PATCH /api/workouts/:id` | Update a workout entry |
-| `DELETE /api/workouts/:id` | Delete a workout entry |
-| `GET /api/nutrition/daily?start=&end=` | Daily macros vs targets |
-| `GET /api/nutrition/meals?start=&end=` | Meal log for date range |
-| `PATCH /api/nutrition/meals/:id` | Update a meal entry |
-| `DELETE /api/nutrition/meals/:id` | Delete a meal entry |
+
+| Endpoint                                   | Description                                         |
+| ------------------------------------------ | --------------------------------------------------- |
+| `GET /api/health`                          | Config status                                       |
+| `GET /api/expenses/daily?start=&end=`      | Daily spending series                               |
+| `GET /api/expenses/categories?start=&end=` | Category breakdown                                  |
+| `GET /api/expenses/overview?month=`        | Monthly budget overview (tables, charts, totals)    |
+| `GET /api/expenses/transactions?month=`    | Transaction log for the selected month              |
+| `PATCH /api/expenses/transactions/:id`     | Update a variable expense transaction               |
+| `DELETE /api/expenses/transactions/:id`    | Delete a variable expense transaction               |
+| `GET /api/expenses/fixed`                  | Active fixed/recurring expenses                     |
+| `PATCH /api/expenses/fixed/:id`            | Update a fixed expense                              |
+| `DELETE /api/expenses/fixed/:id`           | Deactivate a fixed expense                          |
+| `GET /api/workouts/daily?start=&end=`      | Sessions and sets per day                           |
+| `GET /api/workouts/exercises?start=&end=`  | Top exercises and weight trend                      |
+| `GET /api/workouts/prs`                    | All-time personal records (max weight per exercise) |
+| `GET /api/workouts/history?start=&end=`    | Detailed workout log for date range                 |
+| `PATCH /api/workouts/:id`                  | Update a workout entry                              |
+| `DELETE /api/workouts/:id`                 | Delete a workout entry                              |
+| `GET /api/nutrition/daily?start=&end=`     | Daily macros vs targets                             |
+| `GET /api/nutrition/meals?start=&end=`     | Meal log for date range                             |
+| `PATCH /api/nutrition/meals/:id`           | Update a meal entry                                 |
+| `DELETE /api/nutrition/meals/:id`          | Delete a meal entry                                 |
+
 
 Date params use `YYYY-MM-DD`. Defaults to the last 30 days (Asia/Kuala_Lumpur).

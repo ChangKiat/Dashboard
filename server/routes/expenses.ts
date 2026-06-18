@@ -16,7 +16,9 @@ import {
     groupExpensesByDate,
     groupFixedExpensesByCategory,
 } from '../aggregators';
-import { loadFinanceConfig } from '../financeConfig';
+import { loadExpenseCategories } from '../../../AI Agent/src/config/expenseCategories';
+import { getSalaryAfterTax } from '../../../AI Agent/src/services/financeSettings';
+import { getTelegramUserId } from '../telegramUser';
 import {
     isDayOfMonth,
     isNonEmptyString,
@@ -30,12 +32,15 @@ const router = Router();
 router.get('/overview', async (req, res) => {
     try {
         const { month, start, end } = parseMonth(req.query.month as string | undefined);
-        const config = loadFinanceConfig();
+        const [categories, salaryAfterTax] = await Promise.all([
+            loadExpenseCategories(),
+            getSalaryAfterTax(getTelegramUserId()),
+        ]);
         const summary = await getSpendingSummary(undefined, undefined, start, end);
         const fixedRows = await getActiveFixedExpenses();
 
-        const variable = config.variableCategories.map(({ category, monthlyBudget }) => {
-            const spending = summary.breakdown[category.toLowerCase()] ?? 0;
+        const variable = categories.map(({ category, monthlyBudget }) => {
+            const spending = summary.breakdown[category] ?? 0;
             return {
                 category,
                 monthlyBudget,
@@ -56,12 +61,12 @@ router.get('/overview', async (req, res) => {
 
         res.json({
             month,
-            salaryAfterTax: config.salaryAfterTax,
+            salaryAfterTax,
             variable,
             fixed,
             totals: {
                 fixExpensesTotal,
-                amountCanUse: config.salaryAfterTax - fixExpensesTotal,
+                amountCanUse: salaryAfterTax - fixExpensesTotal,
                 budget,
                 actualSpend,
             },

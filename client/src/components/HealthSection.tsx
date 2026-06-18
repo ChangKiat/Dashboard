@@ -34,9 +34,7 @@ export default function HealthSection({ month }: Props) {
     const [nutritionSeries, setNutritionSeries] = useState<NutritionDailyPoint[]>([]);
 
     const [totalSessions, setTotalSessions] = useState(0);
-    const [totalSets, setTotalSets] = useState(0);
     const [mostTrained, setMostTrained] = useState<string | null>(null);
-    const [heaviestPr, setHeaviestPr] = useState<PersonalRecord | null>(null);
     const [volumeData, setVolumeData] = useState<{ date: string; sessions: number; sets: number }[]>([]);
     const [topExercises, setTopExercises] = useState<{ exercise: string; count: number }[]>([]);
     const [weightTrend, setWeightTrend] = useState<
@@ -72,9 +70,7 @@ export default function HealthSection({ month }: Props) {
         });
 
         setTotalSessions(dailyRes.totalSessions);
-        setTotalSets(dailyRes.totalSets);
         setMostTrained(exRes.mostTrained);
-        setHeaviestPr(prsRes.heaviest);
         setVolumeData(
             dailyRes.series.map((d) => ({
                 date: d.date,
@@ -120,10 +116,7 @@ export default function HealthSection({ month }: Props) {
         });
     }, [loadData]);
 
-    const heaviestLabel = useMemo(() => {
-        if (!heaviestPr) return '—';
-        return `${heaviestPr.exercise} · ${heaviestPr.weightKg} kg`;
-    }, [heaviestPr]);
+
 
     if (loading) {
         return (
@@ -167,8 +160,6 @@ export default function HealthSection({ month }: Props) {
 
                 <div className="health-summary-row summary-row">
                     <SummaryCard label="Total sessions" value={String(totalSessions)} />
-                    <SummaryCard label="Total sets" value={String(totalSets)} />
-                    <SummaryCard label="Heaviest PR" value={heaviestLabel} sub="All-time" />
                     <SummaryCard label="Most trained" value={mostTrained ?? '—'} />
                     <SummaryCard
                         label="Avg daily calories"

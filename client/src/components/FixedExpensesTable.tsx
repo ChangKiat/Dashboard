@@ -3,17 +3,19 @@ import { useState } from 'react';
 import type { FixedExpenseConfig } from '../api';
 import { deleteFixedExpense, updateFixedExpense } from '../api';
 import { usePagination } from '../hooks/usePagination';
+import ExpenseCategorySelect from './ExpenseCategorySelect';
 import RecordModal from './RecordModal';
 import RowActions from './RowActions';
 import TablePagination from './TablePagination';
 
 interface Props {
     rows: FixedExpenseConfig[];
+    variableCategories: string[];
     formatAmount: (amount: number) => string;
     onChanged: () => void;
 }
 
-export default function FixedExpensesTable({ rows, formatAmount, onChanged }: Props) {
+export default function FixedExpensesTable({ rows, variableCategories, formatAmount, onChanged }: Props) {
     const { page, setPage, pageItems, totalPages, totalItems } = usePagination(rows);
     const [editing, setEditing] = useState<FixedExpenseConfig | null>(null);
     const [form, setForm] = useState({
@@ -159,11 +161,12 @@ export default function FixedExpensesTable({ rows, formatAmount, onChanged }: Pr
                 </div>
                 <div className="form-field">
                     <label htmlFor="fx-category">Category</label>
-                    <input
+                    <ExpenseCategorySelect
                         id="fx-category"
-                        type="text"
                         value={form.category}
-                        onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+                        variableCategories={variableCategories}
+                        usedCategories={rows.map((r) => r.category)}
+                        onChange={(category) => setForm((f) => ({ ...f, category }))}
                     />
                 </div>
                 <div className="form-field">
