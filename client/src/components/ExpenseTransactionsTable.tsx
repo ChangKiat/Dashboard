@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 
 import type { ExpenseTransaction } from '../api';
 import { deleteExpenseTransaction, updateExpenseTransaction } from '../api';
-import { buildExpenseCategoryOptions } from '../utils/expenseCategories';
 import { usePagination } from '../hooks/usePagination';
 import ExpenseCategorySelect from './ExpenseCategorySelect';
 import RecordModal from './RecordModal';
 import RowActions from './RowActions';
 import TablePagination from './TablePagination';
+
+const DAY_PAGE_SIZE = 5;
 
 interface Props {
     entries: ExpenseTransaction[];
@@ -22,30 +23,15 @@ export default function ExpenseTransactionsTable({
     formatAmount,
     onChanged,
 }: Props) {
-    const [categoryFilter, setCategoryFilter] = useState('all');
     const [editing, setEditing] = useState<ExpenseTransaction | null>(null);
     const [form, setForm] = useState({ date: '', category: '', amount: '', description: '' });
     const [saving, setSaving] = useState(false);
     const [modalError, setModalError] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
 
-    const categoryOptions = useMemo(
-        () => buildExpenseCategoryOptions(variableCategories, entries.map((e) => e.category)),
-        [variableCategories, entries]
-    );
-
-    const filteredEntries = useMemo(() => {
-        if (categoryFilter === 'all') return entries;
-        return entries.filter(
-            (e) => e.category.toLowerCase() === categoryFilter.toLowerCase()
-        );
-    }, [entries, categoryFilter]);
-
-    const { page, setPage, pageItems, totalPages, totalItems } = usePagination(filteredEntries);
-
-    useEffect(() => {
-        setCategoryFilter('all');
-    }, [entries]);
+    const { page, setPage, pageItems, totalPages, totalItems } = usePagination(entries, {
+        pageSize: DAY_PAGE_SIZE,
+    });
 
     const openEdit = (entry: ExpenseTransaction) => {
         setEditing(entry);
@@ -98,118 +84,90 @@ export default function ExpenseTransactionsTable({
         }
     };
 
+    const editModal = (
+        <RecordModal
+            title="Edit transaction"
+            open={editing != null}
+            saving={saving}
+            error={modalError}
+            onClose={closeEdit}
+            onSave={handleSave}
+        >
+            <div className="form-field">
+                <label htmlFor="tx-date">Date</label>
+                <input
+                    id="tx-date"
+                    type="date"
+                    value={form.date}
+                    onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+                />
+            </div>
+            <div className="form-field">
+                <label htmlFor="tx-category">Category</label>
+                <ExpenseCategorySelect
+                    id="tx-category"
+                    value={form.category}
+                    variableCategories={variableCategories}
+                    usedCategories={entries.map((e) => e.category)}
+                    onChange={(category) => setForm((f) => ({ ...f, category }))}
+                />
+            </div>
+            <div className="form-field">
+                <label htmlFor="tx-amount">Amount</label>
+                <input
+                    id="tx-amount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={form.amount}
+                    onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+                />
+            </div>
+            <div className="form-field">
+                <label htmlFor="tx-description">Description</label>
+                <input
+                    id="tx-description"
+                    type="text"
+                    value={form.description}
+                    onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                />
+            </div>
+        </RecordModal>
+    );
+
     if (entries.length === 0) {
-        return <p className="muted">No transactions logged in this month.</p>;
+        return <p className="muted">No transactions logged this day.</p>;
     }
 
     return (
         <>
             {actionError && <p className="error">{actionError}</p>}
-            <div className="transactions-toolbar">
-                <select
-                    className="chart-select"
-                    value={categoryFilter}
-                    onChange={(e) => setCategoryFilter(e.target.value)}
-                    aria-label="Filter by category"
-                >
-                    <option value="all">All categories</option>
-                    {categoryOptions.map((category) => (
-                        <option key={category} value={category}>
-                            {category}
-                        </option>
-                    ))}
-                </select>
-            </div>
-            {filteredEntries.length === 0 ? (
-                <p className="muted">No transactions match this category.</p>
-            ) : (
-                <>
-                    <div className="table-scroll">
-                        <table className="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Date</th>
-                                    <th>Category</th>
-                                    <th>Amount</th>
-                                    <th>Description</th>
-                                    <th className="actions-col">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {pageItems.map((entry) => (
-                                    <tr key={entry.id}>
-                                        <td>{entry.date}</td>
-                                        <td>{entry.category}</td>
-                                        <td>{formatAmount(entry.amount)}</td>
-                                        <td className="notes-cell">{entry.description}</td>
-                                        <td>
-                                            <RowActions
-                                                onEdit={() => openEdit(entry)}
-                                                onDelete={() => handleDelete(entry)}
-                                                deleteLabel="this transaction"
-                                            />
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                    <TablePagination
-                        page={page}
-                        totalPages={totalPages}
-                        totalItems={totalItems}
-                        onPageChange={setPage}
-                    />
-                </>
+            <ul className="day-entry-list">
+                {pageItems.map((entry) => (
+                    <li key={entry.id} className="day-entry-card">
+                        <div className="day-entry-main">
+                            <span className="day-entry-title">{entry.description}</span>
+                            <span className="day-entry-sub">
+                                {entry.category} · {formatAmount(entry.amount)}
+                            </span>
+                        </div>
+                        <RowActions
+                            onEdit={() => openEdit(entry)}
+                            onDelete={() => handleDelete(entry)}
+                            deleteLabel="this transaction"
+                        />
+                    </li>
+                ))}
+            </ul>
+            {totalPages > 1 && (
+                <TablePagination
+                    page={page}
+                    totalPages={totalPages}
+                    totalItems={totalItems}
+                    onPageChange={setPage}
+                />
             )}
-            <RecordModal
-                title="Edit transaction"
-                open={editing != null}
-                saving={saving}
-                error={modalError}
-                onClose={closeEdit}
-                onSave={handleSave}
-            >
-                <div className="form-field">
-                    <label htmlFor="tx-date">Date</label>
-                    <input
-                        id="tx-date"
-                        type="date"
-                        value={form.date}
-                        onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
-                    />
-                </div>
-                <div className="form-field">
-                    <label htmlFor="tx-category">Category</label>
-                    <ExpenseCategorySelect
-                        id="tx-category"
-                        value={form.category}
-                        variableCategories={variableCategories}
-                        usedCategories={entries.map((e) => e.category)}
-                        onChange={(category) => setForm((f) => ({ ...f, category }))}
-                    />
-                </div>
-                <div className="form-field">
-                    <label htmlFor="tx-amount">Amount</label>
-                    <input
-                        id="tx-amount"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={form.amount}
-                        onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
-                    />
-                </div>
-                <div className="form-field">
-                    <label htmlFor="tx-description">Description</label>
-                    <input
-                        id="tx-description"
-                        type="text"
-                        value={form.description}
-                        onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                    />
-                </div>
-            </RecordModal>
+            {editModal}
         </>
     );
 }

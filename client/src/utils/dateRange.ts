@@ -55,3 +55,16 @@ export function pickDefaultSelectedDate(
 
     return [...activeDates].sort().reverse()[0];
 }
+
+export function pickDefaultExpenseDate(
+    month: string,
+    dailySeries: { date: string; total: number }[]
+): string {
+    const today = todayInKL();
+    if (today.startsWith(`${month}-`)) return today;
+
+    const activeDates = dailySeries.filter((d) => d.total > 0).map((d) => d.date);
+    if (activeDates.length === 0) return `${month}-01`;
+
+    return [...activeDates].sort().reverse()[0];
+}

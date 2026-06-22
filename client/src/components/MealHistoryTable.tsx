@@ -8,6 +8,7 @@ import {
     parseOptionalNumber,
     parseRequiredNumber,
 } from '../utils/tableFormat';
+import HealthEntryDetailModal from './HealthEntryDetailModal';
 import RecordModal from './RecordModal';
 import RowActions from './RowActions';
 import TablePagination from './TablePagination';
@@ -27,6 +28,7 @@ function formatMealSummary(entry: MealEntry): string {
 
 export default function MealHistoryTable({ entries, onChanged, compact = false }: Props) {
     const [mealTypeFilter, setMealTypeFilter] = useState('all');
+    const [viewing, setViewing] = useState<MealEntry | null>(null);
     const [editing, setEditing] = useState<MealEntry | null>(null);
     const [form, setForm] = useState({
         date: '',
@@ -61,7 +63,9 @@ export default function MealHistoryTable({ entries, onChanged, compact = false }
         return entries.filter((e) => e.mealType === mealTypeFilter);
     }, [entries, mealTypeFilter]);
 
-    const { page, setPage, pageItems, totalPages, totalItems } = usePagination(filteredEntries);
+    const { page, setPage, pageItems, totalPages, totalItems } = usePagination(filteredEntries, {
+        pageSize: compact ? 5 : 10,
+    });
 
     useEffect(() => {
         setMealTypeFilter('all');
@@ -132,7 +136,7 @@ export default function MealHistoryTable({ entries, onChanged, compact = false }
         return <p className="muted">{compact ? 'No meals logged this day.' : 'No meals logged in this range.'}</p>;
     }
 
-    const displayEntries = compact ? filteredEntries : pageItems;
+    const displayEntries = pageItems;
 
     const editModal = (
         <RecordModal
@@ -229,13 +233,17 @@ export default function MealHistoryTable({ entries, onChanged, compact = false }
                 <ul className="day-entry-list">
                     {displayEntries.map((entry) => (
                         <li key={entry.id} className="day-entry-card">
-                            <div className="day-entry-main">
+                            <button
+                                type="button"
+                                className="day-entry-main day-entry-main--clickable"
+                                onClick={() => setViewing(entry)}
+                            >
                                 <span className="day-entry-title">{entry.description}</span>
                                 <span className="day-entry-sub">
                                     {entry.mealType ? `${entry.mealType} · ` : ''}
                                     {formatMealSummary(entry)}
                                 </span>
-                            </div>
+                            </button>
                             <RowActions
                                 onEdit={() => openEdit(entry)}
                                 onDelete={() => handleDelete(entry)}
@@ -244,6 +252,30 @@ export default function MealHistoryTable({ entries, onChanged, compact = false }
                         </li>
                     ))}
                 </ul>
+                {totalPages > 1 && (
+                    <TablePagination
+                        page={page}
+                        totalPages={totalPages}
+                        totalItems={totalItems}
+                        onPageChange={setPage}
+                    />
+                )}
+                {viewing && (
+                    <HealthEntryDetailModal
+                        type="meal"
+                        entry={viewing}
+                        onClose={() => setViewing(null)}
+                        onEdit={() => {
+                            const entry = viewing;
+                            setViewing(null);
+                            openEdit(entry);
+                        }}
+                        onDelete={async () => {
+                            await handleDelete(viewing);
+                            setViewing(null);
+                        }}
+                    />
+                )}
                 {editModal}
             </>
         );

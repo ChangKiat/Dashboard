@@ -15,13 +15,6 @@ export interface ExpenseDailyResponse {
     series: ExpenseDailyPoint[];
 }
 
-export interface ExpenseCategoriesResponse {
-    start: string;
-    end: string;
-    total: number;
-    breakdown: Record<string, number>;
-}
-
 export interface ExpenseOverviewVariable {
     category: string;
     monthlyBudget: number;
@@ -124,6 +117,8 @@ export interface WorkoutEntry {
     weightKg: number | null;
     durationMin: number | null;
     notes: string | null;
+    caloriesBurned: number | null;
+    fatBurnG: number | null;
 }
 
 export interface WorkoutHistoryResponse {
@@ -151,7 +146,7 @@ export interface NutritionDailyResponse {
     start: string;
     end: string;
     series: NutritionDailyPoint[];
-    targets: NutritionDailyPoint['targets'];
+    targets: NutritionDailyPoint['targets'] & { bodyWeightKg: number | null };
     totals: {
         protein: number;
         carbs: number;
@@ -198,10 +193,6 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 
 export function fetchExpenseDaily(range: DateRange) {
     return fetchJson<ExpenseDailyResponse>(`/api/expenses/daily?${qs(range)}`);
-}
-
-export function fetchExpenseCategories(range: DateRange) {
-    return fetchJson<ExpenseCategoriesResponse>(`/api/expenses/categories?${qs(range)}`);
 }
 
 export function fetchExpenseOverview(month: string) {
@@ -267,7 +258,18 @@ export function fetchWorkoutHistory(range: DateRange) {
 export function updateWorkout(
     id: number,
     fields: Partial<
-        Pick<WorkoutEntry, 'date' | 'exercise' | 'sets' | 'reps' | 'weightKg' | 'durationMin' | 'notes'>
+        Pick<
+            WorkoutEntry,
+            | 'date'
+            | 'exercise'
+            | 'sets'
+            | 'reps'
+            | 'weightKg'
+            | 'durationMin'
+            | 'notes'
+            | 'caloriesBurned'
+            | 'fatBurnG'
+        >
     >
 ) {
     return fetchJson<{ ok: true }>(`/api/workouts/${id}`, {

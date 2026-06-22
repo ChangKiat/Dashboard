@@ -4,6 +4,7 @@ import type { WorkoutEntry } from '../api';
 import { deleteWorkout, updateWorkout } from '../api';
 import { usePagination } from '../hooks/usePagination';
 import { formatCell, parseOptionalInt, parseOptionalNumber } from '../utils/tableFormat';
+import HealthEntryDetailModal from './HealthEntryDetailModal';
 import RecordModal from './RecordModal';
 import RowActions from './RowActions';
 import TablePagination from './TablePagination';
@@ -19,11 +20,14 @@ function formatWorkoutSummary(entry: WorkoutEntry): string {
     if (entry.sets != null) parts.push(`${entry.sets} sets`);
     if (entry.reps != null) parts.push(`${entry.reps} reps`);
     if (entry.weightKg != null) parts.push(`${entry.weightKg} kg`);
+    if (entry.caloriesBurned != null) parts.push(`${entry.caloriesBurned} kcal`);
+    if (entry.fatBurnG != null) parts.push(`${entry.fatBurnG}g fat`);
     return parts.length > 0 ? parts.join(' · ') : '—';
 }
 
 export default function WorkoutHistoryTable({ entries, onChanged, compact = false }: Props) {
     const [exerciseFilter, setExerciseFilter] = useState('all');
+    const [viewing, setViewing] = useState<WorkoutEntry | null>(null);
     const [editing, setEditing] = useState<WorkoutEntry | null>(null);
     const [form, setForm] = useState({
         date: '',
@@ -33,6 +37,8 @@ export default function WorkoutHistoryTable({ entries, onChanged, compact = fals
         weightKg: '',
         durationMin: '',
         notes: '',
+        caloriesBurned: '',
+        fatBurnG: '',
     });
     const [saving, setSaving] = useState(false);
     const [modalError, setModalError] = useState<string | null>(null);
@@ -48,7 +54,9 @@ export default function WorkoutHistoryTable({ entries, onChanged, compact = fals
         return entries.filter((e) => e.exercise === exerciseFilter);
     }, [entries, exerciseFilter]);
 
-    const { page, setPage, pageItems, totalPages, totalItems } = usePagination(filteredEntries);
+    const { page, setPage, pageItems, totalPages, totalItems } = usePagination(filteredEntries, {
+        pageSize: compact ? 5 : 10,
+    });
 
     useEffect(() => {
         setExerciseFilter('all');
@@ -64,6 +72,8 @@ export default function WorkoutHistoryTable({ entries, onChanged, compact = fals
             weightKg: entry.weightKg != null ? String(entry.weightKg) : '',
             durationMin: entry.durationMin != null ? String(entry.durationMin) : '',
             notes: entry.notes ?? '',
+            caloriesBurned: entry.caloriesBurned != null ? String(entry.caloriesBurned) : '',
+            fatBurnG: entry.fatBurnG != null ? String(entry.fatBurnG) : '',
         });
         setModalError(null);
     };
@@ -90,6 +100,8 @@ export default function WorkoutHistoryTable({ entries, onChanged, compact = fals
                 weightKg: parseOptionalNumber(form.weightKg),
                 durationMin: parseOptionalNumber(form.durationMin),
                 notes: form.notes.trim() || null,
+                caloriesBurned: parseOptionalNumber(form.caloriesBurned),
+                fatBurnG: parseOptionalNumber(form.fatBurnG),
             });
             closeEdit();
             onChanged();
@@ -114,7 +126,7 @@ export default function WorkoutHistoryTable({ entries, onChanged, compact = fals
         return <p className="muted">{compact ? 'No workouts logged this day.' : 'No workouts logged in this range.'}</p>;
     }
 
-    const displayEntries = compact ? filteredEntries : pageItems;
+    const displayEntries = pageItems;
 
     const editModal = (
         <RecordModal
@@ -186,6 +198,28 @@ export default function WorkoutHistoryTable({ entries, onChanged, compact = fals
                 />
             </div>
             <div className="form-field">
+                <label htmlFor="wo-calories">Calories burned</label>
+                <input
+                    id="wo-calories"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={form.caloriesBurned}
+                    onChange={(e) => setForm((f) => ({ ...f, caloriesBurned: e.target.value }))}
+                />
+            </div>
+            <div className="form-field">
+                <label htmlFor="wo-fat">Fat burned (g)</label>
+                <input
+                    id="wo-fat"
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={form.fatBurnG}
+                    onChange={(e) => setForm((f) => ({ ...f, fatBurnG: e.target.value }))}
+                />
+            </div>
+            <div className="form-field">
                 <label htmlFor="wo-notes">Notes</label>
                 <textarea
                     id="wo-notes"
@@ -207,10 +241,14 @@ export default function WorkoutHistoryTable({ entries, onChanged, compact = fals
                 <ul className="day-entry-list">
                     {displayEntries.map((entry) => (
                         <li key={entry.id} className="day-entry-card">
-                            <div className="day-entry-main">
+                            <button
+                                type="button"
+                                className="day-entry-main day-entry-main--clickable"
+                                onClick={() => setViewing(entry)}
+                            >
                                 <span className="day-entry-title">{entry.exercise}</span>
                                 <span className="day-entry-sub">{formatWorkoutSummary(entry)}</span>
-                            </div>
+                            </button>
                             <RowActions
                                 onEdit={() => openEdit(entry)}
                                 onDelete={() => handleDelete(entry)}
@@ -219,6 +257,30 @@ export default function WorkoutHistoryTable({ entries, onChanged, compact = fals
                         </li>
                     ))}
                 </ul>
+                {totalPages > 1 && (
+                    <TablePagination
+                        page={page}
+                        totalPages={totalPages}
+                        totalItems={totalItems}
+                        onPageChange={setPage}
+                    />
+                )}
+                {viewing && (
+                    <HealthEntryDetailModal
+                        type="workout"
+                        entry={viewing}
+                        onClose={() => setViewing(null)}
+                        onEdit={() => {
+                            const entry = viewing;
+                            setViewing(null);
+                            openEdit(entry);
+                        }}
+                        onDelete={async () => {
+                            await handleDelete(viewing);
+                            setViewing(null);
+                        }}
+                    />
+                )}
                 {editModal}
             </>
         );
@@ -257,6 +319,8 @@ export default function WorkoutHistoryTable({ entries, onChanged, compact = fals
                                         <th>Reps</th>
                                         <th className="col-weight">Weight (kg)</th>
                                         <th className="col-duration">Duration (min)</th>
+                                        <th className="col-calories">Calories</th>
+                                        <th className="col-fat">Fat (g)</th>
                                         <th className="col-notes">Notes</th>
                                         <th className="actions-col">Actions</th>
                                     </tr>
@@ -270,6 +334,8 @@ export default function WorkoutHistoryTable({ entries, onChanged, compact = fals
                                             <td>{formatCell(entry.reps)}</td>
                                             <td className="col-weight">{formatCell(entry.weightKg)}</td>
                                             <td className="col-duration">{formatCell(entry.durationMin)}</td>
+                                            <td className="col-calories">{formatCell(entry.caloriesBurned)}</td>
+                                            <td className="col-fat">{formatCell(entry.fatBurnG)}</td>
                                             <td className="notes-cell col-notes">{formatCell(entry.notes)}</td>
                                             <td>
                                                 <RowActions

@@ -1,18 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import type { ExpenseOverviewResponse, ExpenseTransaction, FixedExpenseConfig } from '../api';
+import type { ExpenseDailyPoint, ExpenseOverviewResponse, ExpenseTransaction, FixedExpenseConfig } from '../api';
 import {
     fetchExpenseDaily,
     fetchExpenseOverview,
     fetchExpenseTransactions,
     fetchFixedExpenses,
 } from '../api';
-import { monthToDateRange } from '../utils/dateRange';
+import { monthToDateRange, pickDefaultExpenseDate } from '../utils/dateRange';
 import { getBudgetStatus } from '../utils/budgetStatus';
 
-import DailyBarChart from '../charts/DailyBarChart';
-import FixedExpenseBarChart from '../charts/FixedExpenseBarChart';
-import ExpenseTransactionsTable from './ExpenseTransactionsTable';
+import ExpenseCalendar from './ExpenseCalendar';
+import ExpenseDayDetailPanel from './ExpenseDayDetailPanel';
 import FixedExpensesTable from './FixedExpensesTable';
 import SummaryCard from './SummaryCard';
 import VariableExpensesTable from './VariableExpensesTable';
@@ -28,10 +27,11 @@ function formatMYR(amount: number) {
 export default function ExpensesSection({ month }: Props) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [selectedDate, setSelectedDate] = useState<string>('');
     const [data, setData] = useState<ExpenseOverviewResponse | null>(null);
     const [transactions, setTransactions] = useState<ExpenseTransaction[]>([]);
     const [fixedConfigs, setFixedConfigs] = useState<FixedExpenseConfig[]>([]);
-    const [dailySeries, setDailySeries] = useState<{ date: string; value: number }[]>([]);
+    const [dailySeries, setDailySeries] = useState<ExpenseDailyPoint[]>([]);
 
     const loadData = useCallback(async () => {
         const range = monthToDateRange(month);
@@ -44,13 +44,19 @@ export default function ExpensesSection({ month }: Props) {
         setData(overviewRes);
         setTransactions(transactionsRes.entries);
         setFixedConfigs(fixedRes.entries);
-        setDailySeries(dailyRes.series.map((d) => ({ date: d.date, value: d.total })));
+        setDailySeries(dailyRes.series);
+
+        setSelectedDate((prev) => {
+            if (prev.startsWith(`${month}-`)) return prev;
+            return pickDefaultExpenseDate(month, dailyRes.series);
+        });
     }, [month]);
 
     useEffect(() => {
         let cancelled = false;
         setLoading(true);
         setError(null);
+        setSelectedDate('');
 
         loadData()
             .catch((err) => {
@@ -85,6 +91,16 @@ export default function ExpensesSection({ month }: Props) {
         [data?.variable]
     );
 
+    const dayTransactions = useMemo(
+        () => transactions.filter((t) => t.date === selectedDate),
+        [transactions, selectedDate]
+    );
+
+    const daySummary = useMemo(
+        () => dailySeries.find((d) => d.date === selectedDate),
+        [dailySeries, selectedDate]
+    );
+
     if (loading) return <section className="panel"><p className="muted">Loading expenses…</p></section>;
     if (error) return <section className="panel"><p className="error">{error}</p></section>;
     if (!data) return null;
@@ -111,24 +127,28 @@ export default function ExpensesSection({ month }: Props) {
 
                 <VariableExpensesTable rows={data.variable} formatAmount={formatMYR} />
 
-                <div className="chart-card expenses-combo-chart">
-                    <h3>Daily Spending</h3>
-                    <div className="chart-card-body">
-                        <DailyBarChart
-                            data={dailySeries}
-                            valueFormatter={formatMYR}
-                            label="Spending"
-                            height="100%"
-                        />
-                    </div>
+                <div className="expenses-calendar">
+                    <ExpenseCalendar
+                        month={month}
+                        dailySeries={dailySeries}
+                        selectedDate={selectedDate}
+                        onSelectDate={setSelectedDate}
+                        formatAmount={formatMYR}
+                    />
                 </div>
 
-                <div className="chart-card expenses-pie-chart">
-                    <h3>Fixed Expenses Breakdown</h3>
-                    <div className="chart-card-body">
-                        <FixedExpenseBarChart rows={data.fixed} valueFormatter={formatMYR} />
+                {selectedDate && (
+                    <div className="expenses-day-panel">
+                        <ExpenseDayDetailPanel
+                            selectedDate={selectedDate}
+                            transactions={dayTransactions}
+                            daySummary={daySummary}
+                            variableCategories={variableCategories}
+                            formatAmount={formatMYR}
+                            onChanged={handleChanged}
+                        />
                     </div>
-                </div>
+                )}
 
                 <FixedExpensesTable
                     rows={fixedConfigs}
@@ -136,16 +156,6 @@ export default function ExpensesSection({ month }: Props) {
                     formatAmount={formatMYR}
                     onChanged={handleChanged}
                 />
-
-                <div className="chart-card full-width expenses-transactions">
-                    <h3>Transactions</h3>
-                    <ExpenseTransactionsTable
-                        entries={transactions}
-                        variableCategories={variableCategories}
-                        formatAmount={formatMYR}
-                        onChanged={handleChanged}
-                    />
-                </div>
             </div>
         </section>
     );

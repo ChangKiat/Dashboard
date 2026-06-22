@@ -53,7 +53,13 @@ router.get('/daily', async (req, res) => {
             start,
             end,
             series,
-            targets: summary.targets,
+            targets: {
+                protein: summary.targets.dailyProteinTargetG,
+                carbs: summary.targets.dailyCarbsTargetG,
+                fat: summary.targets.dailyFatTargetG,
+                calories: summary.targets.dailyCalorieTarget,
+                bodyWeightKg: summary.targets.bodyWeightKg,
+            },
             totals: {
                 protein: summary.totalProtein,
                 carbs: summary.totalCarbs,

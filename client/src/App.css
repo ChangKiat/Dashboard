@@ -184,16 +184,29 @@
 }
 
 .expenses-variable-table {
-  grid-column: 1;
+  grid-column: 1 / -1;
   grid-row: 2;
   display: flex;
   flex-direction: column;
   height: 100%;
 }
 
+.expenses-calendar {
+  grid-column: 1;
+  grid-row: 3;
+  min-width: 0;
+}
+
+.expenses-day-panel {
+  grid-column: 1 / -1;
+  grid-row: 4;
+  min-width: 0;
+  align-self: start;
+}
+
 .expenses-fixed-expenses {
   grid-column: 1 / -1;
-  grid-row: 3;
+  grid-row: 5;
 }
 
 .expenses-table-card h3 {
@@ -203,31 +216,58 @@
   color: #d1d5db;
 }
 
-.expenses-combo-chart {
-  grid-column: 2;
-  grid-row: 2;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.expenses-pie-chart {
-  grid-column: 3;
-  grid-row: 2;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
 .chart-card-body {
   flex: 1;
   min-height: 280px;
   min-width: 0;
 }
 
-.expenses-transactions {
-  grid-column: 1 / -1;
-  grid-row: 4;
+.expense-day-summary {
+  margin-bottom: 16px;
+}
+
+.expense-day-total {
+  margin: 0 0 12px;
+  font-size: 0.9rem;
+  color: #d1d5db;
+}
+
+.expense-day-categories {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.expense-day-categories li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.85rem;
+  color: #9aa0a6;
+}
+
+.expense-day-categories li span:last-child {
+  color: #e8eaed;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 768px) {
+  .expenses-calendar {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  .expenses-day-panel {
+    grid-column: 2 / -1;
+    grid-row: 3;
+  }
+
+  .expenses-fixed-expenses {
+    grid-row: 4;
+  }
 }
 
 .transactions-toolbar {
@@ -547,10 +587,9 @@
 
   .expenses-hero-row,
   .expenses-variable-table,
-  .expenses-fixed-expenses,
-  .expenses-combo-chart,
-  .expenses-pie-chart,
-  .expenses-transactions {
+  .expenses-calendar,
+  .expenses-day-panel,
+  .expenses-fixed-expenses {
     grid-column: 1;
     grid-row: auto;
   }
@@ -568,10 +607,9 @@
 
   .expenses-hero-row,
   .expenses-variable-table,
-  .expenses-fixed-expenses,
-  .expenses-combo-chart,
-  .expenses-pie-chart,
-  .expenses-transactions {
+  .expenses-calendar,
+  .expenses-day-panel,
+  .expenses-fixed-expenses {
     grid-column: 1;
     grid-row: auto;
   }
@@ -698,6 +736,46 @@
   margin-top: 16px;
 }
 
+.detail-modal {
+  max-width: 520px;
+}
+
+.detail-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.detail-modal-header h4 {
+  margin: 0;
+  flex: 1;
+}
+
+.detail-modal-close {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #9aa0a6;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.detail-modal-close:hover {
+  background: #2a2f3a;
+  color: #e8eaed;
+}
+
+.detail-modal-body {
+  min-width: 0;
+}
+
 .form-field {
   display: flex;
   flex-direction: column;
@@ -749,17 +827,24 @@
 .health-day-panel,
 .health-summary-row,
 .health-volume-chart,
-.health-top-exercises,
 .health-weight-trend,
 .health-pr-table,
-.health-macros-chart,
-.health-workout-log,
-.health-meal-log {
+.health-macros-chart {
   min-width: 0;
 }
 
 .health-day-panel {
   align-self: start;
+}
+
+.health-summary-row {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.health-calendar {
+  grid-column: 1 / -1;
+  grid-row: 2;
 }
 
 .health-workout-parts,
@@ -772,36 +857,25 @@
     grid-template-columns: 3fr 2fr;
   }
 
+  .health-summary-row {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
   .health-calendar {
     grid-column: 1;
-    grid-row: 1;
+    grid-row: 2;
   }
 
   .health-day-panel {
     grid-column: 2;
-    grid-row: 1;
-  }
-
-  .health-summary-row {
-    grid-column: 1 / -1;
     grid-row: 2;
   }
 
-  .health-volume-chart,
-  .health-top-exercises,
-  .health-weight-trend,
-  .health-pr-table,
-  .health-macros-chart {
-    grid-column: 1 / -1;
-  }
-
-  .health-volume-chart { grid-row: 3; }
-  .health-top-exercises { grid-row: 4; }
-  .health-weight-trend { grid-row: 5; }
-  .health-macros-chart { grid-row: 6; }
-  .health-workout-log { grid-column: 1 / -1; grid-row: 7; }
-  .health-meal-log { grid-column: 1 / -1; grid-row: 8; }
-  .health-pr-table { grid-row: 9; }
+  .health-volume-chart { grid-column: 1; grid-row: 3; }
+  .health-weight-trend { grid-column: 1 / -1; grid-row: 4; }
+  .health-pr-table { grid-column: 1 / -1; grid-row: 5; }
+  .health-macros-chart { grid-column: 1 / -1; grid-row: 6; }
 }
 
 @media (min-width: 1024px) {
@@ -809,14 +883,19 @@
     grid-template-columns: 2fr 1fr 1fr;
   }
 
+  .health-summary-row {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
   .health-calendar {
     grid-column: 1;
-    grid-row: 1;
+    grid-row: 2;
   }
 
   .health-day-panel {
     grid-column: 2 / -1;
-    grid-row: 1;
+    grid-row: 2;
   }
 
   .health-volume-chart {
@@ -824,34 +903,19 @@
     grid-row: 3;
   }
 
-  .health-top-exercises {
-    grid-column: 2;
-    grid-row: 3;
-  }
-
   .health-weight-trend {
-    grid-column: 3;
+    grid-column: 2 / -1;
     grid-row: 3;
-  }
-
-  .health-macros-chart {
-    grid-column: 1 / -1;
-    grid-row: 4;
-  }
-
-  .health-workout-log {
-    grid-column: 1 / -1;
-    grid-row: 5;
-  }
-
-  .health-meal-log {
-    grid-column: 1 / -1;
-    grid-row: 6;
   }
 
   .health-pr-table {
     grid-column: 1 / -1;
-    grid-row: 7;
+    grid-row: 4;
+  }
+
+  .health-macros-chart {
+    grid-column: 1 / -1;
+    grid-row: 5;
   }
 }
 
@@ -903,6 +967,10 @@
 
 .legend-dot.meal {
   background: #34d399;
+}
+
+.legend-dot.expense {
+  background: #fbbf24;
 }
 
 .activity-calendar-weekdays {
@@ -987,6 +1055,9 @@
   border-radius: 4px;
   min-width: 14px;
   text-align: center;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
 }
 
 .activity-badge.workout {
@@ -997,6 +1068,13 @@
 .activity-badge.meal {
   background: rgba(52, 211, 153, 0.25);
   color: #34d399;
+}
+
+.activity-badge.expense {
+  background: rgba(251, 191, 36, 0.25);
+  color: #fbbf24;
+  font-size: 0.6rem;
+  padding: 2px 3px;
 }
 
 .day-detail-panel {
@@ -1030,10 +1108,83 @@
   letter-spacing: 0.04em;
 }
 
+.day-detail-stat {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+  color: #e8eaed;
+}
 
-.variable-expense-list {
+.detail-field-list {
   display: flex;
   flex-direction: column;
+  gap: 10px;
+  margin: 0;
+}
+
+.detail-field {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 8px 12px;
+  align-items: baseline;
+}
+
+.detail-field dt {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #9aa0a6;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.detail-field dd {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #e8eaed;
+  word-break: break-word;
+}
+
+
+.variable-expense-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  background: #161b26;
+  border: 1px solid #2a2f3a;
+  border-radius: 8px;
+}
+
+.variable-expense-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 100px;
+}
+
+.variable-expense-summary-item--alert .variable-expense-summary-value {
+  color: #fbbf24;
+}
+
+.variable-expense-summary-label {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #9aa0a6;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.variable-expense-summary-value {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #e8eaed;
+  font-variant-numeric: tabular-nums;
+}
+
+.variable-expense-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 12px;
   flex: 1;
 }
@@ -1042,15 +1193,35 @@
   background: #161b26;
   border: 1px solid #2a2f3a;
   border-radius: 8px;
-  padding: 12px 14px;
+  padding: 14px 16px;
+}
+
+.variable-expense-card.budget-row--ok {
+  border-left: 3px solid #34d399;
+}
+
+.variable-expense-card.budget-row--warning {
+  border-left: 3px solid #fbbf24;
+}
+
+.variable-expense-card.budget-row--over {
+  border-left: 3px solid #f87171;
 }
 
 .variable-expense-card-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.variable-expense-card-title {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
 }
 
 .variable-expense-card-header h4 {
@@ -1060,13 +1231,31 @@
   color: #e8eaed;
 }
 
+.variable-expense-card-amount {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #e8eaed;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
 .variable-expense-card-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
   font-size: 0.8rem;
+  color: #e8eaed;
+  margin-bottom: 12px;
+}
+
+.variable-expense-meta-label {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 500;
   color: #9aa0a6;
-  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
 }
 
 .variable-expense-card .budget-usage {
@@ -1093,11 +1282,30 @@
   border-radius: 8px;
 }
 
+.day-entry-card:hover {
+  border-color: #3a4150;
+}
+
 .day-entry-main {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+}
+
+.day-entry-main--clickable {
+  cursor: pointer;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  flex: 1;
+}
+
+.day-entry-main--clickable:hover .day-entry-title {
+  color: #fff;
 }
 
 .day-entry-title {

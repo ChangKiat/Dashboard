@@ -61,3 +61,24 @@ Open [http://localhost:5173](http://localhost:5173)
 
 
 Date params use `YYYY-MM-DD`. Defaults to the last 30 days (Asia/Kuala_Lumpur).
+
+## Expenses tab layout
+
+Top to bottom:
+
+1. Summary cards — salary, amount can use, fixed total, budget, actual spend
+2. Variable budget cards with totals summary (full width, responsive grid)
+3. Spending calendar + day detail panel (selected day's total, category breakdown, paginated transactions)
+4. Fixed expenses table (edit/delete)
+
+Transactions are viewed and edited per day via the spending calendar day panel.
+
+Variable expense categories and salary come from the AI Agent database (`budgets` table and `user_settings.salary_after_tax`). The API loads categories at startup via `loadExpenseCategories()`.
+
+## Health tab
+
+- Activity calendar with inline day summary panel; click workout/meal badges to open detail popouts
+- Workout analytics: volume, top exercises, weight trend, and personal records (no monthly log table)
+- Daily macros chart (no monthly meal log table)
+- Workout entries include `caloriesBurned` and `fatBurnG` when set via the bot
+- Nutrition targets include `bodyWeightKg` from `user_settings`

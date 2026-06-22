@@ -91,14 +91,32 @@ export default function ActivityCalendar({
                             <span className="activity-calendar-day">{dayNum}</span>
                             <span className="activity-calendar-badges">
                                 {sessions > 0 && (
-                                    <span className="activity-badge workout" title={`${sessions} session${sessions !== 1 ? 's' : ''}`}>
+                                    <button
+                                        type="button"
+                                        className="activity-badge workout"
+                                        title={`${sessions} session${sessions !== 1 ? 's' : ''}`}
+                                        aria-label={`${sessions} workout${sessions !== 1 ? 's' : ''} on ${date}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onSelectDate(date);
+                                        }}
+                                    >
                                         {sessions}
-                                    </span>
+                                    </button>
                                 )}
                                 {meals > 0 && (
-                                    <span className="activity-badge meal" title={`${meals} meal${meals !== 1 ? 's' : ''}`}>
+                                    <button
+                                        type="button"
+                                        className="activity-badge meal"
+                                        title={`${meals} meal${meals !== 1 ? 's' : ''}`}
+                                        aria-label={`${meals} meal${meals !== 1 ? 's' : ''} on ${date}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onSelectDate(date);
+                                        }}
+                                    >
                                         {meals}
-                                    </span>
+                                    </button>
                                 )}
                             </span>
                         </button>

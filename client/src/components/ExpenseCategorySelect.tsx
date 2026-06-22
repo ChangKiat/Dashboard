@@ -22,9 +22,14 @@ export default function ExpenseCategorySelect({
         [variableCategories, usedCategories]
     );
 
+    const displayOptions = useMemo(() => {
+        if (value && !options.includes(value)) return [value, ...options];
+        return options;
+    }, [options, value]);
+
     return (
         <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
-            {options.map((category) => (
+            {displayOptions.map((category) => (
                 <option key={category} value={category}>
                     {category}
                 </option>

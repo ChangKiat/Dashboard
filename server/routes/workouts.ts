@@ -114,6 +114,8 @@ router.patch('/:id', async (req, res) => {
             weightKg?: number | null;
             durationMin?: number | null;
             notes?: string | null;
+            caloriesBurned?: number | null;
+            fatBurnG?: number | null;
         } = {};
 
         if (body.date != null) {
@@ -152,6 +154,21 @@ router.patch('/:id', async (req, res) => {
         }
         if (body.notes !== undefined) {
             fields.notes = body.notes === null || body.notes === '' ? null : String(body.notes);
+        }
+        if (body.caloriesBurned !== undefined) {
+            if (
+                body.caloriesBurned !== null &&
+                (typeof body.caloriesBurned !== 'number' || body.caloriesBurned < 0)
+            ) {
+                return res.status(400).json({ error: 'Invalid calories burned' });
+            }
+            fields.caloriesBurned = body.caloriesBurned;
+        }
+        if (body.fatBurnG !== undefined) {
+            if (body.fatBurnG !== null && (typeof body.fatBurnG !== 'number' || body.fatBurnG < 0)) {
+                return res.status(400).json({ error: 'Invalid fat burned' });
+            }
+            fields.fatBurnG = body.fatBurnG;
         }
 
         if (Object.keys(fields).length === 0) {

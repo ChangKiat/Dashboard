@@ -55,6 +55,8 @@ export type WorkoutRow = {
     weightKg: number | null;
     durationMin: number | null;
     notes: string | null;
+    caloriesBurned: number | null;
+    fatBurnG: number | null;
 };
 
 export type PersonalRecord = {
@@ -120,6 +122,8 @@ export function formatWorkoutEntries(rows: WorkoutRow[]) {
         weightKg: row.weightKg,
         durationMin: row.durationMin,
         notes: row.notes,
+        caloriesBurned: row.caloriesBurned,
+        fatBurnG: row.fatBurnG,
     }));
 }
 
