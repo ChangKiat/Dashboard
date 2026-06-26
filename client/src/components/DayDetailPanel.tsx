@@ -51,12 +51,20 @@ export default function DayDetailPanel({
             )}
             <div className="day-detail-columns">
                 <div className="day-detail-section">
-                    <h4>Workouts</h4>
-                    <WorkoutHistoryTable entries={dayWorkouts} onChanged={onChanged} compact />
+                    <WorkoutHistoryTable
+                        entries={dayWorkouts}
+                        onChanged={onChanged}
+                        compact
+                        defaultDate={selectedDate}
+                    />
                 </div>
                 <div className="day-detail-section">
-                    <h4>Meals</h4>
-                    <MealHistoryTable entries={dayMeals} onChanged={onChanged} compact />
+                    <MealHistoryTable
+                        entries={dayMeals}
+                        onChanged={onChanged}
+                        compact
+                        defaultDate={selectedDate}
+                    />
                 </div>
             </div>
         </div>

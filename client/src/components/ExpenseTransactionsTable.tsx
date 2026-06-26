@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import type { ExpenseTransaction } from '../api';
-import { deleteExpenseTransaction, updateExpenseTransaction } from '../api';
+import { createExpenseTransaction, deleteExpenseTransaction, updateExpenseTransaction } from '../api';
 import { usePagination } from '../hooks/usePagination';
 import ExpenseCategorySelect from './ExpenseCategorySelect';
 import RecordModal from './RecordModal';
@@ -10,11 +10,14 @@ import TablePagination from './TablePagination';
 
 const DAY_PAGE_SIZE = 5;
 
+type ModalMode = 'closed' | 'create' | 'edit';
+
 interface Props {
     entries: ExpenseTransaction[];
     variableCategories: string[];
     formatAmount: (amount: number) => string;
     onChanged: () => void;
+    defaultDate?: string;
 }
 
 export default function ExpenseTransactionsTable({
@@ -22,8 +25,10 @@ export default function ExpenseTransactionsTable({
     variableCategories,
     formatAmount,
     onChanged,
+    defaultDate,
 }: Props) {
-    const [editing, setEditing] = useState<ExpenseTransaction | null>(null);
+    const [modalMode, setModalMode] = useState<ModalMode>('closed');
+    const [editingEntry, setEditingEntry] = useState<ExpenseTransaction | null>(null);
     const [form, setForm] = useState({ date: '', category: '', amount: '', description: '' });
     const [saving, setSaving] = useState(false);
     const [modalError, setModalError] = useState<string | null>(null);
@@ -33,8 +38,21 @@ export default function ExpenseTransactionsTable({
         pageSize: DAY_PAGE_SIZE,
     });
 
+    const openCreate = useCallback(() => {
+        setModalMode('create');
+        setEditingEntry(null);
+        setForm({
+            date: defaultDate ?? '',
+            category: '',
+            amount: '',
+            description: '',
+        });
+        setModalError(null);
+    }, [defaultDate]);
+
     const openEdit = (entry: ExpenseTransaction) => {
-        setEditing(entry);
+        setModalMode('edit');
+        setEditingEntry(entry);
         setForm({
             date: entry.date,
             category: entry.category,
@@ -44,28 +62,39 @@ export default function ExpenseTransactionsTable({
         setModalError(null);
     };
 
-    const closeEdit = () => {
-        setEditing(null);
+    const closeModal = () => {
+        setModalMode('closed');
+        setEditingEntry(null);
         setModalError(null);
     };
 
     const handleSave = async () => {
-        if (!editing) return;
         const amount = parseFloat(form.amount);
-        if (!form.date || !form.category.trim() || !form.description.trim() || !Number.isFinite(amount) || amount <= 0) {
+        if (
+            !form.date ||
+            !form.category.trim() ||
+            !form.description.trim() ||
+            !Number.isFinite(amount) ||
+            amount <= 0
+        ) {
             setModalError('Date, category, description, and a positive amount are required.');
             return;
         }
         setSaving(true);
         setModalError(null);
         try {
-            await updateExpenseTransaction(editing.id, {
+            const payload = {
                 date: form.date,
                 category: form.category.trim(),
                 amount,
                 description: form.description.trim(),
-            });
-            closeEdit();
+            };
+            if (modalMode === 'create') {
+                await createExpenseTransaction(payload);
+            } else if (editingEntry) {
+                await updateExpenseTransaction(editingEntry.id, payload);
+            }
+            closeModal();
             onChanged();
         } catch (err) {
             setModalError(err instanceof Error ? err.message : 'Failed to save');
@@ -84,13 +113,13 @@ export default function ExpenseTransactionsTable({
         }
     };
 
-    const editModal = (
+    const modal = (
         <RecordModal
-            title="Edit transaction"
-            open={editing != null}
+            title={modalMode === 'create' ? 'Add transaction' : 'Edit transaction'}
+            open={modalMode !== 'closed'}
             saving={saving}
             error={modalError}
-            onClose={closeEdit}
+            onClose={closeModal}
             onSave={handleSave}
         >
             <div className="form-field">
@@ -135,39 +164,49 @@ export default function ExpenseTransactionsTable({
         </RecordModal>
     );
 
-    if (entries.length === 0) {
-        return <p className="muted">No transactions logged this day.</p>;
-    }
-
     return (
         <>
-            {actionError && <p className="error">{actionError}</p>}
-            <ul className="day-entry-list">
-                {pageItems.map((entry) => (
-                    <li key={entry.id} className="day-entry-card">
-                        <div className="day-entry-main">
-                            <span className="day-entry-title">{entry.description}</span>
-                            <span className="day-entry-sub">
-                                {entry.category} · {formatAmount(entry.amount)}
-                            </span>
-                        </div>
-                        <RowActions
-                            onEdit={() => openEdit(entry)}
-                            onDelete={() => handleDelete(entry)}
-                            deleteLabel="this transaction"
-                        />
-                    </li>
-                ))}
-            </ul>
-            {totalPages > 1 && (
-                <TablePagination
-                    page={page}
-                    totalPages={totalPages}
-                    totalItems={totalItems}
-                    onPageChange={setPage}
-                />
+            {defaultDate != null && (
+                <div className="section-header-row">
+                    <h4>Transactions</h4>
+                    <button type="button" className="btn-add" onClick={openCreate}>
+                        + Add
+                    </button>
+                </div>
             )}
-            {editModal}
+            {actionError && <p className="error">{actionError}</p>}
+            {entries.length === 0 ? (
+                <p className="muted">No transactions logged this day.</p>
+            ) : (
+                <>
+                    <ul className="day-entry-list">
+                        {pageItems.map((entry) => (
+                            <li key={entry.id} className="day-entry-card">
+                                <div className="day-entry-main">
+                                    <span className="day-entry-title">{entry.description}</span>
+                                    <span className="day-entry-sub">
+                                        {entry.category} · {formatAmount(entry.amount)}
+                                    </span>
+                                </div>
+                                <RowActions
+                                    onEdit={() => openEdit(entry)}
+                                    onDelete={() => handleDelete(entry)}
+                                    deleteLabel="this transaction"
+                                />
+                            </li>
+                        ))}
+                    </ul>
+                    {totalPages > 1 && (
+                        <TablePagination
+                            page={page}
+                            totalPages={totalPages}
+                            totalItems={totalItems}
+                            onPageChange={setPage}
+                        />
+                    )}
+                </>
+            )}
+            {modal}
         </>
     );
 }

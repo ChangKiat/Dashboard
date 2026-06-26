@@ -57,12 +57,12 @@ export default function ExpenseDayDetailPanel({
                 )}
             </div>
             <div className="day-detail-section">
-                <h4>Transactions</h4>
                 <ExpenseTransactionsTable
                     entries={transactions}
                     variableCategories={variableCategories}
                     formatAmount={formatAmount}
                     onChanged={onChanged}
+                    defaultDate={selectedDate}
                 />
             </div>
         </div>

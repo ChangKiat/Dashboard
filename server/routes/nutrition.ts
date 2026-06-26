@@ -1,5 +1,11 @@
 import { Router } from 'express';
-import { getNutritionSummary, getMealHistory, updateMeal, deleteMeal } from '../../../AI Agent/src/services/nutritionService';
+import {
+    deleteMeal,
+    getMealHistory,
+    getNutritionSummary,
+    logMeal,
+    updateMeal,
+} from '../../../AI Agent/src/services/nutritionService';
 import { enumerateDates, parseDateRange } from '../dateUtils';
 import {
     isNonEmptyString,
@@ -86,6 +92,46 @@ router.get('/meals', async (req, res) => {
         res.json({ start, end, entries });
     } catch (err) {
         console.error('GET /api/nutrition/meals', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+    }
+});
+
+router.post('/meals', async (req, res) => {
+    try {
+        const body = req.body ?? {};
+        if (!isValidDate(body.date)) return res.status(400).json({ error: 'Invalid date' });
+        if (!isNonEmptyString(body.description)) {
+            return res.status(400).json({ error: 'Invalid description' });
+        }
+        if (typeof body.proteinG !== 'number' || body.proteinG < 0) {
+            return res.status(400).json({ error: 'Invalid protein' });
+        }
+        if (body.carbsG != null && (typeof body.carbsG !== 'number' || body.carbsG < 0)) {
+            return res.status(400).json({ error: 'Invalid carbs' });
+        }
+        if (body.fatG != null && (typeof body.fatG !== 'number' || body.fatG < 0)) {
+            return res.status(400).json({ error: 'Invalid fat' });
+        }
+        if (body.calories != null && (typeof body.calories !== 'number' || body.calories < 0)) {
+            return res.status(400).json({ error: 'Invalid calories' });
+        }
+
+        const userId = getTelegramUserId();
+        const mealType =
+            body.mealType != null && body.mealType !== '' ? String(body.mealType) : undefined;
+        await logMeal(
+            userId,
+            body.date,
+            body.description.trim(),
+            body.proteinG,
+            mealType,
+            body.carbsG ?? undefined,
+            body.fatG ?? undefined,
+            body.calories ?? undefined
+        );
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('POST /api/nutrition/meals', err);
         res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
     }
 });

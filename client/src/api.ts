@@ -207,6 +207,16 @@ export function fetchFixedExpenses() {
     return fetchJson<FixedExpensesResponse>('/api/expenses/fixed');
 }
 
+export function createExpenseTransaction(
+    fields: Pick<ExpenseTransaction, 'date' | 'amount' | 'category' | 'description'>
+) {
+    return fetchJson<{ ok: true }>('/api/expenses/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+    });
+}
+
 export function updateExpenseTransaction(
     id: number,
     fields: Partial<Pick<ExpenseTransaction, 'date' | 'amount' | 'category' | 'description'>>
@@ -220,6 +230,19 @@ export function updateExpenseTransaction(
 
 export function deleteExpenseTransaction(id: number) {
     return fetchJson<{ ok: true }>(`/api/expenses/transactions/${id}`, { method: 'DELETE' });
+}
+
+export function createFixedExpense(
+    fields: Pick<
+        FixedExpenseConfig,
+        'description' | 'category' | 'amount' | 'dayOfMonth' | 'frequencyMonths' | 'startMonth'
+    >
+) {
+    return fetchJson<{ ok: true }>('/api/expenses/fixed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+    });
 }
 
 export function updateFixedExpense(
@@ -253,6 +276,27 @@ export function fetchWorkoutPRs() {
 
 export function fetchWorkoutHistory(range: DateRange) {
     return fetchJson<WorkoutHistoryResponse>(`/api/workouts/history?${qs(range)}`);
+}
+
+export function createWorkout(
+    fields: Pick<
+        WorkoutEntry,
+        | 'date'
+        | 'exercise'
+        | 'sets'
+        | 'reps'
+        | 'weightKg'
+        | 'durationMin'
+        | 'notes'
+        | 'caloriesBurned'
+        | 'fatBurnG'
+    >
+) {
+    return fetchJson<{ ok: true }>('/api/workouts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+    });
 }
 
 export function updateWorkout(
@@ -289,6 +333,16 @@ export function fetchNutritionDaily(range: DateRange) {
 
 export function fetchMeals(range: DateRange) {
     return fetchJson<MealsResponse>(`/api/nutrition/meals?${qs(range)}`);
+}
+
+export function createMeal(
+    fields: Pick<MealEntry, 'date' | 'description' | 'mealType' | 'proteinG' | 'carbsG' | 'fatG' | 'calories'>
+) {
+    return fetchJson<{ ok: true }>('/api/nutrition/meals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+    });
 }
 
 export function updateMeal(

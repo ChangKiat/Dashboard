@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { MealEntry } from '../api';
-import { deleteMeal, updateMeal } from '../api';
+import { createMeal, deleteMeal, updateMeal } from '../api';
 import { usePagination } from '../hooks/usePagination';
 import {
     formatCell,
@@ -13,10 +13,13 @@ import RecordModal from './RecordModal';
 import RowActions from './RowActions';
 import TablePagination from './TablePagination';
 
+type ModalMode = 'closed' | 'create' | 'edit';
+
 interface Props {
     entries: MealEntry[];
     onChanged: () => void;
     compact?: boolean;
+    defaultDate?: string;
 }
 
 const UNCATEGORIZED_FILTER = '__uncategorized__';
@@ -26,10 +29,16 @@ function formatMealSummary(entry: MealEntry): string {
     return `${cal} · ${entry.proteinG}g protein`;
 }
 
-export default function MealHistoryTable({ entries, onChanged, compact = false }: Props) {
+export default function MealHistoryTable({
+    entries,
+    onChanged,
+    compact = false,
+    defaultDate,
+}: Props) {
     const [mealTypeFilter, setMealTypeFilter] = useState('all');
     const [viewing, setViewing] = useState<MealEntry | null>(null);
-    const [editing, setEditing] = useState<MealEntry | null>(null);
+    const [modalMode, setModalMode] = useState<ModalMode>('closed');
+    const [editingEntry, setEditingEntry] = useState<MealEntry | null>(null);
     const [form, setForm] = useState({
         date: '',
         mealType: '',
@@ -71,8 +80,24 @@ export default function MealHistoryTable({ entries, onChanged, compact = false }
         setMealTypeFilter('all');
     }, [entries]);
 
+    const openCreate = useCallback(() => {
+        setModalMode('create');
+        setEditingEntry(null);
+        setForm({
+            date: defaultDate ?? '',
+            mealType: '',
+            description: '',
+            proteinG: '',
+            carbsG: '',
+            fatG: '',
+            calories: '',
+        });
+        setModalError(null);
+    }, [defaultDate]);
+
     const openEdit = (entry: MealEntry) => {
-        setEditing(entry);
+        setModalMode('edit');
+        setEditingEntry(entry);
         setForm({
             date: entry.date,
             mealType: entry.mealType ?? '',
@@ -85,13 +110,13 @@ export default function MealHistoryTable({ entries, onChanged, compact = false }
         setModalError(null);
     };
 
-    const closeEdit = () => {
-        setEditing(null);
+    const closeModal = () => {
+        setModalMode('closed');
+        setEditingEntry(null);
         setModalError(null);
     };
 
     const handleSave = async () => {
-        if (!editing) return;
         if (!form.date || !form.description.trim()) {
             setModalError('Date and description are required.');
             return;
@@ -104,7 +129,7 @@ export default function MealHistoryTable({ entries, onChanged, compact = false }
         setSaving(true);
         setModalError(null);
         try {
-            await updateMeal(editing.id, {
+            const payload = {
                 date: form.date,
                 mealType: form.mealType.trim() || null,
                 description: form.description.trim(),
@@ -112,8 +137,13 @@ export default function MealHistoryTable({ entries, onChanged, compact = false }
                 carbsG: parseOptionalNumber(form.carbsG),
                 fatG: parseOptionalNumber(form.fatG),
                 calories: parseOptionalNumber(form.calories),
-            });
-            closeEdit();
+            };
+            if (modalMode === 'create') {
+                await createMeal(payload);
+            } else if (editingEntry) {
+                await updateMeal(editingEntry.id, payload);
+            }
+            closeModal();
             onChanged();
         } catch (err) {
             setModalError(err instanceof Error ? err.message : 'Failed to save');
@@ -132,19 +162,19 @@ export default function MealHistoryTable({ entries, onChanged, compact = false }
         }
     };
 
-    if (entries.length === 0) {
+    if (entries.length === 0 && defaultDate == null) {
         return <p className="muted">{compact ? 'No meals logged this day.' : 'No meals logged in this range.'}</p>;
     }
 
     const displayEntries = pageItems;
 
-    const editModal = (
+    const recordModal = (
         <RecordModal
-            title="Edit meal"
-            open={editing != null}
+            title={modalMode === 'create' ? 'Add meal' : 'Edit meal'}
+            open={modalMode !== 'closed'}
             saving={saving}
             error={modalError}
-            onClose={closeEdit}
+            onClose={closeModal}
             onSave={handleSave}
         >
             <div className="form-field">
@@ -223,42 +253,56 @@ export default function MealHistoryTable({ entries, onChanged, compact = false }
     );
 
     if (compact) {
-        if (filteredEntries.length === 0) {
+        if (filteredEntries.length === 0 && entries.length > 0) {
             return <p className="muted">No meals match this type.</p>;
         }
 
         return (
             <>
+                {defaultDate != null && (
+                    <div className="section-header-row">
+                        <h4>Meals</h4>
+                        <button type="button" className="btn-add" onClick={openCreate}>
+                            + Add
+                        </button>
+                    </div>
+                )}
                 {actionError && <p className="error">{actionError}</p>}
-                <ul className="day-entry-list">
-                    {displayEntries.map((entry) => (
-                        <li key={entry.id} className="day-entry-card">
-                            <button
-                                type="button"
-                                className="day-entry-main day-entry-main--clickable"
-                                onClick={() => setViewing(entry)}
-                            >
-                                <span className="day-entry-title">{entry.description}</span>
-                                <span className="day-entry-sub">
-                                    {entry.mealType ? `${entry.mealType} · ` : ''}
-                                    {formatMealSummary(entry)}
-                                </span>
-                            </button>
-                            <RowActions
-                                onEdit={() => openEdit(entry)}
-                                onDelete={() => handleDelete(entry)}
-                                deleteLabel={`"${entry.description}"`}
+                {filteredEntries.length === 0 ? (
+                    <p className="muted">No meals logged this day.</p>
+                ) : (
+                    <>
+                        <ul className="day-entry-list">
+                            {displayEntries.map((entry) => (
+                                <li key={entry.id} className="day-entry-card">
+                                    <button
+                                        type="button"
+                                        className="day-entry-main day-entry-main--clickable"
+                                        onClick={() => setViewing(entry)}
+                                    >
+                                        <span className="day-entry-title">{entry.description}</span>
+                                        <span className="day-entry-sub">
+                                            {entry.mealType ? `${entry.mealType} · ` : ''}
+                                            {formatMealSummary(entry)}
+                                        </span>
+                                    </button>
+                                    <RowActions
+                                        onEdit={() => openEdit(entry)}
+                                        onDelete={() => handleDelete(entry)}
+                                        deleteLabel={`"${entry.description}"`}
+                                    />
+                                </li>
+                            ))}
+                        </ul>
+                        {totalPages > 1 && (
+                            <TablePagination
+                                page={page}
+                                totalPages={totalPages}
+                                totalItems={totalItems}
+                                onPageChange={setPage}
                             />
-                        </li>
-                    ))}
-                </ul>
-                {totalPages > 1 && (
-                    <TablePagination
-                        page={page}
-                        totalPages={totalPages}
-                        totalItems={totalItems}
-                        onPageChange={setPage}
-                    />
+                        )}
+                    </>
                 )}
                 {viewing && (
                     <HealthEntryDetailModal
@@ -276,7 +320,7 @@ export default function MealHistoryTable({ entries, onChanged, compact = false }
                         }}
                     />
                 )}
-                {editModal}
+                {recordModal}
             </>
         );
     }
@@ -352,7 +396,7 @@ export default function MealHistoryTable({ entries, onChanged, compact = false }
                     </>
                 )}
             </div>
-            {editModal}
+            {recordModal}
         </>
     );
 }

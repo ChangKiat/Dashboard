@@ -694,6 +694,25 @@
   color: #e8eaed;
 }
 
+.btn-add {
+  padding: 5px 12px;
+  border: 1px solid #2a2f3a;
+  border-radius: 8px;
+  background: #1a1f2b;
+  color: #9aa0a6;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.btn-add:hover {
+  border-color: #3b4252;
+  color: #e8eaed;
+  background: #222836;
+}
+
 .record-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -1097,6 +1116,24 @@
   display: grid;
   grid-template-columns: 1fr;
   gap: 16px;
+}
+
+.section-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.section-header-row h3,
+.section-header-row h4 {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #9aa0a6;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .day-detail-section h4 {

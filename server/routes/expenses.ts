@@ -3,6 +3,8 @@ import { and, desc, eq, gte, lte } from 'drizzle-orm';
 import { requireDb } from '../../../AI Agent/src/db/client';
 import { expenses } from '../../../AI Agent/src/db/schema';
 import {
+    addFixedExpense,
+    appendExpense,
     deactivateFixedExpenseById,
     deleteExpense,
     getActiveFixedExpenses,
@@ -148,6 +150,84 @@ router.get('/fixed', async (_req, res) => {
         res.json({ entries });
     } catch (err) {
         console.error('GET /api/expenses/fixed', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+    }
+});
+
+router.post('/transactions', async (req, res) => {
+    try {
+        const body = req.body ?? {};
+        if (!isValidDate(body.date)) return res.status(400).json({ error: 'Invalid date' });
+        if (!isPositiveNumber(body.amount)) {
+            return res.status(400).json({ error: 'Amount must be a positive number' });
+        }
+        if (!isNonEmptyString(body.category)) {
+            return res.status(400).json({ error: 'Invalid category' });
+        }
+        if (!isNonEmptyString(body.description)) {
+            return res.status(400).json({ error: 'Invalid description' });
+        }
+        const currency =
+            body.currency != null && isNonEmptyString(body.currency)
+                ? body.currency.trim()
+                : 'MYR';
+
+        await appendExpense(
+            body.date,
+            body.amount,
+            currency,
+            body.category.trim(),
+            body.description.trim()
+        );
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('POST /api/expenses/transactions', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+    }
+});
+
+router.post('/fixed', async (req, res) => {
+    try {
+        const body = req.body ?? {};
+        if (!isNonEmptyString(body.description)) {
+            return res.status(400).json({ error: 'Invalid description' });
+        }
+        if (!isNonEmptyString(body.category)) {
+            return res.status(400).json({ error: 'Invalid category' });
+        }
+        if (!isPositiveNumber(body.amount)) {
+            return res.status(400).json({ error: 'Amount must be a positive number' });
+        }
+        if (!isDayOfMonth(body.dayOfMonth)) {
+            return res.status(400).json({ error: 'Day of month must be 1–31' });
+        }
+        if (
+            !isPositiveNumber(body.frequencyMonths) ||
+            !Number.isInteger(body.frequencyMonths)
+        ) {
+            return res.status(400).json({ error: 'Frequency must be a positive integer' });
+        }
+        const startMonth =
+            body.startMonth != null && Number.isInteger(body.startMonth) && body.startMonth >= 1 && body.startMonth <= 12
+                ? body.startMonth
+                : new Date().getMonth() + 1;
+        const currency =
+            body.currency != null && isNonEmptyString(body.currency)
+                ? body.currency.trim()
+                : 'MYR';
+
+        await addFixedExpense(
+            body.dayOfMonth,
+            body.amount,
+            currency,
+            body.category.trim(),
+            body.description.trim(),
+            body.frequencyMonths,
+            startMonth
+        );
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('POST /api/expenses/fixed', err);
         res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
     }
 });

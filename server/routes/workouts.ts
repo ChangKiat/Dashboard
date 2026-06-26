@@ -1,5 +1,10 @@
 import { Router } from 'express';
-import { getWorkoutHistory, updateWorkout, deleteWorkout } from '../../../AI Agent/src/services/gymService';
+import {
+    deleteWorkout,
+    getWorkoutHistory,
+    logWorkout,
+    updateWorkout,
+} from '../../../AI Agent/src/services/gymService';
 import { enumerateDates, parseDateRange } from '../dateUtils';
 import {
     computePersonalRecords,
@@ -96,6 +101,58 @@ router.get('/history', async (req, res) => {
         res.json({ start, end, entries: formatWorkoutEntries(history) });
     } catch (err) {
         console.error('GET /api/workouts/history', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+    }
+});
+
+router.post('/', async (req, res) => {
+    try {
+        const body = req.body ?? {};
+        if (!isValidDate(body.date)) return res.status(400).json({ error: 'Invalid date' });
+        if (!isNonEmptyString(body.exercise)) {
+            return res.status(400).json({ error: 'Invalid exercise' });
+        }
+        if (body.sets != null && !isNonNegativeInteger(body.sets)) {
+            return res.status(400).json({ error: 'Invalid sets' });
+        }
+        if (body.reps != null && !isNonNegativeInteger(body.reps)) {
+            return res.status(400).json({ error: 'Invalid reps' });
+        }
+        if (body.weightKg != null && (typeof body.weightKg !== 'number' || body.weightKg < 0)) {
+            return res.status(400).json({ error: 'Invalid weight' });
+        }
+        if (
+            body.durationMin != null &&
+            (typeof body.durationMin !== 'number' || body.durationMin < 0)
+        ) {
+            return res.status(400).json({ error: 'Invalid duration' });
+        }
+        if (
+            body.caloriesBurned != null &&
+            (typeof body.caloriesBurned !== 'number' || body.caloriesBurned < 0)
+        ) {
+            return res.status(400).json({ error: 'Invalid calories burned' });
+        }
+        if (body.fatBurnG != null && (typeof body.fatBurnG !== 'number' || body.fatBurnG < 0)) {
+            return res.status(400).json({ error: 'Invalid fat burned' });
+        }
+
+        const userId = getTelegramUserId();
+        await logWorkout(
+            userId,
+            body.date,
+            body.exercise.trim(),
+            body.sets ?? undefined,
+            body.reps ?? undefined,
+            body.weightKg ?? undefined,
+            body.durationMin ?? undefined,
+            body.notes != null && body.notes !== '' ? String(body.notes) : undefined,
+            body.caloriesBurned ?? undefined,
+            body.fatBurnG ?? undefined
+        );
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('POST /api/workouts', err);
         res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
     }
 });

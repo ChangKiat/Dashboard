@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { WorkoutEntry } from '../api';
-import { deleteWorkout, updateWorkout } from '../api';
+import { createWorkout, deleteWorkout, updateWorkout } from '../api';
 import { usePagination } from '../hooks/usePagination';
 import { formatCell, parseOptionalInt, parseOptionalNumber } from '../utils/tableFormat';
 import HealthEntryDetailModal from './HealthEntryDetailModal';
@@ -9,10 +9,13 @@ import RecordModal from './RecordModal';
 import RowActions from './RowActions';
 import TablePagination from './TablePagination';
 
+type ModalMode = 'closed' | 'create' | 'edit';
+
 interface Props {
     entries: WorkoutEntry[];
     onChanged: () => void;
     compact?: boolean;
+    defaultDate?: string;
 }
 
 function formatWorkoutSummary(entry: WorkoutEntry): string {
@@ -25,10 +28,16 @@ function formatWorkoutSummary(entry: WorkoutEntry): string {
     return parts.length > 0 ? parts.join(' · ') : '—';
 }
 
-export default function WorkoutHistoryTable({ entries, onChanged, compact = false }: Props) {
+export default function WorkoutHistoryTable({
+    entries,
+    onChanged,
+    compact = false,
+    defaultDate,
+}: Props) {
     const [exerciseFilter, setExerciseFilter] = useState('all');
     const [viewing, setViewing] = useState<WorkoutEntry | null>(null);
-    const [editing, setEditing] = useState<WorkoutEntry | null>(null);
+    const [modalMode, setModalMode] = useState<ModalMode>('closed');
+    const [editingEntry, setEditingEntry] = useState<WorkoutEntry | null>(null);
     const [form, setForm] = useState({
         date: '',
         exercise: '',
@@ -62,8 +71,26 @@ export default function WorkoutHistoryTable({ entries, onChanged, compact = fals
         setExerciseFilter('all');
     }, [entries]);
 
+    const openCreate = useCallback(() => {
+        setModalMode('create');
+        setEditingEntry(null);
+        setForm({
+            date: defaultDate ?? '',
+            exercise: '',
+            sets: '',
+            reps: '',
+            weightKg: '',
+            durationMin: '',
+            notes: '',
+            caloriesBurned: '',
+            fatBurnG: '',
+        });
+        setModalError(null);
+    }, [defaultDate]);
+
     const openEdit = (entry: WorkoutEntry) => {
-        setEditing(entry);
+        setModalMode('edit');
+        setEditingEntry(entry);
         setForm({
             date: entry.date,
             exercise: entry.exercise,
@@ -78,13 +105,13 @@ export default function WorkoutHistoryTable({ entries, onChanged, compact = fals
         setModalError(null);
     };
 
-    const closeEdit = () => {
-        setEditing(null);
+    const closeModal = () => {
+        setModalMode('closed');
+        setEditingEntry(null);
         setModalError(null);
     };
 
     const handleSave = async () => {
-        if (!editing) return;
         if (!form.date || !form.exercise.trim()) {
             setModalError('Date and exercise are required.');
             return;
@@ -92,7 +119,7 @@ export default function WorkoutHistoryTable({ entries, onChanged, compact = fals
         setSaving(true);
         setModalError(null);
         try {
-            await updateWorkout(editing.id, {
+            const payload = {
                 date: form.date,
                 exercise: form.exercise.trim(),
                 sets: parseOptionalInt(form.sets),
@@ -102,8 +129,13 @@ export default function WorkoutHistoryTable({ entries, onChanged, compact = fals
                 notes: form.notes.trim() || null,
                 caloriesBurned: parseOptionalNumber(form.caloriesBurned),
                 fatBurnG: parseOptionalNumber(form.fatBurnG),
-            });
-            closeEdit();
+            };
+            if (modalMode === 'create') {
+                await createWorkout(payload);
+            } else if (editingEntry) {
+                await updateWorkout(editingEntry.id, payload);
+            }
+            closeModal();
             onChanged();
         } catch (err) {
             setModalError(err instanceof Error ? err.message : 'Failed to save');
@@ -122,19 +154,19 @@ export default function WorkoutHistoryTable({ entries, onChanged, compact = fals
         }
     };
 
-    if (entries.length === 0) {
+    if (entries.length === 0 && defaultDate == null) {
         return <p className="muted">{compact ? 'No workouts logged this day.' : 'No workouts logged in this range.'}</p>;
     }
 
     const displayEntries = pageItems;
 
-    const editModal = (
+    const recordModal = (
         <RecordModal
-            title="Edit workout"
-            open={editing != null}
+            title={modalMode === 'create' ? 'Add workout' : 'Edit workout'}
+            open={modalMode !== 'closed'}
             saving={saving}
             error={modalError}
-            onClose={closeEdit}
+            onClose={closeModal}
             onSave={handleSave}
         >
             <div className="form-field">
@@ -231,39 +263,53 @@ export default function WorkoutHistoryTable({ entries, onChanged, compact = fals
     );
 
     if (compact) {
-        if (filteredEntries.length === 0) {
+        if (filteredEntries.length === 0 && entries.length > 0) {
             return <p className="muted">No workouts match this exercise.</p>;
         }
 
         return (
             <>
+                {defaultDate != null && (
+                    <div className="section-header-row">
+                        <h4>Workouts</h4>
+                        <button type="button" className="btn-add" onClick={openCreate}>
+                            + Add
+                        </button>
+                    </div>
+                )}
                 {actionError && <p className="error">{actionError}</p>}
-                <ul className="day-entry-list">
-                    {displayEntries.map((entry) => (
-                        <li key={entry.id} className="day-entry-card">
-                            <button
-                                type="button"
-                                className="day-entry-main day-entry-main--clickable"
-                                onClick={() => setViewing(entry)}
-                            >
-                                <span className="day-entry-title">{entry.exercise}</span>
-                                <span className="day-entry-sub">{formatWorkoutSummary(entry)}</span>
-                            </button>
-                            <RowActions
-                                onEdit={() => openEdit(entry)}
-                                onDelete={() => handleDelete(entry)}
-                                deleteLabel={`this ${entry.exercise} entry`}
+                {filteredEntries.length === 0 ? (
+                    <p className="muted">No workouts logged this day.</p>
+                ) : (
+                    <>
+                        <ul className="day-entry-list">
+                            {displayEntries.map((entry) => (
+                                <li key={entry.id} className="day-entry-card">
+                                    <button
+                                        type="button"
+                                        className="day-entry-main day-entry-main--clickable"
+                                        onClick={() => setViewing(entry)}
+                                    >
+                                        <span className="day-entry-title">{entry.exercise}</span>
+                                        <span className="day-entry-sub">{formatWorkoutSummary(entry)}</span>
+                                    </button>
+                                    <RowActions
+                                        onEdit={() => openEdit(entry)}
+                                        onDelete={() => handleDelete(entry)}
+                                        deleteLabel={`this ${entry.exercise} entry`}
+                                    />
+                                </li>
+                            ))}
+                        </ul>
+                        {totalPages > 1 && (
+                            <TablePagination
+                                page={page}
+                                totalPages={totalPages}
+                                totalItems={totalItems}
+                                onPageChange={setPage}
                             />
-                        </li>
-                    ))}
-                </ul>
-                {totalPages > 1 && (
-                    <TablePagination
-                        page={page}
-                        totalPages={totalPages}
-                        totalItems={totalItems}
-                        onPageChange={setPage}
-                    />
+                        )}
+                    </>
                 )}
                 {viewing && (
                     <HealthEntryDetailModal
@@ -281,7 +327,7 @@ export default function WorkoutHistoryTable({ entries, onChanged, compact = fals
                         }}
                     />
                 )}
-                {editModal}
+                {recordModal}
             </>
         );
     }
@@ -358,7 +404,7 @@ export default function WorkoutHistoryTable({ entries, onChanged, compact = fals
                     </>
                 )}
             </div>
-            {editModal}
+            {recordModal}
         </>
     );
 }
