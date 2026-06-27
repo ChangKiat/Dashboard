@@ -10,6 +10,14 @@ import TablePagination from './TablePagination';
 
 type ModalMode = 'closed' | 'create' | 'edit';
 
+function formatFrequencyMonths(months: number): string {
+    if (months === 1) return 'Monthly';
+    if (months === 2) return 'Every 2 months';
+    if (months === 3) return 'Quarterly';
+    if (months === 12) return 'Yearly';
+    return `Every ${months} months`;
+}
+
 interface Props {
     rows: FixedExpenseConfig[];
     variableCategories: string[];
@@ -136,13 +144,14 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
                             <th>Category</th>
                             <th>Amount</th>
                             <th>Date of payment</th>
+                            <th>Frequency</th>
                             <th className="actions-col">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {rows.length === 0 ? (
                             <tr>
-                                <td colSpan={5} className="muted">
+                                <td colSpan={6} className="muted">
                                     No fixed expenses configured
                                 </td>
                             </tr>
@@ -153,6 +162,7 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
                                     <td>{row.category}</td>
                                     <td>{formatAmount(row.amount)}</td>
                                     <td>{row.dayOfMonth}</td>
+                                    <td>{formatFrequencyMonths(row.frequencyMonths)}</td>
                                     <td>
                                         <RowActions
                                             onEdit={() => openEdit(row)}
