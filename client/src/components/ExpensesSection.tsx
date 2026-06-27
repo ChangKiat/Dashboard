@@ -125,7 +125,7 @@ export default function ExpensesSection({ month }: Props) {
                     />
                 </div>
 
-                <VariableExpensesTable rows={data.variable} formatAmount={formatMYR} />
+                <VariableExpensesTable rows={data.variable} transactions={transactions} formatAmount={formatMYR} />
 
                 <div className="expenses-calendar">
                     <ExpenseCalendar

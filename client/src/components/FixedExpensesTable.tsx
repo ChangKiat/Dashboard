@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import type { FixedExpenseConfig } from '../api';
 import { createFixedExpense, deleteFixedExpense, updateFixedExpense } from '../api';
@@ -26,7 +26,14 @@ interface Props {
 }
 
 export default function FixedExpensesTable({ rows, variableCategories, formatAmount, onChanged }: Props) {
-    const { page, setPage, pageItems, totalPages, totalItems } = usePagination(rows);
+    const sortedRows = useMemo(
+        () =>
+            [...rows].sort((a, b) =>
+                a.description.localeCompare(b.description, 'en-MY', { sensitivity: 'base' })
+            ),
+        [rows]
+    );
+    const { page, setPage, pageItems, totalPages, totalItems } = usePagination(sortedRows);
     const [modalMode, setModalMode] = useState<ModalMode>('closed');
     const [editingEntry, setEditingEntry] = useState<FixedExpenseConfig | null>(null);
     const [form, setForm] = useState({

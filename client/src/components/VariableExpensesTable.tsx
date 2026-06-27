@@ -1,10 +1,12 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
+import type { ExpenseTransaction } from '../api';
 import {
     BUDGET_STATUS_LABELS,
     getBudgetStatus,
     getBudgetUsagePct,
 } from '../utils/budgetStatus';
+import VariableCategoryDetailModal from './VariableCategoryDetailModal';
 
 interface Row {
     category: string;
@@ -15,10 +17,23 @@ interface Row {
 
 interface Props {
     rows: Row[];
+    transactions: ExpenseTransaction[];
     formatAmount: (amount: number) => string;
 }
 
-export default function VariableExpensesTable({ rows, formatAmount }: Props) {
+export default function VariableExpensesTable({ rows, transactions, formatAmount }: Props) {
+    const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+    const selectedRow = useMemo(
+        () => rows.find((r) => r.category === selectedCategory) ?? null,
+        [rows, selectedCategory]
+    );
+
+    const selectedTransactions = useMemo(() => {
+        if (!selectedCategory) return [];
+        return transactions.filter((t) => t.category === selectedCategory);
+    }, [transactions, selectedCategory]);
+
     const summary = useMemo(() => {
         let totalBudget = 0;
         let totalSpending = 0;
@@ -86,9 +101,11 @@ export default function VariableExpensesTable({ rows, formatAmount }: Props) {
                     const remaining = row.monthlyBudget - row.spending;
 
                     return (
-                        <article
+                        <button
                             key={row.category}
-                            className={`variable-expense-card budget-row budget-row--${status}`}
+                            type="button"
+                            className={`variable-expense-card variable-expense-card--clickable budget-row budget-row--${status}`}
+                            onClick={() => setSelectedCategory(row.category)}
                         >
                             <div className="variable-expense-card-header">
                                 <div className="variable-expense-card-title">
@@ -134,10 +151,20 @@ export default function VariableExpensesTable({ rows, formatAmount }: Props) {
                                 </div>
                                 <span className="budget-usage-pct">{usagePct}%</span>
                             </div>
-                        </article>
+                        </button>
                     );
                 })}
             </div>
+            {selectedRow && selectedCategory && (
+                <VariableCategoryDetailModal
+                    category={selectedCategory}
+                    monthlyBudget={selectedRow.monthlyBudget}
+                    spending={selectedRow.spending}
+                    transactions={selectedTransactions}
+                    formatAmount={formatAmount}
+                    onClose={() => setSelectedCategory(null)}
+                />
+            )}
         </div>
     );
 }

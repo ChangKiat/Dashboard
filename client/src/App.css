@@ -1233,6 +1233,113 @@
   padding: 14px 16px;
 }
 
+.variable-expense-card--clickable {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.variable-expense-card--clickable:hover {
+  background: #1a2030;
+  border-color: #3b4252;
+}
+
+.variable-expense-card--clickable:hover .variable-expense-card-header h4 {
+  color: #93c5fd;
+}
+
+.category-detail-summary {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  background: #161b26;
+  border: 1px solid #2a2f3a;
+  border-radius: 8px;
+}
+
+.category-detail-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin: 0;
+}
+
+.category-detail-transactions-heading {
+  margin: 0 0 10px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #9aa0a6;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.category-detail-search {
+  margin-bottom: 12px;
+}
+
+.category-detail-search input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid #2a2f3a;
+  border-radius: 6px;
+  background: #1a1f2b;
+  color: #e8eaed;
+  font-size: 0.875rem;
+}
+
+.category-detail-search input::placeholder {
+  color: #6b7280;
+}
+
+.category-detail-transactions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.category-detail-transaction {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #161b26;
+  border: 1px solid #2a2f3a;
+  border-radius: 6px;
+}
+
+.category-detail-transaction-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.category-detail-transaction-desc {
+  font-size: 0.875rem;
+  color: #e8eaed;
+}
+
+.category-detail-transaction-date {
+  font-size: 0.75rem;
+  color: #9aa0a6;
+}
+
+.category-detail-transaction-amount {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #e8eaed;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
 .variable-expense-card.budget-row--ok {
   border-left: 3px solid #34d399;
 }
