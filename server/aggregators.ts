@@ -28,6 +28,40 @@ export function formatExpenseTransactions(rows: ExpenseTransactionRow[]) {
     }));
 }
 
+export type ExpenseReimbursementRow = {
+    id: number;
+    source: string | null;
+    amount: string;
+};
+
+export function enrichExpenseTransactions(
+    rows: ExpenseTransactionRow[],
+    reimbursedByExpenseId: Map<number, number>,
+    reimbursementsByExpenseId: Map<number, ExpenseReimbursementRow[]>
+) {
+    return rows.map((row) => {
+        const grossAmount = parseFloat(row.amount);
+        const reimbursed = reimbursedByExpenseId.get(row.id) || 0;
+        const netAmount = Math.max(0, grossAmount - reimbursed);
+        const reimbursements = (reimbursementsByExpenseId.get(row.id) || []).map((r) => ({
+            id: r.id,
+            source: r.source,
+            amount: parseFloat(r.amount),
+        }));
+        return {
+            id: row.id,
+            date: row.date,
+            amount: grossAmount,
+            grossAmount,
+            reimbursed,
+            netAmount,
+            category: row.category,
+            description: row.description,
+            reimbursements,
+        };
+    });
+}
+
 export function groupExpensesByDate(
     rows: { date: string; amount: string; category: string }[]
 ) {
@@ -41,6 +75,67 @@ export function groupExpensesByDate(
         byDate[row.date].total += amount;
         const cat = row.category;
         byDate[row.date].byCategory[cat] = (byDate[row.date].byCategory[cat] || 0) + amount;
+    }
+
+    return byDate;
+}
+
+export type IncomeTransactionRow = {
+    id: number;
+    date: string;
+    amount: string;
+    category: string;
+    description: string;
+    source: string | null;
+    expenseId: number | null;
+};
+
+export function formatIncomeTransactions(rows: IncomeTransactionRow[]) {
+    return rows.map((row) => ({
+        id: row.id,
+        date: row.date,
+        amount: parseFloat(row.amount),
+        category: row.category,
+        description: row.description,
+        source: row.source,
+        expenseId: row.expenseId,
+    }));
+}
+
+export function groupIncomesByDate(
+    rows: { date: string; amount: string; category: string }[]
+) {
+    const byDate: Record<string, { total: number; byCategory: Record<string, number> }> = {};
+
+    for (const row of rows) {
+        if (!byDate[row.date]) {
+            byDate[row.date] = { total: 0, byCategory: {} };
+        }
+        const amount = parseFloat(row.amount);
+        byDate[row.date].total += amount;
+        const cat = row.category;
+        byDate[row.date].byCategory[cat] = (byDate[row.date].byCategory[cat] || 0) + amount;
+    }
+
+    return byDate;
+}
+
+export function groupExpensesByDateNet(
+    rows: { date: string; amount: string; category: string; id: number }[],
+    reimbursedByExpenseId: Map<number, number>
+) {
+    const byDate: Record<string, { total: number; byCategory: Record<string, number> }> = {};
+
+    for (const row of rows) {
+        if (!byDate[row.date]) {
+            byDate[row.date] = { total: 0, byCategory: {} };
+        }
+        const gross = parseFloat(row.amount);
+        const reimbursed = reimbursedByExpenseId.get(row.id) || 0;
+        const net = Math.max(0, gross - reimbursed);
+        byDate[row.date].total += net;
+        const cat = row.category;
+        byDate[row.date].byCategory[cat] = (byDate[row.date].byCategory[cat] || 0) + net;
     }
 
     return byDate;

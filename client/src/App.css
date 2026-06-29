@@ -822,6 +822,29 @@
   resize: vertical;
 }
 
+.reimbursement-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.reimbursement-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.reimbursement-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.reimbursement-row .btn-icon {
+  flex: 0 0 auto;
+  padding: 0.25rem 0.5rem;
+}
+
 .data-table .actions-col {
   width: 56px;
 }

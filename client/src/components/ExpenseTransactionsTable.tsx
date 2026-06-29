@@ -12,12 +12,18 @@ const DAY_PAGE_SIZE = 5;
 
 type ModalMode = 'closed' | 'create' | 'edit';
 
+type ReimbursementRow = { source: string; amount: string };
+
 interface Props {
     entries: ExpenseTransaction[];
     variableCategories: string[];
     formatAmount: (amount: number) => string;
     onChanged: () => void;
     defaultDate?: string;
+}
+
+function emptyReimbursement(): ReimbursementRow {
+    return { source: '', amount: '' };
 }
 
 export default function ExpenseTransactionsTable({
@@ -30,6 +36,8 @@ export default function ExpenseTransactionsTable({
     const [modalMode, setModalMode] = useState<ModalMode>('closed');
     const [editingEntry, setEditingEntry] = useState<ExpenseTransaction | null>(null);
     const [form, setForm] = useState({ date: '', category: '', amount: '', description: '' });
+    const [showReimbursements, setShowReimbursements] = useState(false);
+    const [reimbursements, setReimbursements] = useState<ReimbursementRow[]>([emptyReimbursement()]);
     const [saving, setSaving] = useState(false);
     const [modalError, setModalError] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
@@ -47,6 +55,8 @@ export default function ExpenseTransactionsTable({
             amount: '',
             description: '',
         });
+        setShowReimbursements(false);
+        setReimbursements([emptyReimbursement()]);
         setModalError(null);
     }, [defaultDate]);
 
@@ -56,7 +66,7 @@ export default function ExpenseTransactionsTable({
         setForm({
             date: entry.date,
             category: entry.category,
-            amount: String(entry.amount),
+            amount: String(entry.grossAmount ?? entry.amount),
             description: entry.description,
         });
         setModalError(null);
@@ -66,6 +76,18 @@ export default function ExpenseTransactionsTable({
         setModalMode('closed');
         setEditingEntry(null);
         setModalError(null);
+    };
+
+    const parseReimbursements = (): { source: string; amount: number }[] | 'invalid' => {
+        const items: { source: string; amount: number }[] = [];
+        for (const row of reimbursements) {
+            const source = row.source.trim();
+            const amount = parseFloat(row.amount);
+            if (!source && !row.amount.trim()) continue;
+            if (!source || !Number.isFinite(amount) || amount <= 0) return 'invalid';
+            items.push({ source, amount });
+        }
+        return items;
     };
 
     const handleSave = async () => {
@@ -80,6 +102,17 @@ export default function ExpenseTransactionsTable({
             setModalError('Date, category, description, and a positive amount are required.');
             return;
         }
+
+        let reimbursementPayload: { source: string; amount: number }[] | undefined;
+        if (modalMode === 'create' && showReimbursements) {
+            const parsed = parseReimbursements();
+            if (parsed === 'invalid') {
+                setModalError('Each reimbursement needs a person name and positive amount.');
+                return;
+            }
+            reimbursementPayload = parsed.length > 0 ? parsed : undefined;
+        }
+
         setSaving(true);
         setModalError(null);
         try {
@@ -88,11 +121,17 @@ export default function ExpenseTransactionsTable({
                 category: form.category.trim(),
                 amount,
                 description: form.description.trim(),
+                ...(reimbursementPayload ? { reimbursements: reimbursementPayload } : {}),
             };
             if (modalMode === 'create') {
                 await createExpenseTransaction(payload);
             } else if (editingEntry) {
-                await updateExpenseTransaction(editingEntry.id, payload);
+                await updateExpenseTransaction(editingEntry.id, {
+                    date: payload.date,
+                    category: payload.category,
+                    amount: payload.amount,
+                    description: payload.description,
+                });
             }
             closeModal();
             onChanged();
@@ -111,6 +150,15 @@ export default function ExpenseTransactionsTable({
         } catch (err) {
             setActionError(err instanceof Error ? err.message : 'Failed to delete');
         }
+    };
+
+    const formatEntryAmount = (entry: ExpenseTransaction) => {
+        const reimbursed = entry.reimbursed ?? 0;
+        const netAmount = entry.netAmount ?? entry.amount;
+        if (reimbursed > 0) {
+            return `${formatAmount(netAmount)} (gross ${formatAmount(entry.grossAmount ?? entry.amount)}, reimbursed ${formatAmount(reimbursed)})`;
+        }
+        return formatAmount(entry.amount);
     };
 
     const modal = (
@@ -161,6 +209,74 @@ export default function ExpenseTransactionsTable({
                     onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                 />
             </div>
+            {modalMode === 'create' && (
+                <div className="form-field">
+                    <label>
+                        <input
+                            type="checkbox"
+                            checked={showReimbursements}
+                            onChange={(e) => setShowReimbursements(e.target.checked)}
+                        />{' '}
+                        Shared bill reimbursements
+                    </label>
+                    {showReimbursements && (
+                        <div className="reimbursement-rows">
+                            {reimbursements.map((row, index) => (
+                                <div key={index} className="reimbursement-row">
+                                    <input
+                                        type="text"
+                                        placeholder="Person"
+                                        value={row.source}
+                                        onChange={(e) =>
+                                            setReimbursements((rows) =>
+                                                rows.map((r, i) =>
+                                                    i === index ? { ...r, source: e.target.value } : r
+                                                )
+                                            )
+                                        }
+                                    />
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        placeholder="Amount"
+                                        value={row.amount}
+                                        onChange={(e) =>
+                                            setReimbursements((rows) =>
+                                                rows.map((r, i) =>
+                                                    i === index ? { ...r, amount: e.target.value } : r
+                                                )
+                                            )
+                                        }
+                                    />
+                                    {reimbursements.length > 1 && (
+                                        <button
+                                            type="button"
+                                            className="btn-icon"
+                                            onClick={() =>
+                                                setReimbursements((rows) =>
+                                                    rows.filter((_, i) => i !== index)
+                                                )
+                                            }
+                                        >
+                                            ×
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                            <button
+                                type="button"
+                                className="btn-add"
+                                onClick={() =>
+                                    setReimbursements((rows) => [...rows, emptyReimbursement()])
+                                }
+                            >
+                                + Add person
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
         </RecordModal>
     );
 
@@ -168,7 +284,7 @@ export default function ExpenseTransactionsTable({
         <>
             {defaultDate != null && (
                 <div className="section-header-row">
-                    <h4>Transactions</h4>
+                    <h4>Expenses</h4>
                     <button type="button" className="btn-add" onClick={openCreate}>
                         + Add
                     </button>
@@ -185,7 +301,7 @@ export default function ExpenseTransactionsTable({
                                 <div className="day-entry-main">
                                     <span className="day-entry-title">{entry.description}</span>
                                     <span className="day-entry-sub">
-                                        {entry.category} · {formatAmount(entry.amount)}
+                                        {entry.category} · {formatEntryAmount(entry)}
                                     </span>
                                 </div>
                                 <RowActions

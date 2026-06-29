@@ -37,7 +37,16 @@ export interface ExpenseOverviewResponse {
         amountCanUse: number;
         budget: number;
         actualSpend: number;
+        totalIncome: number;
+        totalReimbursed: number;
+        netCashflow: number;
     };
+}
+
+export interface ExpenseReimbursement {
+    id: number;
+    source: string | null;
+    amount: number;
 }
 
 export interface ExpenseTransaction {
@@ -46,6 +55,10 @@ export interface ExpenseTransaction {
     amount: number;
     category: string;
     description: string;
+    grossAmount?: number;
+    reimbursed?: number;
+    netAmount?: number;
+    reimbursements?: ExpenseReimbursement[];
 }
 
 export interface ExpenseTransactionsResponse {
@@ -53,6 +66,35 @@ export interface ExpenseTransactionsResponse {
     start: string;
     end: string;
     entries: ExpenseTransaction[];
+}
+
+export interface IncomeTransaction {
+    id: number;
+    date: string;
+    amount: number;
+    category: string;
+    description: string;
+    source: string | null;
+    expenseId: number | null;
+}
+
+export interface IncomeTransactionsResponse {
+    month: string;
+    start: string;
+    end: string;
+    entries: IncomeTransaction[];
+}
+
+export interface IncomeDailyPoint {
+    date: string;
+    total: number;
+    byCategory: Record<string, number>;
+}
+
+export interface IncomeDailyResponse {
+    start: string;
+    end: string;
+    series: IncomeDailyPoint[];
 }
 
 export interface FixedExpenseConfig {
@@ -208,9 +250,11 @@ export function fetchFixedExpenses() {
 }
 
 export function createExpenseTransaction(
-    fields: Pick<ExpenseTransaction, 'date' | 'amount' | 'category' | 'description'>
+    fields: Pick<ExpenseTransaction, 'date' | 'amount' | 'category' | 'description'> & {
+        reimbursements?: { source: string; amount: number }[];
+    }
 ) {
-    return fetchJson<{ ok: true }>('/api/expenses/transactions', {
+    return fetchJson<{ ok: true; id: number }>('/api/expenses/transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(fields),
@@ -260,6 +304,44 @@ export function updateFixedExpense(
 
 export function deleteFixedExpense(id: number) {
     return fetchJson<{ ok: true }>(`/api/expenses/fixed/${id}`, { method: 'DELETE' });
+}
+
+export function fetchIncomeTransactions(month: string) {
+    return fetchJson<IncomeTransactionsResponse>(`/api/incomes/transactions?month=${month}`);
+}
+
+export function fetchIncomeDaily(range: DateRange) {
+    return fetchJson<IncomeDailyResponse>(`/api/incomes/daily?${qs(range)}`);
+}
+
+export function createIncomeTransaction(
+    fields: Pick<IncomeTransaction, 'date' | 'amount' | 'category' | 'description'> & {
+        source?: string | null;
+        expenseId?: number | null;
+    }
+) {
+    return fetchJson<{ ok: true; id: number }>('/api/incomes/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+    });
+}
+
+export function updateIncomeTransaction(
+    id: number,
+    fields: Partial<
+        Pick<IncomeTransaction, 'date' | 'amount' | 'category' | 'description' | 'source' | 'expenseId'>
+    >
+) {
+    return fetchJson<{ ok: true }>(`/api/incomes/transactions/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+    });
+}
+
+export function deleteIncomeTransaction(id: number) {
+    return fetchJson<{ ok: true }>(`/api/incomes/transactions/${id}`, { method: 'DELETE' });
 }
 
 export function fetchWorkoutDaily(range: DateRange) {

@@ -43,13 +43,18 @@ Open [http://localhost:5173](http://localhost:5173)
 | `GET /api/expenses/categories?start=&end=` | Category breakdown                                  |
 | `GET /api/expenses/overview?month=`        | Monthly budget overview (tables, charts, totals)    |
 | `GET /api/expenses/transactions?month=`    | Transaction log for the selected month              |
-| `POST /api/expenses/transactions`          | Create a variable expense transaction               |
+| `POST /api/expenses/transactions`          | Create a variable expense transaction (optional `reimbursements` for shared bills) |
 | `PATCH /api/expenses/transactions/:id`     | Update a variable expense transaction               |
 | `DELETE /api/expenses/transactions/:id`    | Delete a variable expense transaction               |
 | `GET /api/expenses/fixed`                  | Active fixed/recurring expenses                     |
 | `POST /api/expenses/fixed`                 | Create a fixed expense                              |
 | `PATCH /api/expenses/fixed/:id`            | Update a fixed expense                              |
 | `DELETE /api/expenses/fixed/:id`           | Deactivate a fixed expense                          |
+| `GET /api/incomes/transactions?month=`   | Income log for the selected month                   |
+| `GET /api/incomes/daily?start=&end=`       | Daily income series                                 |
+| `POST /api/incomes/transactions`           | Create an income entry (claim, transfer, etc.)      |
+| `PATCH /api/incomes/transactions/:id`    | Update an income entry                              |
+| `DELETE /api/incomes/transactions/:id`   | Delete an income entry                              |
 | `GET /api/workouts/daily?start=&end=`      | Sessions and sets per day                           |
 | `GET /api/workouts/exercises?start=&end=`  | Top exercises and weight trend                      |
 | `GET /api/workouts/prs`                    | All-time personal records (max weight per exercise) |
@@ -72,10 +77,10 @@ Top to bottom:
 
 1. Summary cards — salary, amount can use, fixed total, budget, actual spend
 2. Variable budget cards with totals summary (full width, responsive grid)
-3. Spending calendar + day detail panel (selected day's total, category breakdown, paginated transactions; add/edit/delete per day)
+3. Spending calendar + day detail panel (combined net spend / income stat, side-by-side expense and income tables with per-day CRUD)
 4. Fixed expenses table (add/edit/delete)
 
-Transactions are viewed, added, and edited per day via the spending calendar day panel.
+Transactions and income are viewed, added, and edited per day via the spending calendar day panel. Expense create supports optional shared-bill reimbursements (`reimbursements: [{ source, amount }]`), which create linked `Transfer` income rows and reduce your net cost. Income categories: Claim (medical/OT), Transfer (bill share), Salary, Other.
 
 Variable expense categories and salary come from the AI Agent database (`budgets` table and `user_settings.salary_after_tax`). The API loads categories at startup via `loadExpenseCategories()`.
 

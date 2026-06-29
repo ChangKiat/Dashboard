@@ -12,10 +12,15 @@ import {
     updateExpense,
     updateFixedExpenseById,
 } from '../../../AI Agent/src/services/expenseService';
+import {
+    appendReimbursements,
+    getIncomesByExpenseIds,
+    getReimbursementsByExpenseIds,
+} from '../../../AI Agent/src/services/incomeService';
 import { enumerateDates, parseDateRange, parseMonth } from '../dateUtils';
 import {
-    formatExpenseTransactions,
-    groupExpensesByDate,
+    enrichExpenseTransactions,
+    groupExpensesByDateNet,
     groupFixedExpensesByCategory,
 } from '../aggregators';
 import { loadExpenseCategories } from '../../../AI Agent/src/config/expenseCategories';
@@ -30,6 +35,22 @@ import {
 } from '../validation';
 
 const router = Router();
+
+function parseReimbursements(
+    value: unknown
+): { source: string; amount: number }[] | undefined | 'invalid' {
+    if (value == null) return undefined;
+    if (!Array.isArray(value)) return 'invalid';
+    const items: { source: string; amount: number }[] = [];
+    for (const item of value) {
+        if (typeof item !== 'object' || item == null) return 'invalid';
+        const source = (item as { source?: unknown }).source;
+        const amount = (item as { amount?: unknown }).amount;
+        if (!isNonEmptyString(source) || !isPositiveNumber(amount)) return 'invalid';
+        items.push({ source: source.trim(), amount });
+    }
+    return items;
+}
 
 router.get('/overview', async (req, res) => {
     try {
@@ -71,6 +92,9 @@ router.get('/overview', async (req, res) => {
                 amountCanUse: salaryAfterTax - fixExpensesTotal,
                 budget,
                 actualSpend,
+                totalIncome: summary.totalIncome,
+                totalReimbursed: summary.totalReimbursed,
+                netCashflow: summary.netCashflow,
             },
         });
     } catch (err) {
@@ -92,7 +116,9 @@ router.get('/daily', async (req, res) => {
             .from(expenses)
             .where(and(gte(expenses.date, start), lte(expenses.date, end)));
 
-        const grouped = groupExpensesByDate(rows);
+        const expenseIds = rows.map((r) => r.id);
+        const reimbursedByExpenseId = await getReimbursementsByExpenseIds(expenseIds);
+        const grouped = groupExpensesByDateNet(rows, reimbursedByExpenseId);
         const series = enumerateDates(start, end).map((date) => ({
             date,
             total: grouped[date]?.total ?? 0,
@@ -117,11 +143,24 @@ router.get('/transactions', async (req, res) => {
             .where(and(gte(expenses.date, start), lte(expenses.date, end)))
             .orderBy(desc(expenses.date), desc(expenses.id));
 
+        const expenseIds = rows.map((r) => r.id);
+        const [reimbursedByExpenseId, incomeRows] = await Promise.all([
+            getReimbursementsByExpenseIds(expenseIds),
+            getIncomesByExpenseIds(expenseIds),
+        ]);
+        const reimbursementsByExpenseId = new Map<number, typeof incomeRows>();
+        for (const income of incomeRows) {
+            if (income.expenseId == null) continue;
+            const list = reimbursementsByExpenseId.get(income.expenseId) || [];
+            list.push(income);
+            reimbursementsByExpenseId.set(income.expenseId, list);
+        }
+
         res.json({
             month,
             start,
             end,
-            entries: formatExpenseTransactions(rows),
+            entries: enrichExpenseTransactions(rows, reimbursedByExpenseId, reimbursementsByExpenseId),
         });
     } catch (err) {
         console.error('GET /api/expenses/transactions', err);
@@ -172,14 +211,24 @@ router.post('/transactions', async (req, res) => {
                 ? body.currency.trim()
                 : 'MYR';
 
-        await appendExpense(
+        const reimbursements = parseReimbursements(body.reimbursements);
+        if (reimbursements === 'invalid') {
+            return res.status(400).json({ error: 'Invalid reimbursements' });
+        }
+
+        const expenseId = await appendExpense(
             body.date,
             body.amount,
             currency,
             body.category.trim(),
             body.description.trim()
         );
-        res.json({ ok: true });
+
+        if (reimbursements?.length) {
+            await appendReimbursements(expenseId, reimbursements, body.date);
+        }
+
+        res.json({ ok: true, id: expenseId });
     } catch (err) {
         console.error('POST /api/expenses/transactions', err);
         res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });

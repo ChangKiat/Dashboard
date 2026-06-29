@@ -7,6 +7,7 @@ import cors from 'cors';
 import express from 'express';
 import { loadExpenseCategories } from '../../AI Agent/src/config/expenseCategories';
 import expensesRouter from './routes/expenses';
+import incomesRouter from './routes/incomes';
 import workoutsRouter from './routes/workouts';
 import nutritionRouter from './routes/nutrition';
 
@@ -27,6 +28,7 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.use('/api/expenses', expensesRouter);
+app.use('/api/incomes', incomesRouter);
 app.use('/api/workouts', workoutsRouter);
 app.use('/api/nutrition', nutritionRouter);
 
