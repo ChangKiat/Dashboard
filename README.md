@@ -59,8 +59,8 @@ Open [http://localhost:5173](http://localhost:5173)
 | `GET /api/workouts/exercises?start=&end=`  | Top exercises and weight trend                      |
 | `GET /api/workouts/prs`                    | All-time personal records (max weight per exercise) |
 | `GET /api/workouts/history?start=&end=`    | Detailed workout log for date range                 |
-| `POST /api/workouts`                       | Create a workout entry                              |
-| `PATCH /api/workouts/:id`                  | Update a workout entry                              |
+| `POST /api/workouts`                       | Create a workout entry (optional `sessionId`, `sessionLabel`; label alone creates a new session) |
+| `PATCH /api/workouts/:id`                  | Update a workout entry (including session fields) |
 | `DELETE /api/workouts/:id`                 | Delete a workout entry                              |
 | `GET /api/nutrition/daily?start=&end=`     | Daily macros vs targets                             |
 | `GET /api/nutrition/meals?start=&end=`     | Meal log for date range                             |
@@ -86,7 +86,8 @@ Variable expense categories and salary come from the AI Agent database (`budgets
 
 ## Health tab
 
-- Activity calendar with inline day summary panel; add workouts and meals per day; click workout/meal badges to open detail popouts
+- Activity calendar with inline day summary panel; workouts grouped by session in the day panel (e.g. Shoulder + Abs day with exercises listed underneath); add workouts per day with optional session label or join an existing same-day session
+- Workout entries use `session_id` and `session_label` in the database — run `AI Agent/scripts/migrate-workout-sessions.sql` on older DBs
 - Workout analytics: volume, top exercises, weight trend, and personal records (no monthly log table)
 - Daily macros chart (no monthly meal log table)
 - Workout entries include `caloriesBurned` and `fatBurnG` when set via the bot

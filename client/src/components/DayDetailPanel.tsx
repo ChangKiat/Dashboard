@@ -53,6 +53,7 @@ export default function DayDetailPanel({
                 <div className="day-detail-section">
                     <WorkoutHistoryTable
                         entries={dayWorkouts}
+                        allEntries={workouts}
                         onChanged={onChanged}
                         compact
                         defaultDate={selectedDate}

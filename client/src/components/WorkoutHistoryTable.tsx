@@ -1,41 +1,66 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import type { WorkoutEntry } from '../api';
+import type { WorkoutEntry, WorkoutSession } from '../api';
 import { createWorkout, deleteWorkout, updateWorkout } from '../api';
 import { usePagination } from '../hooks/usePagination';
 import { formatCell, parseOptionalInt, parseOptionalNumber } from '../utils/tableFormat';
+import {
+    formatExerciseLine,
+    formatSessionSummary,
+    formatWorkoutEntrySummary,
+    listSameDaySessions,
+    toWorkoutDisplayItems,
+    type WorkoutDisplayItem,
+} from '../utils/workoutSessions';
 import HealthEntryDetailModal from './HealthEntryDetailModal';
 import RecordModal from './RecordModal';
 import RowActions from './RowActions';
 import TablePagination from './TablePagination';
+import WorkoutSessionDetailModal from './WorkoutSessionDetailModal';
 
 type ModalMode = 'closed' | 'create' | 'edit';
+type SessionMode = 'standalone' | 'new' | 'join';
 
 interface Props {
     entries: WorkoutEntry[];
+    allEntries?: WorkoutEntry[];
     onChanged: () => void;
     compact?: boolean;
     defaultDate?: string;
 }
 
-function formatWorkoutSummary(entry: WorkoutEntry): string {
-    const parts: string[] = [];
-    if (entry.sets != null) parts.push(`${entry.sets} sets`);
-    if (entry.reps != null) parts.push(`${entry.reps} reps`);
-    if (entry.weightKg != null) parts.push(`${entry.weightKg} kg`);
-    if (entry.caloriesBurned != null) parts.push(`${entry.caloriesBurned} kcal`);
-    if (entry.fatBurnG != null) parts.push(`${entry.fatBurnG}g fat`);
-    return parts.length > 0 ? parts.join(' · ') : '—';
+function resolveSessionFields(
+    sessionMode: SessionMode,
+    sessionLabel: string,
+    existingSessionId: string,
+    sameDaySessions: { sessionId: string; sessionLabel: string | null }[]
+): { sessionId: string | null; sessionLabel: string | null } | 'invalid' {
+    if (sessionMode === 'standalone') {
+        return { sessionId: null, sessionLabel: null };
+    }
+    if (sessionMode === 'new') {
+        const label = sessionLabel.trim();
+        if (!label) return 'invalid';
+        return { sessionId: crypto.randomUUID(), sessionLabel: label };
+    }
+    if (!existingSessionId) return 'invalid';
+    const match = sameDaySessions.find((s) => s.sessionId === existingSessionId);
+    return {
+        sessionId: existingSessionId,
+        sessionLabel: match?.sessionLabel ?? null,
+    };
 }
 
 export default function WorkoutHistoryTable({
     entries,
+    allEntries = [],
     onChanged,
     compact = false,
     defaultDate,
 }: Props) {
     const [exerciseFilter, setExerciseFilter] = useState('all');
     const [viewing, setViewing] = useState<WorkoutEntry | null>(null);
+    const [viewingSession, setViewingSession] = useState<WorkoutSession | null>(null);
     const [modalMode, setModalMode] = useState<ModalMode>('closed');
     const [editingEntry, setEditingEntry] = useState<WorkoutEntry | null>(null);
     const [form, setForm] = useState({
@@ -49,9 +74,19 @@ export default function WorkoutHistoryTable({
         caloriesBurned: '',
         fatBurnG: '',
     });
+    const [sessionMode, setSessionMode] = useState<SessionMode>('standalone');
+    const [sessionLabel, setSessionLabel] = useState('');
+    const [existingSessionId, setExistingSessionId] = useState('');
     const [saving, setSaving] = useState(false);
     const [modalError, setModalError] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
+
+    const showSessionFields = defaultDate != null;
+
+    const sameDaySessions = useMemo(
+        () => listSameDaySessions(allEntries.length > 0 ? allEntries : entries, form.date || defaultDate || ''),
+        [allEntries, entries, form.date, defaultDate]
+    );
 
     const exerciseOptions = useMemo(
         () => [...new Set(entries.map((e) => e.exercise))].sort(),
@@ -63,13 +98,35 @@ export default function WorkoutHistoryTable({
         return entries.filter((e) => e.exercise === exerciseFilter);
     }, [entries, exerciseFilter]);
 
-    const { page, setPage, pageItems, totalPages, totalItems } = usePagination(filteredEntries, {
+    const displayItems = useMemo(
+        () => (compact ? toWorkoutDisplayItems(filteredEntries) : []),
+        [compact, filteredEntries]
+    );
+
+    const paginationSource = compact ? displayItems : filteredEntries;
+
+    const { page, setPage, pageItems, totalPages, totalItems } = usePagination(paginationSource, {
         pageSize: compact ? 5 : 10,
     });
 
     useEffect(() => {
         setExerciseFilter('all');
     }, [entries]);
+
+    const resetSessionForm = useCallback(
+        (entry?: WorkoutEntry) => {
+            if (entry?.sessionId) {
+                setSessionMode('join');
+                setExistingSessionId(entry.sessionId);
+                setSessionLabel(entry.sessionLabel ?? '');
+            } else {
+                setSessionMode('standalone');
+                setExistingSessionId('');
+                setSessionLabel('');
+            }
+        },
+        []
+    );
 
     const openCreate = useCallback(() => {
         setModalMode('create');
@@ -85,8 +142,9 @@ export default function WorkoutHistoryTable({
             caloriesBurned: '',
             fatBurnG: '',
         });
+        resetSessionForm();
         setModalError(null);
-    }, [defaultDate]);
+    }, [defaultDate, resetSessionForm]);
 
     const openEdit = (entry: WorkoutEntry) => {
         setModalMode('edit');
@@ -102,6 +160,7 @@ export default function WorkoutHistoryTable({
             caloriesBurned: entry.caloriesBurned != null ? String(entry.caloriesBurned) : '',
             fatBurnG: entry.fatBurnG != null ? String(entry.fatBurnG) : '',
         });
+        resetSessionForm(entry);
         setModalError(null);
     };
 
@@ -116,6 +175,26 @@ export default function WorkoutHistoryTable({
             setModalError('Date and exercise are required.');
             return;
         }
+
+        let sessionFields: { sessionId: string | null; sessionLabel: string | null } | undefined;
+        if (showSessionFields) {
+            const resolved = resolveSessionFields(
+                sessionMode,
+                sessionLabel,
+                existingSessionId,
+                sameDaySessions
+            );
+            if (resolved === 'invalid') {
+                setModalError(
+                    sessionMode === 'new'
+                        ? 'Session label is required for a new session.'
+                        : 'Select an existing session to join.'
+                );
+                return;
+            }
+            sessionFields = resolved;
+        }
+
         setSaving(true);
         setModalError(null);
         try {
@@ -129,6 +208,7 @@ export default function WorkoutHistoryTable({
                 notes: form.notes.trim() || null,
                 caloriesBurned: parseOptionalNumber(form.caloriesBurned),
                 fatBurnG: parseOptionalNumber(form.fatBurnG),
+                ...(sessionFields ?? {}),
             };
             if (modalMode === 'create') {
                 await createWorkout(payload);
@@ -154,11 +234,50 @@ export default function WorkoutHistoryTable({
         }
     };
 
+    const renderExerciseRow = (entry: WorkoutEntry) => (
+        <li key={entry.id} className="day-entry-card">
+            <button
+                type="button"
+                className="day-entry-main day-entry-main--clickable"
+                onClick={() => setViewing(entry)}
+            >
+                <span className="day-entry-title">{formatExerciseLine(entry)}</span>
+                <span className="day-entry-sub">{formatWorkoutEntrySummary(entry)}</span>
+            </button>
+            <RowActions
+                onEdit={() => openEdit(entry)}
+                onDelete={() => handleDelete(entry)}
+                deleteLabel={entry.exercise}
+                confirmTitle="Remove exercise?"
+                confirmMessage={`"${entry.exercise}" will be permanently removed.`}
+            />
+        </li>
+    );
+
+    const renderDisplayItem = (item: WorkoutDisplayItem) => {
+        if (item.type === 'standalone') {
+            return renderExerciseRow(item.entry);
+        }
+
+        return (
+            <li key={item.session.sessionId} className="day-entry-card workout-session-summary-card">
+                <button
+                    type="button"
+                    className="day-entry-main day-entry-main--clickable"
+                    onClick={() => setViewingSession(item.session)}
+                >
+                    <span className="day-entry-title">
+                        {item.session.sessionLabel || 'Workout'}
+                    </span>
+                    <span className="day-entry-sub">{formatSessionSummary(item.session)}</span>
+                </button>
+            </li>
+        );
+    };
+
     if (entries.length === 0 && defaultDate == null) {
         return <p className="muted">{compact ? 'No workouts logged this day.' : 'No workouts logged in this range.'}</p>;
     }
-
-    const displayEntries = pageItems;
 
     const recordModal = (
         <RecordModal
@@ -178,6 +297,53 @@ export default function WorkoutHistoryTable({
                     onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
                 />
             </div>
+            {showSessionFields && (
+                <>
+                    <div className="form-field">
+                        <label htmlFor="wo-session-mode">Session</label>
+                        <select
+                            id="wo-session-mode"
+                            value={sessionMode}
+                            onChange={(e) => setSessionMode(e.target.value as SessionMode)}
+                        >
+                            <option value="standalone">Standalone exercise</option>
+                            <option value="new">New session</option>
+                            {sameDaySessions.length > 0 && (
+                                <option value="join">Join existing session</option>
+                            )}
+                        </select>
+                    </div>
+                    {sessionMode === 'new' && (
+                        <div className="form-field">
+                            <label htmlFor="wo-session-label">Session label</label>
+                            <input
+                                id="wo-session-label"
+                                type="text"
+                                placeholder="e.g. Shoulder + Abs day"
+                                value={sessionLabel}
+                                onChange={(e) => setSessionLabel(e.target.value)}
+                            />
+                        </div>
+                    )}
+                    {sessionMode === 'join' && (
+                        <div className="form-field">
+                            <label htmlFor="wo-session-existing">Existing session</label>
+                            <select
+                                id="wo-session-existing"
+                                value={existingSessionId}
+                                onChange={(e) => setExistingSessionId(e.target.value)}
+                            >
+                                <option value="">Select session</option>
+                                {sameDaySessions.map((session) => (
+                                    <option key={session.sessionId} value={session.sessionId}>
+                                        {session.sessionLabel || 'Workout'}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+                </>
+            )}
             <div className="form-field">
                 <label htmlFor="wo-exercise">Exercise</label>
                 <input
@@ -267,6 +433,8 @@ export default function WorkoutHistoryTable({
             return <p className="muted">No workouts match this exercise.</p>;
         }
 
+        const compactItems = pageItems as WorkoutDisplayItem[];
+
         return (
             <>
                 {defaultDate != null && (
@@ -283,23 +451,7 @@ export default function WorkoutHistoryTable({
                 ) : (
                     <>
                         <ul className="day-entry-list">
-                            {displayEntries.map((entry) => (
-                                <li key={entry.id} className="day-entry-card">
-                                    <button
-                                        type="button"
-                                        className="day-entry-main day-entry-main--clickable"
-                                        onClick={() => setViewing(entry)}
-                                    >
-                                        <span className="day-entry-title">{entry.exercise}</span>
-                                        <span className="day-entry-sub">{formatWorkoutSummary(entry)}</span>
-                                    </button>
-                                    <RowActions
-                                        onEdit={() => openEdit(entry)}
-                                        onDelete={() => handleDelete(entry)}
-                                        deleteLabel={`this ${entry.exercise} entry`}
-                                    />
-                                </li>
-                            ))}
+                            {compactItems.map((item) => renderDisplayItem(item))}
                         </ul>
                         {totalPages > 1 && (
                             <TablePagination
@@ -310,6 +462,26 @@ export default function WorkoutHistoryTable({
                             />
                         )}
                     </>
+                )}
+                {viewingSession && (
+                    <WorkoutSessionDetailModal
+                        session={viewingSession}
+                        onClose={() => setViewingSession(null)}
+                        onEdit={(entry) => {
+                            setViewingSession(null);
+                            openEdit(entry);
+                        }}
+                        onDelete={async (entry) => {
+                            await handleDelete(entry);
+                            setViewingSession((prev) => {
+                                if (!prev) return null;
+                                const remaining = prev.exercises.filter((e) => e.id !== entry.id);
+                                return remaining.length > 0
+                                    ? { ...prev, exercises: remaining }
+                                    : null;
+                            });
+                        }}
+                    />
                 )}
                 {viewing && (
                     <HealthEntryDetailModal
@@ -360,6 +532,7 @@ export default function WorkoutHistoryTable({
                                 <thead>
                                     <tr>
                                         <th>Date</th>
+                                        <th>Session</th>
                                         <th>Exercise</th>
                                         <th>Sets</th>
                                         <th>Reps</th>
@@ -372,9 +545,10 @@ export default function WorkoutHistoryTable({
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {pageItems.map((entry) => (
+                                    {(pageItems as WorkoutEntry[]).map((entry) => (
                                         <tr key={entry.id}>
                                             <td>{entry.date}</td>
+                                            <td>{formatCell(entry.sessionLabel)}</td>
                                             <td>{entry.exercise}</td>
                                             <td>{formatCell(entry.sets)}</td>
                                             <td>{formatCell(entry.reps)}</td>

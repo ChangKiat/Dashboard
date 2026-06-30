@@ -161,6 +161,15 @@ export interface WorkoutEntry {
     notes: string | null;
     caloriesBurned: number | null;
     fatBurnG: number | null;
+    sessionId: string | null;
+    sessionLabel: string | null;
+}
+
+export interface WorkoutSession {
+    sessionId: string;
+    sessionLabel: string | null;
+    date: string;
+    exercises: WorkoutEntry[];
 }
 
 export interface WorkoutHistoryResponse {
@@ -372,7 +381,10 @@ export function createWorkout(
         | 'notes'
         | 'caloriesBurned'
         | 'fatBurnG'
-    >
+    > & {
+        sessionId?: string | null;
+        sessionLabel?: string | null;
+    }
 ) {
     return fetchJson<{ ok: true }>('/api/workouts', {
         method: 'POST',
@@ -395,6 +407,8 @@ export function updateWorkout(
             | 'notes'
             | 'caloriesBurned'
             | 'fatBurnG'
+            | 'sessionId'
+            | 'sessionLabel'
         >
     >
 ) {

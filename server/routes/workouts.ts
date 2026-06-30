@@ -1,5 +1,7 @@
+import { randomUUID } from 'crypto';
 import { Router } from 'express';
 import {
+    countWorkoutSessions,
     deleteWorkout,
     getWorkoutHistory,
     logWorkout,
@@ -41,7 +43,13 @@ router.get('/daily', async (req, res) => {
 
         const totalSets = history.reduce((sum, row) => sum + (row.sets ?? 0), 0);
 
-        res.json({ start, end, series, totalSessions: history.length, totalSets });
+        res.json({
+            start,
+            end,
+            series,
+            totalSessions: countWorkoutSessions(history),
+            totalSets,
+        });
     } catch (err) {
         console.error('GET /api/workouts/daily', err);
         res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
@@ -68,7 +76,7 @@ router.get('/exercises', async (req, res) => {
             weightTrend,
             uniqueExercises,
             mostTrained,
-            totalSessions: history.length,
+            totalSessions: countWorkoutSessions(history),
         });
     } catch (err) {
         console.error('GET /api/workouts/exercises', err);
@@ -138,6 +146,25 @@ router.post('/', async (req, res) => {
         }
 
         const userId = getTelegramUserId();
+
+        let sessionId: string | null | undefined;
+        let sessionLabel: string | null | undefined;
+        if (body.sessionId !== undefined) {
+            sessionId =
+                body.sessionId != null && isNonEmptyString(body.sessionId)
+                    ? body.sessionId.trim()
+                    : null;
+        }
+        if (body.sessionLabel !== undefined) {
+            sessionLabel =
+                body.sessionLabel != null && isNonEmptyString(body.sessionLabel)
+                    ? body.sessionLabel.trim()
+                    : null;
+        }
+        if (sessionLabel && !sessionId) {
+            sessionId = randomUUID();
+        }
+
         await logWorkout(
             userId,
             body.date,
@@ -148,7 +175,9 @@ router.post('/', async (req, res) => {
             body.durationMin ?? undefined,
             body.notes != null && body.notes !== '' ? String(body.notes) : undefined,
             body.caloriesBurned ?? undefined,
-            body.fatBurnG ?? undefined
+            body.fatBurnG ?? undefined,
+            sessionId ?? null,
+            sessionLabel ?? null
         );
         res.json({ ok: true });
     } catch (err) {
@@ -173,6 +202,8 @@ router.patch('/:id', async (req, res) => {
             notes?: string | null;
             caloriesBurned?: number | null;
             fatBurnG?: number | null;
+            sessionId?: string | null;
+            sessionLabel?: string | null;
         } = {};
 
         if (body.date != null) {
@@ -226,6 +257,21 @@ router.patch('/:id', async (req, res) => {
                 return res.status(400).json({ error: 'Invalid fat burned' });
             }
             fields.fatBurnG = body.fatBurnG;
+        }
+        if (body.sessionId !== undefined) {
+            fields.sessionId =
+                body.sessionId != null && isNonEmptyString(body.sessionId)
+                    ? body.sessionId.trim()
+                    : null;
+        }
+        if (body.sessionLabel !== undefined) {
+            fields.sessionLabel =
+                body.sessionLabel != null && isNonEmptyString(body.sessionLabel)
+                    ? body.sessionLabel.trim()
+                    : null;
+        }
+        if (fields.sessionLabel && fields.sessionId === undefined) {
+            fields.sessionId = randomUUID();
         }
 
         if (Object.keys(fields).length === 0) {

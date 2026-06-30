@@ -152,6 +152,8 @@ export type WorkoutRow = {
     notes: string | null;
     caloriesBurned: number | null;
     fatBurnG: number | null;
+    sessionId?: string | null;
+    sessionLabel?: string | null;
 };
 
 export type PersonalRecord = {
@@ -162,20 +164,43 @@ export type PersonalRecord = {
     date: string;
 };
 
-export function groupWorkoutsByDate(rows: Pick<WorkoutRow, 'date' | 'exercise' | 'sets'>[]) {
-    const byDate: Record<string, { sessionCount: number; totalSets: number; exercises: string[] }> =
+export function groupWorkoutsByDate(
+    rows: Pick<WorkoutRow, 'date' | 'exercise' | 'sets' | 'sessionId'>[]
+) {
+    const byDate: Record<string, { rows: Pick<WorkoutRow, 'date' | 'exercise' | 'sets' | 'sessionId'>[] }> =
         {};
 
     for (const row of rows) {
         if (!byDate[row.date]) {
-            byDate[row.date] = { sessionCount: 0, totalSets: 0, exercises: [] };
+            byDate[row.date] = { rows: [] };
         }
-        byDate[row.date].sessionCount += 1;
-        byDate[row.date].totalSets += row.sets ?? 0;
-        byDate[row.date].exercises.push(row.exercise);
+        byDate[row.date].rows.push(row);
     }
 
-    return byDate;
+    const result: Record<string, { sessionCount: number; totalSets: number; exercises: string[] }> =
+        {};
+
+    for (const [date, { rows: dayRows }] of Object.entries(byDate)) {
+        const sessionIds = new Set<string>();
+        let sessionCount = 0;
+        let totalSets = 0;
+        const exercises: string[] = [];
+
+        for (const row of dayRows) {
+            totalSets += row.sets ?? 0;
+            exercises.push(row.exercise);
+            if (row.sessionId) {
+                sessionIds.add(row.sessionId);
+            } else {
+                sessionCount += 1;
+            }
+        }
+        sessionCount += sessionIds.size;
+
+        result[date] = { sessionCount, totalSets, exercises };
+    }
+
+    return result;
 }
 
 export function computePersonalRecords(rows: WorkoutRow[]): {
@@ -219,6 +244,8 @@ export function formatWorkoutEntries(rows: WorkoutRow[]) {
         notes: row.notes,
         caloriesBurned: row.caloriesBurned,
         fatBurnG: row.fatBurnG,
+        sessionId: row.sessionId ?? null,
+        sessionLabel: row.sessionLabel ?? null,
     }));
 }
 

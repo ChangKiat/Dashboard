@@ -694,6 +694,36 @@
   color: #e8eaed;
 }
 
+.btn-danger {
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  background: #dc2626;
+  color: #fff;
+  border: 1px solid #dc2626;
+}
+
+.btn-danger:hover {
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
+
+.confirm-dialog {
+  max-width: 380px;
+}
+
+.confirm-dialog h4 {
+  margin-bottom: 8px;
+}
+
+.confirm-dialog-message {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: #9aa0a6;
+}
+
 .btn-add {
   padding: 5px 12px;
   border: 1px solid #2a2f3a;
@@ -843,6 +873,23 @@
 .reimbursement-row .btn-icon {
   flex: 0 0 auto;
   padding: 0.25rem 0.5rem;
+}
+
+.workout-session-summary-card .day-entry-main {
+  width: 100%;
+}
+
+.workout-session-modal-list {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.workout-session-modal-item {
+  margin: 0;
 }
 
 .data-table .actions-col {
