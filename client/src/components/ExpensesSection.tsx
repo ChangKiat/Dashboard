@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type {
     ExpenseDailyPoint,
@@ -13,7 +13,9 @@ import {
     fetchExpenseTransactions,
     fetchFixedExpenses,
     fetchIncomeTransactions,
+    fetchSyncStatus,
 } from '../api';
+import { useSmartRefresh } from '../hooks/useSmartRefresh';
 import { monthToDateRange, pickDefaultExpenseDate } from '../utils/dateRange';
 import { getBudgetStatus } from '../utils/budgetStatus';
 
@@ -40,8 +42,9 @@ export default function ExpensesSection({ month }: Props) {
     const [incomes, setIncomes] = useState<IncomeTransaction[]>([]);
     const [fixedConfigs, setFixedConfigs] = useState<FixedExpenseConfig[]>([]);
     const [dailySeries, setDailySeries] = useState<ExpenseDailyPoint[]>([]);
+    const fingerprintRef = useRef<string | null>(null);
 
-    const loadData = useCallback(async () => {
+    const loadData = useCallback(async (options?: { silent?: boolean }) => {
         const range = monthToDateRange(month);
         const [overviewRes, transactionsRes, incomesRes, fixedRes, dailyRes] = await Promise.all([
             fetchExpenseOverview(month),
@@ -56,14 +59,20 @@ export default function ExpensesSection({ month }: Props) {
         setFixedConfigs(fixedRes.entries);
         setDailySeries(dailyRes.series);
 
-        setSelectedDate((prev) => {
-            if (prev.startsWith(`${month}-`)) return prev;
-            return pickDefaultExpenseDate(month, dailyRes.series);
-        });
+        if (!options?.silent) {
+            setSelectedDate((prev) => {
+                if (prev.startsWith(`${month}-`)) return prev;
+                return pickDefaultExpenseDate(month, dailyRes.series);
+            });
+        }
+
+        const status = await fetchSyncStatus(month, 'expenses');
+        fingerprintRef.current = status.fingerprint;
     }, [month]);
 
     useEffect(() => {
         let cancelled = false;
+        fingerprintRef.current = null;
         setLoading(true);
         setError(null);
         setSelectedDate('');
@@ -86,6 +95,15 @@ export default function ExpensesSection({ month }: Props) {
             setError(err instanceof Error ? err.message : 'Failed to refresh');
         });
     }, [loadData]);
+
+    const handleStale = useCallback(() => loadData({ silent: true }), [loadData]);
+
+    useSmartRefresh({
+        month,
+        scope: 'expenses',
+        fingerprintRef,
+        onStale: handleStale,
+    });
 
     const actualSpendVariant = useMemo(() => {
         if (!data) return 'default' as const;

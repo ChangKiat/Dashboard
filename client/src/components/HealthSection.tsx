@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
     MealEntry,
     NutritionDailyPoint,
@@ -9,11 +9,13 @@ import type {
 import {
     fetchMeals,
     fetchNutritionDaily,
+    fetchSyncStatus,
     fetchWorkoutDaily,
     fetchWorkoutExercises,
     fetchWorkoutHistory,
     fetchWorkoutPRs,
 } from '../api';
+import { useSmartRefresh } from '../hooks/useSmartRefresh';
 import { monthToDateRange, pickDefaultSelectedDate } from '../utils/dateRange';
 import ActivityCalendar from './ActivityCalendar';
 import DayDetailPanel from './DayDetailPanel';
@@ -45,8 +47,10 @@ export default function HealthSection({ month }: Props) {
     const [calorieTarget, setCalorieTarget] = useState(0);
     const [proteinTarget, setProteinTarget] = useState(0);
     const [bodyWeightKg, setBodyWeightKg] = useState<number | null>(null);
+    const fingerprintRef = useRef<string | null>(null);
 
-    const loadData = useCallback(async () => {        const range = monthToDateRange(month);
+    const loadData = useCallback(async (options?: { silent?: boolean }) => {
+        const range = monthToDateRange(month);
         const [dailyRes, exRes, prsRes, historyRes, nutritionRes, mealsRes] = await Promise.all([
             fetchWorkoutDaily(range),
             fetchWorkoutExercises(range),
@@ -59,10 +63,12 @@ export default function HealthSection({ month }: Props) {
         setWorkoutSeries(dailyRes.series);
         setNutritionSeries(nutritionRes.series);
 
-        setSelectedDate((prev) => {
-            if (prev.startsWith(`${month}-`)) return prev;
-            return pickDefaultSelectedDate(month, dailyRes.series, nutritionRes.series);
-        });
+        if (!options?.silent) {
+            setSelectedDate((prev) => {
+                if (prev.startsWith(`${month}-`)) return prev;
+                return pickDefaultSelectedDate(month, dailyRes.series, nutritionRes.series);
+            });
+        }
 
         setVolumeData(
             dailyRes.series.map((d) => ({
@@ -81,10 +87,14 @@ export default function HealthSection({ month }: Props) {
         setCalorieTarget(nutritionRes.targets.calories);
         setProteinTarget(nutritionRes.targets.protein);
         setBodyWeightKg(nutritionRes.targets.bodyWeightKg);
+
+        const status = await fetchSyncStatus(month, 'health');
+        fingerprintRef.current = status.fingerprint;
     }, [month]);
 
     useEffect(() => {
         let cancelled = false;
+        fingerprintRef.current = null;
         setLoading(true);
         setError(null);
         setSelectedDate('');
@@ -107,6 +117,15 @@ export default function HealthSection({ month }: Props) {
             setError(err instanceof Error ? err.message : 'Failed to refresh');
         });
     }, [loadData]);
+
+    const handleStale = useCallback(() => loadData({ silent: true }), [loadData]);
+
+    useSmartRefresh({
+        month,
+        scope: 'health',
+        fingerprintRef,
+        onStale: handleStale,
+    });
 
     const burnTotals = useMemo(() => {
         let caloriesBurned = 0;

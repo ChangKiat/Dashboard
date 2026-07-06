@@ -461,3 +461,9 @@ export function deleteMeal(id: number) {
 export function fetchHealth() {
     return fetchJson<{ ok: boolean; database: string; telegramUser: string }>('/api/health');
 }
+
+export type SyncScope = 'expenses' | 'health';
+
+export function fetchSyncStatus(month: string, scope: SyncScope) {
+    return fetchJson<{ fingerprint: string }>(`/api/sync-status?month=${month}&scope=${scope}`);
+}

@@ -10,6 +10,7 @@ import expensesRouter from './routes/expenses';
 import incomesRouter from './routes/incomes';
 import workoutsRouter from './routes/workouts';
 import nutritionRouter from './routes/nutrition';
+import syncRouter from './routes/sync';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -31,6 +32,7 @@ app.use('/api/expenses', expensesRouter);
 app.use('/api/incomes', incomesRouter);
 app.use('/api/workouts', workoutsRouter);
 app.use('/api/nutrition', nutritionRouter);
+app.use('/api/sync-status', syncRouter);
 
 loadExpenseCategories()
     .then(() => {
