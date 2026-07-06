@@ -4,6 +4,7 @@ import type { FixedExpenseConfig } from '../api';
 import { createFixedExpense, deleteFixedExpense, updateFixedExpense } from '../api';
 import { usePagination } from '../hooks/usePagination';
 import ExpenseCategorySelect from './ExpenseCategorySelect';
+import PaymentMethodSelect from './PaymentMethodSelect';
 import RecordModal from './RecordModal';
 import RowActions from './RowActions';
 import TablePagination from './TablePagination';
@@ -39,6 +40,7 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
     const [form, setForm] = useState({
         description: '',
         category: '',
+        paymentMethod: '',
         amount: '',
         dayOfMonth: '',
         frequencyMonths: '',
@@ -53,6 +55,7 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
         setForm({
             description: '',
             category: '',
+            paymentMethod: '',
             amount: '',
             dayOfMonth: '1',
             frequencyMonths: '1',
@@ -66,6 +69,7 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
         setForm({
             description: row.description,
             category: row.category,
+            paymentMethod: row.paymentMethod ?? '',
             amount: String(row.amount),
             dayOfMonth: String(row.dayOfMonth),
             frequencyMonths: String(row.frequencyMonths),
@@ -100,12 +104,14 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
         setSaving(true);
         setModalError(null);
         try {
+            const paymentMethod = form.paymentMethod.trim() || null;
             const payload = {
                 description: form.description.trim(),
                 category: form.category.trim(),
                 amount,
                 dayOfMonth,
                 frequencyMonths,
+                paymentMethod,
             };
             if (modalMode === 'create') {
                 await createFixedExpense({
@@ -149,6 +155,7 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
                         <tr>
                             <th>Description</th>
                             <th>Category</th>
+                            <th>Payment method</th>
                             <th>Amount</th>
                             <th>Date of payment</th>
                             <th>Frequency</th>
@@ -158,7 +165,7 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
                     <tbody>
                         {rows.length === 0 ? (
                             <tr>
-                                <td colSpan={6} className="muted">
+                                <td colSpan={7} className="muted">
                                     No fixed expenses configured
                                 </td>
                             </tr>
@@ -167,6 +174,7 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
                                 <tr key={row.id}>
                                     <td>{row.description}</td>
                                     <td>{row.category}</td>
+                                    <td>{row.paymentMethod ?? '—'}</td>
                                     <td>{formatAmount(row.amount)}</td>
                                     <td>{row.dayOfMonth}</td>
                                     <td>{formatFrequencyMonths(row.frequencyMonths)}</td>
@@ -214,6 +222,14 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
                         variableCategories={variableCategories}
                         usedCategories={rows.map((r) => r.category)}
                         onChange={(category) => setForm((f) => ({ ...f, category }))}
+                    />
+                </div>
+                <div className="form-field">
+                    <label htmlFor="fx-payment-method">Payment method</label>
+                    <PaymentMethodSelect
+                        id="fx-payment-method"
+                        value={form.paymentMethod}
+                        onChange={(paymentMethod) => setForm((f) => ({ ...f, paymentMethod }))}
                     />
                 </div>
                 <div className="form-field">

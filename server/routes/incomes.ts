@@ -5,6 +5,7 @@ import {
     expenseExists,
     listIncomes,
     updateIncome,
+    validateIncomePaymentAccounts,
 } from '../../../AI Agent/src/services/incomeService';
 import { enumerateDates, parseDateRange, parseMonth } from '../dateUtils';
 import { formatIncomeTransactions, groupIncomesByDate } from '../aggregators';
@@ -16,6 +17,13 @@ import {
 } from '../validation';
 
 const router = Router();
+
+function parsePaymentMethodField(value: unknown): string | null | undefined {
+    if (value === undefined) return undefined;
+    if (value === null || value === '') return null;
+    if (!isNonEmptyString(value)) return 'invalid';
+    return value.trim();
+}
 
 router.get('/transactions', async (req, res) => {
     try {
@@ -86,6 +94,21 @@ router.post('/transactions', async (req, res) => {
                 : 'MYR';
         const source =
             body.source != null && isNonEmptyString(body.source) ? body.source.trim() : undefined;
+        const paymentMethod = parsePaymentMethodField(body.paymentMethod);
+        if (paymentMethod === 'invalid') {
+            return res.status(400).json({ error: 'Invalid payment method' });
+        }
+        const fromPaymentMethod = parsePaymentMethodField(body.fromPaymentMethod);
+        if (fromPaymentMethod === 'invalid') {
+            return res.status(400).json({ error: 'Invalid from payment method' });
+        }
+
+        const accountError = validateIncomePaymentAccounts(
+            body.category.trim(),
+            paymentMethod ?? null,
+            fromPaymentMethod ?? null
+        );
+        if (accountError) return res.status(400).json({ error: accountError });
 
         const id = await appendIncome(
             body.date,
@@ -94,12 +117,16 @@ router.post('/transactions', async (req, res) => {
             body.category.trim(),
             body.description.trim(),
             source,
-            expenseId
+            expenseId,
+            paymentMethod ?? null,
+            fromPaymentMethod ?? null
         );
         res.json({ ok: true, id });
     } catch (err) {
         console.error('POST /api/incomes/transactions', err);
-        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+        const message = err instanceof Error ? err.message : 'Server error';
+        const status = message.includes('Account transfer') || message.includes('account') ? 400 : 500;
+        res.status(status).json({ error: message });
     }
 });
 
@@ -117,6 +144,8 @@ router.patch('/transactions/:id', async (req, res) => {
             description?: string;
             source?: string | null;
             expenseId?: number | null;
+            paymentMethod?: string | null;
+            fromPaymentMethod?: string | null;
         } = {};
 
         if (body.date != null) {
@@ -163,6 +192,20 @@ router.patch('/transactions/:id', async (req, res) => {
                 fields.expenseId = expenseId;
             }
         }
+        if (body.paymentMethod !== undefined) {
+            const paymentMethod = parsePaymentMethodField(body.paymentMethod);
+            if (paymentMethod === 'invalid') {
+                return res.status(400).json({ error: 'Invalid payment method' });
+            }
+            fields.paymentMethod = paymentMethod ?? null;
+        }
+        if (body.fromPaymentMethod !== undefined) {
+            const fromPaymentMethod = parsePaymentMethodField(body.fromPaymentMethod);
+            if (fromPaymentMethod === 'invalid') {
+                return res.status(400).json({ error: 'Invalid from payment method' });
+            }
+            fields.fromPaymentMethod = fromPaymentMethod ?? null;
+        }
 
         if (Object.keys(fields).length === 0) {
             return res.status(400).json({ error: 'No fields to update' });
@@ -173,7 +216,9 @@ router.patch('/transactions/:id', async (req, res) => {
         res.json({ ok: true });
     } catch (err) {
         console.error('PATCH /api/incomes/transactions/:id', err);
-        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+        const message = err instanceof Error ? err.message : 'Server error';
+        const status = message.includes('Account transfer') || message.includes('account') ? 400 : 500;
+        res.status(status).json({ error: message });
     }
 });
 

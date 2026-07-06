@@ -5,14 +5,12 @@ import type {
     ExpenseOverviewResponse,
     ExpenseTransaction,
     FixedExpenseConfig,
-    IncomeTransaction,
 } from '../api';
 import {
     fetchExpenseDaily,
     fetchExpenseOverview,
     fetchExpenseTransactions,
     fetchFixedExpenses,
-    fetchIncomeTransactions,
     fetchSyncStatus,
 } from '../api';
 import { useSmartRefresh } from '../hooks/useSmartRefresh';
@@ -39,23 +37,20 @@ export default function ExpensesSection({ month }: Props) {
     const [selectedDate, setSelectedDate] = useState<string>('');
     const [data, setData] = useState<ExpenseOverviewResponse | null>(null);
     const [transactions, setTransactions] = useState<ExpenseTransaction[]>([]);
-    const [incomes, setIncomes] = useState<IncomeTransaction[]>([]);
     const [fixedConfigs, setFixedConfigs] = useState<FixedExpenseConfig[]>([]);
     const [dailySeries, setDailySeries] = useState<ExpenseDailyPoint[]>([]);
     const fingerprintRef = useRef<string | null>(null);
 
     const loadData = useCallback(async (options?: { silent?: boolean }) => {
         const range = monthToDateRange(month);
-        const [overviewRes, transactionsRes, incomesRes, fixedRes, dailyRes] = await Promise.all([
+        const [overviewRes, transactionsRes, fixedRes, dailyRes] = await Promise.all([
             fetchExpenseOverview(month),
             fetchExpenseTransactions(month),
-            fetchIncomeTransactions(month),
             fetchFixedExpenses(),
             fetchExpenseDaily(range),
         ]);
         setData(overviewRes);
         setTransactions(transactionsRes.entries);
-        setIncomes(incomesRes.entries);
         setFixedConfigs(fixedRes.entries);
         setDailySeries(dailyRes.series);
 
@@ -124,18 +119,6 @@ export default function ExpensesSection({ month }: Props) {
         [transactions, selectedDate]
     );
 
-    const dayIncomes = useMemo(
-        () => incomes.filter((t) => t.date === selectedDate),
-        [incomes, selectedDate]
-    );
-
-    const incomeDayTotal = useMemo(
-        () => dayIncomes.reduce((sum, row) => sum + row.amount, 0),
-        [dayIncomes]
-    );
-
-    const recentExpenses = useMemo(() => transactions.slice(0, 30), [transactions]);
-
     const daySummary = useMemo(
         () => dailySeries.find((d) => d.date === selectedDate),
         [dailySeries, selectedDate]
@@ -182,10 +165,7 @@ export default function ExpensesSection({ month }: Props) {
                         <ExpenseDayDetailPanel
                             selectedDate={selectedDate}
                             transactions={dayTransactions}
-                            incomes={dayIncomes}
-                            recentExpenses={recentExpenses}
                             daySummary={daySummary}
-                            incomeDayTotal={incomeDayTotal}
                             variableCategories={variableCategories}
                             formatAmount={formatMYR}
                             onChanged={handleChanged}

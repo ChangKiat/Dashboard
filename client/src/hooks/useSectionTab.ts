@@ -1,10 +1,10 @@
 import { useCallback, useState } from 'react';
 
-export type TabId = 'expenses' | 'health';
+export type TabId = 'expenses' | 'income' | 'health';
 
 const STORAGE_KEY = 'dashboard-active-tab';
 
-const VALID_TABS: TabId[] = ['expenses', 'health'];
+const VALID_TABS: TabId[] = ['expenses', 'income', 'health'];
 
 function readStoredTab(): TabId {
     try {
@@ -23,11 +23,13 @@ function readStoredTab(): TabId {
 
 export const TAB_LABELS: Record<TabId, string> = {
     expenses: 'Expenses',
+    income: 'Income',
     health: 'Health',
 };
 
 export const TAB_SUBTITLES: Record<TabId, string> = {
     expenses: 'Monthly budget overview',
+    income: 'Income & payment accounts',
     health: 'Workouts & meals',
 };
 

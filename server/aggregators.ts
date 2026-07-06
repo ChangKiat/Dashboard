@@ -16,6 +16,7 @@ export type ExpenseTransactionRow = {
     amount: string;
     category: string;
     description: string;
+    paymentMethod?: string | null;
 };
 
 export function formatExpenseTransactions(rows: ExpenseTransactionRow[]) {
@@ -57,6 +58,7 @@ export function enrichExpenseTransactions(
             netAmount,
             category: row.category,
             description: row.description,
+            paymentMethod: row.paymentMethod ?? null,
             reimbursements,
         };
     });
@@ -88,6 +90,8 @@ export type IncomeTransactionRow = {
     description: string;
     source: string | null;
     expenseId: number | null;
+    paymentMethod?: string | null;
+    fromPaymentMethod?: string | null;
 };
 
 export function formatIncomeTransactions(rows: IncomeTransactionRow[]) {
@@ -99,6 +103,8 @@ export function formatIncomeTransactions(rows: IncomeTransactionRow[]) {
         description: row.description,
         source: row.source,
         expenseId: row.expenseId,
+        paymentMethod: row.paymentMethod ?? null,
+        fromPaymentMethod: row.fromPaymentMethod ?? null,
     }));
 }
 
@@ -108,6 +114,7 @@ export function groupIncomesByDate(
     const byDate: Record<string, { total: number; byCategory: Record<string, number> }> = {};
 
     for (const row of rows) {
+        if (row.category === 'Account transfer') continue;
         if (!byDate[row.date]) {
             byDate[row.date] = { total: 0, byCategory: {} };
         }

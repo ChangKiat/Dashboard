@@ -55,6 +55,7 @@ export interface ExpenseTransaction {
     amount: number;
     category: string;
     description: string;
+    paymentMethod?: string | null;
     grossAmount?: number;
     reimbursed?: number;
     netAmount?: number;
@@ -76,6 +77,8 @@ export interface IncomeTransaction {
     description: string;
     source: string | null;
     expenseId: number | null;
+    paymentMethod?: string | null;
+    fromPaymentMethod?: string | null;
 }
 
 export interface IncomeTransactionsResponse {
@@ -106,10 +109,24 @@ export interface FixedExpenseConfig {
     frequencyMonths: number;
     startMonth: number;
     currency: string;
+    paymentMethod?: string | null;
 }
 
 export interface FixedExpensesResponse {
     entries: FixedExpenseConfig[];
+}
+
+export type PaymentAccountType = 'account' | 'credit';
+
+export interface PaymentAccount {
+    id: number;
+    name: string;
+    accountType: PaymentAccountType;
+    active: boolean;
+}
+
+export interface PaymentAccountsResponse {
+    entries: PaymentAccount[];
 }
 
 export interface WorkoutDailyPoint {
@@ -260,6 +277,7 @@ export function fetchFixedExpenses() {
 
 export function createExpenseTransaction(
     fields: Pick<ExpenseTransaction, 'date' | 'amount' | 'category' | 'description'> & {
+        paymentMethod?: string | null;
         reimbursements?: { source: string; amount: number }[];
     }
 ) {
@@ -272,7 +290,9 @@ export function createExpenseTransaction(
 
 export function updateExpenseTransaction(
     id: number,
-    fields: Partial<Pick<ExpenseTransaction, 'date' | 'amount' | 'category' | 'description'>>
+    fields: Partial<
+        Pick<ExpenseTransaction, 'date' | 'amount' | 'category' | 'description' | 'paymentMethod'>
+    >
 ) {
     return fetchJson<{ ok: true }>(`/api/expenses/transactions/${id}`, {
         method: 'PATCH',
@@ -288,8 +308,15 @@ export function deleteExpenseTransaction(id: number) {
 export function createFixedExpense(
     fields: Pick<
         FixedExpenseConfig,
-        'description' | 'category' | 'amount' | 'dayOfMonth' | 'frequencyMonths' | 'startMonth'
-    >
+        | 'description'
+        | 'category'
+        | 'amount'
+        | 'dayOfMonth'
+        | 'frequencyMonths'
+        | 'startMonth'
+    > & {
+        paymentMethod?: string | null;
+    }
 ) {
     return fetchJson<{ ok: true }>('/api/expenses/fixed', {
         method: 'POST',
@@ -301,7 +328,15 @@ export function createFixedExpense(
 export function updateFixedExpense(
     id: number,
     fields: Partial<
-        Pick<FixedExpenseConfig, 'description' | 'category' | 'amount' | 'dayOfMonth' | 'frequencyMonths'>
+        Pick<
+            FixedExpenseConfig,
+            | 'description'
+            | 'category'
+            | 'amount'
+            | 'dayOfMonth'
+            | 'frequencyMonths'
+            | 'paymentMethod'
+        >
     >
 ) {
     return fetchJson<{ ok: true }>(`/api/expenses/fixed/${id}`, {
@@ -313,6 +348,36 @@ export function updateFixedExpense(
 
 export function deleteFixedExpense(id: number) {
     return fetchJson<{ ok: true }>(`/api/expenses/fixed/${id}`, { method: 'DELETE' });
+}
+
+export function fetchPaymentAccounts() {
+    return fetchJson<PaymentAccountsResponse>('/api/payment-accounts');
+}
+
+export function createPaymentAccount(fields: {
+    name: string;
+    accountType: PaymentAccountType;
+}) {
+    return fetchJson<{ ok: true; id: number }>('/api/payment-accounts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+    });
+}
+
+export function updatePaymentAccount(
+    id: number,
+    fields: Partial<Pick<PaymentAccount, 'name' | 'accountType' | 'active'>>
+) {
+    return fetchJson<{ ok: true }>(`/api/payment-accounts/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+    });
+}
+
+export function deletePaymentAccount(id: number) {
+    return fetchJson<{ ok: true }>(`/api/payment-accounts/${id}`, { method: 'DELETE' });
 }
 
 export function fetchIncomeTransactions(month: string) {
@@ -327,6 +392,8 @@ export function createIncomeTransaction(
     fields: Pick<IncomeTransaction, 'date' | 'amount' | 'category' | 'description'> & {
         source?: string | null;
         expenseId?: number | null;
+        paymentMethod?: string | null;
+        fromPaymentMethod?: string | null;
     }
 ) {
     return fetchJson<{ ok: true; id: number }>('/api/incomes/transactions', {
@@ -339,7 +406,17 @@ export function createIncomeTransaction(
 export function updateIncomeTransaction(
     id: number,
     fields: Partial<
-        Pick<IncomeTransaction, 'date' | 'amount' | 'category' | 'description' | 'source' | 'expenseId'>
+        Pick<
+            IncomeTransaction,
+            | 'date'
+            | 'amount'
+            | 'category'
+            | 'description'
+            | 'source'
+            | 'expenseId'
+            | 'paymentMethod'
+            | 'fromPaymentMethod'
+        >
     >
 ) {
     return fetchJson<{ ok: true }>(`/api/incomes/transactions/${id}`, {

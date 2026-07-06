@@ -106,7 +106,10 @@ export default function VariableCategoryDetailModal({
                                     <span className="category-detail-transaction-desc">
                                         {tx.description}
                                     </span>
-                                    <span className="category-detail-transaction-date">{tx.date}</span>
+                                    <span className="category-detail-transaction-date">
+                                        {tx.date}
+                                        {tx.paymentMethod ? ` · ${tx.paymentMethod}` : ''}
+                                    </span>
                                 </div>
                                 <span className="category-detail-transaction-amount">
                                     {formatAmount(tx.amount)}

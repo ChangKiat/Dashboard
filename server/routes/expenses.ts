@@ -216,12 +216,18 @@ router.post('/transactions', async (req, res) => {
             return res.status(400).json({ error: 'Invalid reimbursements' });
         }
 
+        const paymentMethod =
+            body.paymentMethod != null && isNonEmptyString(body.paymentMethod)
+                ? body.paymentMethod.trim()
+                : null;
+
         const expenseId = await appendExpense(
             body.date,
             body.amount,
             currency,
             body.category.trim(),
-            body.description.trim()
+            body.description.trim(),
+            paymentMethod
         );
 
         if (reimbursements?.length) {
@@ -264,6 +270,10 @@ router.post('/fixed', async (req, res) => {
             body.currency != null && isNonEmptyString(body.currency)
                 ? body.currency.trim()
                 : 'MYR';
+        const paymentMethod =
+            body.paymentMethod != null && isNonEmptyString(body.paymentMethod)
+                ? body.paymentMethod.trim()
+                : null;
 
         await addFixedExpense(
             body.dayOfMonth,
@@ -272,7 +282,8 @@ router.post('/fixed', async (req, res) => {
             body.category.trim(),
             body.description.trim(),
             body.frequencyMonths,
-            startMonth
+            startMonth,
+            paymentMethod
         );
         res.json({ ok: true });
     } catch (err) {
@@ -293,6 +304,7 @@ router.patch('/transactions/:id', async (req, res) => {
             currency?: string;
             category?: string;
             description?: string;
+            paymentMethod?: string | null;
         } = {};
 
         if (body.date != null) {
@@ -322,6 +334,15 @@ router.patch('/transactions/:id', async (req, res) => {
                 return res.status(400).json({ error: 'Invalid description' });
             }
             fields.description = body.description.trim();
+        }
+        if (body.paymentMethod !== undefined) {
+            if (body.paymentMethod === null || body.paymentMethod === '') {
+                fields.paymentMethod = null;
+            } else if (isNonEmptyString(body.paymentMethod)) {
+                fields.paymentMethod = body.paymentMethod.trim();
+            } else {
+                return res.status(400).json({ error: 'Invalid payment method' });
+            }
         }
 
         if (Object.keys(fields).length === 0) {
@@ -363,6 +384,7 @@ router.patch('/fixed/:id', async (req, res) => {
             amount?: number;
             dayOfMonth?: number;
             frequencyMonths?: number;
+            paymentMethod?: string | null;
         } = {};
 
         if (body.description != null) {
@@ -394,6 +416,15 @@ router.patch('/fixed/:id', async (req, res) => {
                 return res.status(400).json({ error: 'Frequency must be a positive integer' });
             }
             fields.frequencyMonths = body.frequencyMonths;
+        }
+        if (body.paymentMethod !== undefined) {
+            if (body.paymentMethod === null || body.paymentMethod === '') {
+                fields.paymentMethod = null;
+            } else if (isNonEmptyString(body.paymentMethod)) {
+                fields.paymentMethod = body.paymentMethod.trim();
+            } else {
+                return res.status(400).json({ error: 'Invalid payment method' });
+            }
         }
 
         if (Object.keys(fields).length === 0) {

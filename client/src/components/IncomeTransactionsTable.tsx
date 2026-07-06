@@ -7,14 +7,18 @@ import {
     updateIncomeTransaction,
 } from '../api';
 import { usePagination } from '../hooks/usePagination';
+import { formatIncomeAccountFlow } from '../utils/incomeAccounts';
 import IncomeCategorySelect from './IncomeCategorySelect';
+import PaymentMethodSelect from './PaymentMethodSelect';
 import RecordModal from './RecordModal';
 import RowActions from './RowActions';
 import TablePagination from './TablePagination';
 
 const DAY_PAGE_SIZE = 5;
+const MONTH_PAGE_SIZE = 10;
 
 type ModalMode = 'closed' | 'create' | 'edit';
+type TableVariant = 'day' | 'month';
 
 interface Props {
     entries: IncomeTransaction[];
@@ -22,6 +26,8 @@ interface Props {
     formatAmount: (amount: number) => string;
     onChanged: () => void;
     defaultDate?: string;
+    variant?: TableVariant;
+    month?: string;
 }
 
 export default function IncomeTransactionsTable({
@@ -30,6 +36,8 @@ export default function IncomeTransactionsTable({
     formatAmount,
     onChanged,
     defaultDate,
+    variant = defaultDate != null ? 'day' : 'month',
+    month,
 }: Props) {
     const [modalMode, setModalMode] = useState<ModalMode>('closed');
     const [editingEntry, setEditingEntry] = useState<IncomeTransaction | null>(null);
@@ -40,28 +48,33 @@ export default function IncomeTransactionsTable({
         description: '',
         source: '',
         expenseId: '',
+        paymentMethod: '',
+        fromPaymentMethod: '',
     });
     const [saving, setSaving] = useState(false);
     const [modalError, setModalError] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
 
     const { page, setPage, pageItems, totalPages, totalItems } = usePagination(entries, {
-        pageSize: DAY_PAGE_SIZE,
+        pageSize: variant === 'month' ? MONTH_PAGE_SIZE : DAY_PAGE_SIZE,
     });
 
     const openCreate = useCallback(() => {
         setModalMode('create');
         setEditingEntry(null);
+        const defaultCreateDate = defaultDate ?? (month ? `${month}-01` : '');
         setForm({
-            date: defaultDate ?? '',
+            date: defaultCreateDate,
             category: 'Claim',
             amount: '',
             description: '',
             source: '',
             expenseId: '',
+            paymentMethod: '',
+            fromPaymentMethod: '',
         });
         setModalError(null);
-    }, [defaultDate]);
+    }, [defaultDate, month]);
 
     const openEdit = (entry: IncomeTransaction) => {
         setModalMode('edit');
@@ -73,6 +86,8 @@ export default function IncomeTransactionsTable({
             description: entry.description,
             source: entry.source ?? '',
             expenseId: entry.expenseId != null ? String(entry.expenseId) : '',
+            paymentMethod: entry.paymentMethod ?? '',
+            fromPaymentMethod: entry.fromPaymentMethod ?? '',
         });
         setModalError(null);
     };
@@ -81,6 +96,15 @@ export default function IncomeTransactionsTable({
         setModalMode('closed');
         setEditingEntry(null);
         setModalError(null);
+    };
+
+    const handleCategoryChange = (category: string) => {
+        setForm((f) => ({
+            ...f,
+            category,
+            expenseId: category === 'Account transfer' ? '' : f.expenseId,
+            fromPaymentMethod: category === 'Account transfer' ? f.fromPaymentMethod : '',
+        }));
     };
 
     const handleSave = async () => {
@@ -96,6 +120,21 @@ export default function IncomeTransactionsTable({
             return;
         }
 
+        const isAccountTransfer = form.category === 'Account transfer';
+        const paymentMethod = form.paymentMethod.trim() || null;
+        const fromPaymentMethod = isAccountTransfer ? form.fromPaymentMethod.trim() || null : null;
+
+        if (isAccountTransfer) {
+            if (!fromPaymentMethod || !paymentMethod) {
+                setModalError('Account transfer requires both from and to accounts.');
+                return;
+            }
+            if (fromPaymentMethod === paymentMethod) {
+                setModalError('From and to accounts must be different.');
+                return;
+            }
+        }
+
         let expenseId: number | null | undefined;
         if (form.category === 'Transfer' && form.expenseId.trim()) {
             const parsed = parseInt(form.expenseId.trim(), 10);
@@ -105,6 +144,8 @@ export default function IncomeTransactionsTable({
             }
             expenseId = parsed;
         } else if (modalMode === 'edit' && form.category === 'Transfer' && !form.expenseId.trim()) {
+            expenseId = null;
+        } else if (isAccountTransfer) {
             expenseId = null;
         }
 
@@ -117,6 +158,8 @@ export default function IncomeTransactionsTable({
                 amount,
                 description: form.description.trim(),
                 source: form.source.trim() || null,
+                paymentMethod,
+                fromPaymentMethod,
                 ...(expenseId !== undefined ? { expenseId } : {}),
             };
             if (modalMode === 'create') {
@@ -144,6 +187,7 @@ export default function IncomeTransactionsTable({
     };
 
     const showExpenseLink = form.category === 'Transfer';
+    const showFromAccount = form.category === 'Account transfer';
 
     const modal = (
         <RecordModal
@@ -169,7 +213,7 @@ export default function IncomeTransactionsTable({
                     id="income-category"
                     value={form.category}
                     usedCategories={entries.map((e) => e.category)}
-                    onChange={(category) => setForm((f) => ({ ...f, category }))}
+                    onChange={handleCategoryChange}
                 />
             </div>
             <div className="form-field">
@@ -200,6 +244,26 @@ export default function IncomeTransactionsTable({
                     placeholder="Person or payer name"
                     value={form.source}
                     onChange={(e) => setForm((f) => ({ ...f, source: e.target.value }))}
+                />
+            </div>
+            {showFromAccount && (
+                <div className="form-field">
+                    <label htmlFor="income-from-account">From account</label>
+                    <PaymentMethodSelect
+                        id="income-from-account"
+                        value={form.fromPaymentMethod}
+                        onChange={(fromPaymentMethod) =>
+                            setForm((f) => ({ ...f, fromPaymentMethod }))
+                        }
+                    />
+                </div>
+            )}
+            <div className="form-field">
+                <label htmlFor="income-to-account">To account</label>
+                <PaymentMethodSelect
+                    id="income-to-account"
+                    value={form.paymentMethod}
+                    onChange={(paymentMethod) => setForm((f) => ({ ...f, paymentMethod }))}
                 />
             </div>
             {showExpenseLink && (
@@ -234,11 +298,21 @@ export default function IncomeTransactionsTable({
         </RecordModal>
     );
 
+    const showToolbar = variant === 'month' || defaultDate != null;
+    const emptyMessage =
+        variant === 'month' ? 'No income logged this month.' : 'No income logged this day.';
+
+    const renderAccountFlow = (entry: IncomeTransaction) => {
+        const flow = formatIncomeAccountFlow(entry.paymentMethod, entry.fromPaymentMethod);
+        if (!flow) return null;
+        return <span className="income-entry-accounts">{flow}</span>;
+    };
+
     return (
         <>
-            {defaultDate != null && (
+            {showToolbar && (
                 <div className="section-header-row">
-                    <h4>Income received</h4>
+                    <h4>{variant === 'month' ? 'Income transactions' : 'Income received'}</h4>
                     <button type="button" className="btn-add" onClick={openCreate}>
                         + Add
                     </button>
@@ -246,20 +320,49 @@ export default function IncomeTransactionsTable({
             )}
             {actionError && <p className="error">{actionError}</p>}
             {entries.length === 0 ? (
-                <p className="muted">No income logged this day.</p>
+                <p className="muted">{emptyMessage}</p>
             ) : (
                 <>
-                    <ul className="day-entry-list">
+                    <ul
+                        className={
+                            variant === 'month'
+                                ? 'day-entry-list income-transactions-list'
+                                : 'day-entry-list'
+                        }
+                    >
                         {pageItems.map((entry) => (
                             <li key={entry.id} className="day-entry-card">
                                 <div className="day-entry-main">
                                     <span className="day-entry-title">{entry.description}</span>
-                                    <span className="day-entry-sub">
-                                        {entry.category}
-                                        {entry.source ? ` · ${entry.source}` : ''} ·{' '}
-                                        {formatAmount(entry.amount)}
-                                        {entry.expenseId != null ? ` · expense #${entry.expenseId}` : ''}
-                                    </span>
+                                    {variant === 'month' ? (
+                                        <div className="income-entry-meta">
+                                            <span className="income-entry-date">{entry.date}</span>
+                                            <span>{entry.category}</span>
+                                            {entry.source ? <span>{entry.source}</span> : null}
+                                            {renderAccountFlow(entry)}
+                                            <span className="income-entry-amount">
+                                                {formatAmount(entry.amount)}
+                                            </span>
+                                            {entry.expenseId != null ? (
+                                                <span>expense #{entry.expenseId}</span>
+                                            ) : null}
+                                        </div>
+                                    ) : (
+                                        <span className="day-entry-sub">
+                                            {entry.category}
+                                            {entry.source ? ` · ${entry.source}` : ''}
+                                            {formatIncomeAccountFlow(
+                                                entry.paymentMethod,
+                                                entry.fromPaymentMethod
+                                            )
+                                                ? ` · ${formatIncomeAccountFlow(entry.paymentMethod, entry.fromPaymentMethod)}`
+                                                : ''}{' '}
+                                            · {formatAmount(entry.amount)}
+                                            {entry.expenseId != null
+                                                ? ` · expense #${entry.expenseId}`
+                                                : ''}
+                                        </span>
+                                    )}
                                 </div>
                                 <RowActions
                                     onEdit={() => openEdit(entry)}

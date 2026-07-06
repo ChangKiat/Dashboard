@@ -4,6 +4,7 @@ import type { ExpenseTransaction } from '../api';
 import { createExpenseTransaction, deleteExpenseTransaction, updateExpenseTransaction } from '../api';
 import { usePagination } from '../hooks/usePagination';
 import ExpenseCategorySelect from './ExpenseCategorySelect';
+import PaymentMethodSelect from './PaymentMethodSelect';
 import RecordModal from './RecordModal';
 import RowActions from './RowActions';
 import TablePagination from './TablePagination';
@@ -35,7 +36,13 @@ export default function ExpenseTransactionsTable({
 }: Props) {
     const [modalMode, setModalMode] = useState<ModalMode>('closed');
     const [editingEntry, setEditingEntry] = useState<ExpenseTransaction | null>(null);
-    const [form, setForm] = useState({ date: '', category: '', amount: '', description: '' });
+    const [form, setForm] = useState({
+        date: '',
+        category: '',
+        amount: '',
+        description: '',
+        paymentMethod: '',
+    });
     const [showReimbursements, setShowReimbursements] = useState(false);
     const [reimbursements, setReimbursements] = useState<ReimbursementRow[]>([emptyReimbursement()]);
     const [saving, setSaving] = useState(false);
@@ -54,6 +61,7 @@ export default function ExpenseTransactionsTable({
             category: '',
             amount: '',
             description: '',
+            paymentMethod: '',
         });
         setShowReimbursements(false);
         setReimbursements([emptyReimbursement()]);
@@ -68,6 +76,7 @@ export default function ExpenseTransactionsTable({
             category: entry.category,
             amount: String(entry.grossAmount ?? entry.amount),
             description: entry.description,
+            paymentMethod: entry.paymentMethod ?? '',
         });
         setModalError(null);
     };
@@ -116,11 +125,13 @@ export default function ExpenseTransactionsTable({
         setSaving(true);
         setModalError(null);
         try {
+            const paymentMethod = form.paymentMethod.trim() || null;
             const payload = {
                 date: form.date,
                 category: form.category.trim(),
                 amount,
                 description: form.description.trim(),
+                paymentMethod,
                 ...(reimbursementPayload ? { reimbursements: reimbursementPayload } : {}),
             };
             if (modalMode === 'create') {
@@ -131,6 +142,7 @@ export default function ExpenseTransactionsTable({
                     category: payload.category,
                     amount: payload.amount,
                     description: payload.description,
+                    paymentMethod,
                 });
             }
             closeModal();
@@ -207,6 +219,14 @@ export default function ExpenseTransactionsTable({
                     type="text"
                     value={form.description}
                     onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                />
+            </div>
+            <div className="form-field">
+                <label htmlFor="tx-payment-method">Payment method</label>
+                <PaymentMethodSelect
+                    id="tx-payment-method"
+                    value={form.paymentMethod}
+                    onChange={(paymentMethod) => setForm((f) => ({ ...f, paymentMethod }))}
                 />
             </div>
             {modalMode === 'create' && (
@@ -301,7 +321,10 @@ export default function ExpenseTransactionsTable({
                                 <div className="day-entry-main">
                                     <span className="day-entry-title">{entry.description}</span>
                                     <span className="day-entry-sub">
-                                        {entry.category} · {formatEntryAmount(entry)}
+                                        {entry.category}
+                                        {entry.paymentMethod ? ` · ${entry.paymentMethod}` : ''}
+                                        {' · '}
+                                        {formatEntryAmount(entry)}
                                     </span>
                                 </div>
                                 <RowActions

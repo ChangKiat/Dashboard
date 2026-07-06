@@ -5,7 +5,7 @@ interface Props {
     onChange: (tab: TabId) => void;
 }
 
-const TABS: TabId[] = ['expenses', 'health'];
+const TABS: TabId[] = ['expenses', 'income', 'health'];
 
 export default function SectionTabs({ active, onChange }: Props) {
     return (
