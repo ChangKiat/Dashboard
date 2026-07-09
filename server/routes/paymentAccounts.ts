@@ -1,13 +1,21 @@
 import { Router } from 'express';
+import { desc } from 'drizzle-orm';
 import { loadPaymentAccounts } from '../../../AI Agent/src/config/paymentMethods';
+import { requireDb } from '../../../AI Agent/src/db/client';
+import { expenses, incomes } from '../../../AI Agent/src/db/schema';
 import {
     createPaymentAccount,
     deactivatePaymentAccount,
+    getPaymentAccountById,
     isValidPaymentAccountType,
     listActivePaymentAccounts,
     normalizePaymentAccountName,
     updatePaymentAccount,
 } from '../../../AI Agent/src/services/paymentAccountService';
+import {
+    buildAccountActivity,
+    computeAccountBalances,
+} from '../accountBalances';
 import { isNonEmptyString, parseIdParam } from '../validation';
 
 const router = Router();
@@ -16,12 +24,51 @@ async function refreshPaymentAccountsCache() {
     await loadPaymentAccounts();
 }
 
+function isNonNegativeNumber(value: unknown): value is number {
+    return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+async function loadAllTransactions() {
+    const db = requireDb();
+    const [expenseRows, incomeRows] = await Promise.all([
+        db.select().from(expenses).orderBy(desc(expenses.date), desc(expenses.id)),
+        db.select().from(incomes).orderBy(desc(incomes.date), desc(incomes.id)),
+    ]);
+    return { expenseRows, incomeRows };
+}
+
 router.get('/', async (_req, res) => {
     try {
-        const entries = await listActivePaymentAccounts();
+        const [accounts, { expenseRows, incomeRows }] = await Promise.all([
+            listActivePaymentAccounts(),
+            loadAllTransactions(),
+        ]);
+        const entries = computeAccountBalances(accounts, expenseRows, incomeRows);
         res.json({ entries });
     } catch (err) {
         console.error('GET /api/payment-accounts', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+    }
+});
+
+router.get('/:id/activity', async (req, res) => {
+    try {
+        const id = parseIdParam(req.params.id);
+        if (!id) return res.status(400).json({ error: 'Invalid id' });
+
+        const account = await getPaymentAccountById(id);
+        if (!account) return res.status(404).json({ error: 'Payment account not found' });
+
+        const { expenseRows, incomeRows } = await loadAllTransactions();
+        const [withBalance] = computeAccountBalances([account], expenseRows, incomeRows);
+        const entries = buildAccountActivity(account, expenseRows, incomeRows);
+
+        res.json({
+            account: withBalance,
+            entries,
+        });
+    } catch (err) {
+        console.error('GET /api/payment-accounts/:id/activity', err);
         res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
     }
 });
@@ -37,7 +84,22 @@ router.post('/', async (req, res) => {
                 ? body.accountType
                 : 'account';
 
-        const id = await createPaymentAccount(body.name, accountType);
+        const fields: { initialBalance?: number; creditLimit?: number | null } = {};
+        if (accountType === 'account') {
+            if (body.initialBalance != null) {
+                if (!isNonNegativeNumber(body.initialBalance)) {
+                    return res.status(400).json({ error: 'initialBalance must be a non-negative number' });
+                }
+                fields.initialBalance = body.initialBalance;
+            }
+        } else {
+            if (body.creditLimit == null || !isNonNegativeNumber(body.creditLimit)) {
+                return res.status(400).json({ error: 'creditLimit is required for credit accounts' });
+            }
+            fields.creditLimit = body.creditLimit;
+        }
+
+        const id = await createPaymentAccount(body.name, accountType, fields);
         await refreshPaymentAccountsCache();
         res.json({ ok: true, id });
     } catch (err) {
@@ -59,6 +121,8 @@ router.patch('/:id', async (req, res) => {
         const fields: {
             name?: string;
             accountType?: 'account' | 'credit';
+            initialBalance?: number;
+            creditLimit?: number | null;
             active?: boolean;
         } = {};
 
@@ -73,6 +137,18 @@ router.patch('/:id', async (req, res) => {
                 return res.status(400).json({ error: 'accountType must be "account" or "credit"' });
             }
             fields.accountType = body.accountType;
+        }
+        if (body.initialBalance != null) {
+            if (!isNonNegativeNumber(body.initialBalance)) {
+                return res.status(400).json({ error: 'initialBalance must be a non-negative number' });
+            }
+            fields.initialBalance = body.initialBalance;
+        }
+        if (body.creditLimit !== undefined) {
+            if (body.creditLimit != null && !isNonNegativeNumber(body.creditLimit)) {
+                return res.status(400).json({ error: 'creditLimit must be a non-negative number' });
+            }
+            fields.creditLimit = body.creditLimit;
         }
         if (body.active != null) {
             if (typeof body.active !== 'boolean') {

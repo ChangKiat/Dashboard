@@ -190,19 +190,41 @@
   min-width: 0;
 }
 
-.income-summary-row {
+.income-main-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: 1fr;
+  gap: 16px;
+  min-width: 0;
+}
+
+.income-main-left,
+.income-main-right {
+  min-width: 0;
+}
+
+.income-main-left {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.income-main-right {
+  display: flex;
+  flex-direction: column;
   gap: 12px;
 }
 
-.income-summary-row .summary-card--highlight .summary-value {
-  font-size: 1.5rem;
+.income-day-panel {
+  padding: 12px 16px;
 }
 
-.income-transfer-note {
-  margin: -8px 0 0;
-  font-size: 0.8rem;
+.income-day-panel h3 {
+  margin-bottom: 8px;
+}
+
+.income-day-panel .day-detail-stat {
+  margin-bottom: 0;
+  color: #34d399;
 }
 
 .income-section-card {
@@ -271,19 +293,145 @@
   gap: 8px;
 }
 
-.payment-account-item {
+.payment-account-card {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 12px;
+  align-items: stretch;
+  gap: 8px;
   background: #1a1f2b;
   border: 1px solid #2a2f3a;
   border-radius: 8px;
+  overflow: hidden;
 }
 
-.payment-account-item:hover {
+.payment-account-card .row-actions {
+  align-self: center;
+  padding-right: 8px;
+  flex-shrink: 0;
+}
+
+.payment-account-card:hover {
   border-color: #3a4150;
+}
+
+.payment-account-card-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+
+.payment-account-card-main:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.payment-account-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+
+.payment-account-stat {
+  font-size: 0.75rem;
+  color: #9aa0a6;
+}
+
+.payment-account-balance {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.payment-account-balance.positive,
+.account-balance-positive {
+  color: #34d399;
+}
+
+.payment-account-balance.negative,
+.account-balance-negative {
+  color: #f87171;
+}
+
+.account-activity-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  margin: 0 0 12px;
+  font-size: 0.875rem;
+  color: #d1d5db;
+}
+
+.account-activity-body {
+  overflow: auto;
+  max-height: 50vh;
+}
+
+.account-activity-table {
+  table-layout: fixed;
+}
+
+.account-activity-table th:nth-child(1),
+.account-activity-table td:nth-child(1) {
+  width: 110px;
+  white-space: nowrap;
+}
+
+.account-activity-table th:nth-child(2),
+.account-activity-table td:nth-child(2) {
+  width: 110px;
+  white-space: nowrap;
+}
+
+.account-activity-table th:nth-child(3),
+.account-activity-table td:nth-child(3) {
+  width: auto;
+  overflow: hidden;
+}
+
+.account-activity-table th:nth-child(4),
+.account-activity-table td:nth-child(4),
+.account-activity-table th:nth-child(5),
+.account-activity-table td:nth-child(5) {
+  width: 130px;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.account-activity-table .account-activity-desc {
+  display: block;
+  color: #e8eaed;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-activity-table .account-activity-category {
+  display: block;
+  font-size: 0.75rem;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-activity-in {
+  color: #34d399;
+}
+
+.account-activity-out {
+  color: #f87171;
+}
+
+.income-calendar .activity-calendar-cell.selected {
+  background: #1a3d2e;
+  border-color: #059669;
 }
 
 .payment-account-name {
@@ -335,9 +483,20 @@
   white-space: nowrap;
 }
 
+.form-hint {
+  font-size: 0.75rem;
+}
+
 @media (max-width: 768px) {
   .payment-accounts-split {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 768px) {
+  .income-main-grid {
+    grid-template-columns: minmax(380px, 1.35fr) minmax(300px, 1fr);
+    align-items: start;
   }
 }
 
@@ -923,6 +1082,15 @@
   overflow-y: auto;
 }
 
+.record-modal.account-activity-modal {
+  width: max(50vw, min(960px, 96vw));
+  max-width: 96vw;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .record-modal h4 {
   margin: 0 0 16px;
   font-size: 1rem;
@@ -1220,6 +1388,10 @@
   background: #fbbf24;
 }
 
+.legend-dot.income {
+  background: #34d399;
+}
+
 .activity-calendar-weekdays {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
@@ -1320,6 +1492,13 @@
 .activity-badge.expense {
   background: rgba(251, 191, 36, 0.25);
   color: #fbbf24;
+  font-size: 0.6rem;
+  padding: 2px 3px;
+}
+
+.activity-badge.income {
+  background: rgba(52, 211, 153, 0.25);
+  color: #34d399;
   font-size: 0.6rem;
   padding: 2px 3px;
 }

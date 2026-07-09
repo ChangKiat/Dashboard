@@ -312,7 +312,7 @@ export default function IncomeTransactionsTable({
         <>
             {showToolbar && (
                 <div className="section-header-row">
-                    <h4>{variant === 'month' ? 'Income transactions' : 'Income received'}</h4>
+                    <h4>Income transactions</h4>
                     <button type="button" className="btn-add" onClick={openCreate}>
                         + Add
                     </button>

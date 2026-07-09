@@ -122,11 +122,36 @@ export interface PaymentAccount {
     id: number;
     name: string;
     accountType: PaymentAccountType;
+    initialBalance: number;
+    balanceBaselineDate: string;
+    creditLimit: number | null;
     active: boolean;
+    balance?: number;
+    amountOwed?: number;
+    availableCredit?: number;
 }
 
 export interface PaymentAccountsResponse {
     entries: PaymentAccount[];
+}
+
+export type AccountActivityType = 'expense' | 'income' | 'transfer_in' | 'transfer_out';
+
+export interface AccountActivityEntry {
+    id: number;
+    date: string;
+    type: AccountActivityType;
+    description: string;
+    category: string;
+    amount: number;
+    direction: 'in' | 'out';
+    runningBalance?: number;
+    runningOwed?: number;
+}
+
+export interface AccountActivityResponse {
+    account: PaymentAccount;
+    entries: AccountActivityEntry[];
 }
 
 export interface WorkoutDailyPoint {
@@ -357,6 +382,8 @@ export function fetchPaymentAccounts() {
 export function createPaymentAccount(fields: {
     name: string;
     accountType: PaymentAccountType;
+    initialBalance?: number;
+    creditLimit?: number;
 }) {
     return fetchJson<{ ok: true; id: number }>('/api/payment-accounts', {
         method: 'POST',
@@ -367,7 +394,9 @@ export function createPaymentAccount(fields: {
 
 export function updatePaymentAccount(
     id: number,
-    fields: Partial<Pick<PaymentAccount, 'name' | 'accountType' | 'active'>>
+    fields: Partial<
+        Pick<PaymentAccount, 'name' | 'accountType' | 'active' | 'initialBalance' | 'creditLimit'>
+    >
 ) {
     return fetchJson<{ ok: true }>(`/api/payment-accounts/${id}`, {
         method: 'PATCH',
@@ -378,6 +407,10 @@ export function updatePaymentAccount(
 
 export function deletePaymentAccount(id: number) {
     return fetchJson<{ ok: true }>(`/api/payment-accounts/${id}`, { method: 'DELETE' });
+}
+
+export function fetchAccountActivity(id: number) {
+    return fetchJson<AccountActivityResponse>(`/api/payment-accounts/${id}/activity`);
 }
 
 export function fetchIncomeTransactions(month: string) {
