@@ -56,6 +56,8 @@ export interface ExpenseTransaction {
     category: string;
     description: string;
     paymentMethod?: string | null;
+    /** Destination investment account when this expense funds an investment. */
+    toInvestmentAccount?: string | null;
     grossAmount?: number;
     reimbursed?: number;
     netAmount?: number;
@@ -110,13 +112,14 @@ export interface FixedExpenseConfig {
     startMonth: number;
     currency: string;
     paymentMethod?: string | null;
+    toInvestmentAccount?: string | null;
 }
 
 export interface FixedExpensesResponse {
     entries: FixedExpenseConfig[];
 }
 
-export type PaymentAccountType = 'account' | 'credit';
+export type PaymentAccountType = 'account' | 'credit' | 'investment';
 
 export interface PaymentAccount {
     id: number;
@@ -303,6 +306,7 @@ export function fetchFixedExpenses() {
 export function createExpenseTransaction(
     fields: Pick<ExpenseTransaction, 'date' | 'amount' | 'category' | 'description'> & {
         paymentMethod?: string | null;
+        toInvestmentAccount?: string | null;
         reimbursements?: { source: string; amount: number }[];
     }
 ) {
@@ -316,7 +320,7 @@ export function createExpenseTransaction(
 export function updateExpenseTransaction(
     id: number,
     fields: Partial<
-        Pick<ExpenseTransaction, 'date' | 'amount' | 'category' | 'description' | 'paymentMethod'>
+        Pick<ExpenseTransaction, 'date' | 'amount' | 'category' | 'description' | 'paymentMethod' | 'toInvestmentAccount'>
     >
 ) {
     return fetchJson<{ ok: true }>(`/api/expenses/transactions/${id}`, {
@@ -341,6 +345,7 @@ export function createFixedExpense(
         | 'startMonth'
     > & {
         paymentMethod?: string | null;
+        toInvestmentAccount?: string | null;
     }
 ) {
     return fetchJson<{ ok: true }>('/api/expenses/fixed', {
@@ -361,6 +366,7 @@ export function updateFixedExpense(
             | 'dayOfMonth'
             | 'frequencyMonths'
             | 'paymentMethod'
+            | 'toInvestmentAccount'
         >
     >
 ) {

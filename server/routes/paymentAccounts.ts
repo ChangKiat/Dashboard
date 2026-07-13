@@ -85,7 +85,7 @@ router.post('/', async (req, res) => {
                 : 'account';
 
         const fields: { initialBalance?: number; creditLimit?: number | null } = {};
-        if (accountType === 'account') {
+        if (accountType === 'account' || accountType === 'investment') {
             if (body.initialBalance != null) {
                 if (!isNonNegativeNumber(body.initialBalance)) {
                     return res.status(400).json({ error: 'initialBalance must be a non-negative number' });

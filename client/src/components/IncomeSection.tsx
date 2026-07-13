@@ -14,6 +14,7 @@ import {
 } from '../api';
 import { countIncomeDays, sumIncomeDailyTotals } from '../utils/incomeAggregates';
 import { monthToDateRange, pickDefaultIncomeDate } from '../utils/dateRange';
+import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
 
 import IncomeCalendar from './IncomeCalendar';
 import IncomeDayDetailPanel from './IncomeDayDetailPanel';
@@ -30,6 +31,7 @@ function formatMYR(amount: number) {
 }
 
 export default function IncomeSection({ month }: Props) {
+    const { refresh: refreshAccounts } = usePaymentAccounts();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [selectedDate, setSelectedDate] = useState<string>('');
@@ -81,7 +83,8 @@ export default function IncomeSection({ month }: Props) {
         loadData({ silent: true }).catch((err) => {
             setError(err instanceof Error ? err.message : 'Failed to refresh');
         });
-    }, [loadData]);
+        void refreshAccounts();
+    }, [loadData, refreshAccounts]);
 
     const monthTotal = useMemo(() => sumIncomeDailyTotals(dailySeries), [dailySeries]);
     const incomeDays = useMemo(() => countIncomeDays(dailySeries), [dailySeries]);

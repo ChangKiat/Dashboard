@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import type { FixedExpenseConfig } from '../api';
 import { createFixedExpense, deleteFixedExpense, updateFixedExpense } from '../api';
 import { usePagination } from '../hooks/usePagination';
+import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
 import ExpenseCategorySelect from './ExpenseCategorySelect';
 import PaymentMethodSelect from './PaymentMethodSelect';
 import RecordModal from './RecordModal';
@@ -19,6 +20,10 @@ function formatFrequencyMonths(months: number): string {
     return `Every ${months} months`;
 }
 
+function isInvestmentCategory(category: string): boolean {
+    return category.trim().toLowerCase() === 'investment';
+}
+
 interface Props {
     rows: FixedExpenseConfig[];
     variableCategories: string[];
@@ -27,6 +32,15 @@ interface Props {
 }
 
 export default function FixedExpensesTable({ rows, variableCategories, formatAmount, onChanged }: Props) {
+    const { accounts } = usePaymentAccounts();
+    const investmentAccounts = useMemo(
+        () =>
+            [...accounts]
+                .filter((a) => a.accountType === 'investment')
+                .sort((a, b) => a.name.localeCompare(b.name, 'en-MY', { sensitivity: 'base' })),
+        [accounts]
+    );
+
     const sortedRows = useMemo(
         () =>
             [...rows].sort((a, b) =>
@@ -41,6 +55,7 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
         description: '',
         category: '',
         paymentMethod: '',
+        toInvestmentAccount: '',
         amount: '',
         dayOfMonth: '',
         frequencyMonths: '',
@@ -49,6 +64,8 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
     const [modalError, setModalError] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
 
+    const showInvestmentDestination = isInvestmentCategory(form.category);
+
     const openCreate = () => {
         setModalMode('create');
         setEditingEntry(null);
@@ -56,6 +73,7 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
             description: '',
             category: '',
             paymentMethod: '',
+            toInvestmentAccount: '',
             amount: '',
             dayOfMonth: '1',
             frequencyMonths: '1',
@@ -70,6 +88,7 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
             description: row.description,
             category: row.category,
             paymentMethod: row.paymentMethod ?? '',
+            toInvestmentAccount: row.toInvestmentAccount ?? '',
             amount: String(row.amount),
             dayOfMonth: String(row.dayOfMonth),
             frequencyMonths: String(row.frequencyMonths),
@@ -101,10 +120,29 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
             setModalError('Fill in all fields with valid values.');
             return;
         }
+
+        const paymentMethod = form.paymentMethod.trim() || null;
+        const toInvestmentAccount = form.toInvestmentAccount.trim() || null;
+        const investment = isInvestmentCategory(form.category);
+
+        if (investment) {
+            if (!paymentMethod) {
+                setModalError('Select the account money is coming from.');
+                return;
+            }
+            if (!toInvestmentAccount) {
+                setModalError('Select the investment account to fund.');
+                return;
+            }
+            if (paymentMethod === toInvestmentAccount) {
+                setModalError('From and to accounts must be different.');
+                return;
+            }
+        }
+
         setSaving(true);
         setModalError(null);
         try {
-            const paymentMethod = form.paymentMethod.trim() || null;
             const payload = {
                 description: form.description.trim(),
                 category: form.category.trim(),
@@ -112,6 +150,7 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
                 dayOfMonth,
                 frequencyMonths,
                 paymentMethod,
+                toInvestmentAccount: investment ? toInvestmentAccount : null,
             };
             if (modalMode === 'create') {
                 await createFixedExpense({
@@ -174,7 +213,12 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
                                 <tr key={row.id}>
                                     <td>{row.description}</td>
                                     <td>{row.category}</td>
-                                    <td>{row.paymentMethod ?? '—'}</td>
+                                    <td>
+                                        {row.paymentMethod ?? '—'}
+                                        {row.toInvestmentAccount
+                                            ? ` → ${row.toInvestmentAccount}`
+                                            : ''}
+                                    </td>
                                     <td>{formatAmount(row.amount)}</td>
                                     <td>{row.dayOfMonth}</td>
                                     <td>{formatFrequencyMonths(row.frequencyMonths)}</td>
@@ -221,17 +265,52 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
                         value={form.category}
                         variableCategories={variableCategories}
                         usedCategories={rows.map((r) => r.category)}
-                        onChange={(category) => setForm((f) => ({ ...f, category }))}
+                        onChange={(category) =>
+                            setForm((f) => ({
+                                ...f,
+                                category,
+                                toInvestmentAccount: isInvestmentCategory(category)
+                                    ? f.toInvestmentAccount
+                                    : '',
+                            }))
+                        }
                     />
                 </div>
                 <div className="form-field">
-                    <label htmlFor="fx-payment-method">Payment method</label>
+                    <label htmlFor="fx-payment-method">
+                        {showInvestmentDestination ? 'From account' : 'Payment method'}
+                    </label>
                     <PaymentMethodSelect
                         id="fx-payment-method"
                         value={form.paymentMethod}
                         onChange={(paymentMethod) => setForm((f) => ({ ...f, paymentMethod }))}
+                        excludeTypes={['investment']}
                     />
                 </div>
+                {showInvestmentDestination && (
+                    <div className="form-field">
+                        <label htmlFor="fx-to-investment">To investment account</label>
+                        <select
+                            id="fx-to-investment"
+                            value={form.toInvestmentAccount}
+                            onChange={(e) =>
+                                setForm((f) => ({ ...f, toInvestmentAccount: e.target.value }))
+                            }
+                        >
+                            <option value="">—</option>
+                            {investmentAccounts.map((account) => (
+                                <option key={account.id} value={account.name}>
+                                    {account.name}
+                                </option>
+                            ))}
+                        </select>
+                        {investmentAccounts.length === 0 && (
+                            <span className="muted form-hint">
+                                Add an investment account on the Income tab first.
+                            </span>
+                        )}
+                    </div>
+                )}
                 <div className="form-field">
                     <label htmlFor="fx-amount">Amount</label>
                     <input

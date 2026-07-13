@@ -1,5 +1,6 @@
 import { resolvePaymentMethod } from '../../AI Agent/src/config/paymentMethods';
 import type { PaymentAccount } from '../../AI Agent/src/services/paymentAccountService';
+import { isDebitBalanceType } from '../../AI Agent/src/services/paymentAccountService';
 
 export type ExpenseRow = {
     id: number;
@@ -18,6 +19,7 @@ export type IncomeRow = {
     description: string;
     paymentMethod?: string | null;
     fromPaymentMethod?: string | null;
+    expenseId?: number | null;
 };
 
 export type AccountBalanceFields = {
@@ -61,7 +63,7 @@ function getBaselineDate(account: PaymentAccount): string {
 }
 
 function isOnOrAfterBaseline(date: string, account: PaymentAccount): boolean {
-    if (account.accountType !== 'account') return true;
+    if (!isDebitBalanceType(account.accountType)) return true;
     return date >= getBaselineDate(account);
 }
 
@@ -79,6 +81,17 @@ export function computeAccountBalances(
         accounts.map((account) => [account.name.toLowerCase(), account])
     );
 
+    /** Investment funding transfers already move money; skip the linked expense debit. */
+    const fundedExpenseIds = new Set<number>();
+    for (const income of incomes) {
+        if (
+            income.category === 'Account transfer' &&
+            income.expenseId != null
+        ) {
+            fundedExpenseIds.add(income.expenseId);
+        }
+    }
+
     function getAccountByStoredName(stored: string | null | undefined): PaymentAccount | undefined {
         if (!stored) return undefined;
         const resolved = resolvePaymentMethod(stored);
@@ -87,6 +100,7 @@ export function computeAccountBalances(
     }
 
     for (const expense of expenses) {
+        if (fundedExpenseIds.has(expense.id)) continue;
         const account = getAccountByStoredName(expense.paymentMethod);
         if (!account) continue;
         if (!isOnOrAfterBaseline(expense.date, account)) continue;
@@ -159,7 +173,15 @@ export function buildAccountActivity(
 ): AccountActivityEntry[] {
     const entries: Omit<AccountActivityEntry, 'runningBalance' | 'runningOwed'>[] = [];
 
+    const fundedExpenseIds = new Set<number>();
+    for (const income of incomes) {
+        if (income.category === 'Account transfer' && income.expenseId != null) {
+            fundedExpenseIds.add(income.expenseId);
+        }
+    }
+
     for (const expense of expenses) {
+        if (fundedExpenseIds.has(expense.id)) continue;
         if (!matchesAccount(expense.paymentMethod, account.name)) continue;
         if (!isOnOrAfterBaseline(expense.date, account)) continue;
         entries.push({
@@ -222,7 +244,9 @@ export function buildAccountActivity(
 
     entries.sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
 
-    let runningDebit = account.accountType === 'account' ? account.initialBalance : undefined;
+    let runningDebit = isDebitBalanceType(account.accountType)
+        ? account.initialBalance
+        : undefined;
     let runningOwed = account.accountType === 'credit' ? 0 : undefined;
 
     const chronological = [...entries].sort(
@@ -231,7 +255,7 @@ export function buildAccountActivity(
     const runningByKey = new Map<string, { runningBalance?: number; runningOwed?: number }>();
 
     for (const entry of chronological) {
-        if (account.accountType === 'account') {
+        if (isDebitBalanceType(account.accountType)) {
             runningDebit =
                 (runningDebit ?? account.initialBalance) +
                 (entry.direction === 'in' ? entry.amount : -entry.amount);

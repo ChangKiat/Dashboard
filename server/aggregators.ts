@@ -38,7 +38,8 @@ export type ExpenseReimbursementRow = {
 export function enrichExpenseTransactions(
     rows: ExpenseTransactionRow[],
     reimbursedByExpenseId: Map<number, number>,
-    reimbursementsByExpenseId: Map<number, ExpenseReimbursementRow[]>
+    reimbursementsByExpenseId: Map<number, ExpenseReimbursementRow[]>,
+    fundingToByExpenseId?: Map<number, string>
 ) {
     return rows.map((row) => {
         const grossAmount = parseFloat(row.amount);
@@ -59,6 +60,7 @@ export function enrichExpenseTransactions(
             category: row.category,
             description: row.description,
             paymentMethod: row.paymentMethod ?? null,
+            toInvestmentAccount: fundingToByExpenseId?.get(row.id) ?? null,
             reimbursements,
         };
     });

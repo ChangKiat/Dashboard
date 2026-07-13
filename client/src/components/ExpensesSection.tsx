@@ -14,6 +14,7 @@ import {
     fetchSyncStatus,
 } from '../api';
 import { useSmartRefresh } from '../hooks/useSmartRefresh';
+import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
 import { monthToDateRange, pickDefaultExpenseDate } from '../utils/dateRange';
 import { getBudgetStatus } from '../utils/budgetStatus';
 
@@ -32,6 +33,7 @@ function formatMYR(amount: number) {
 }
 
 export default function ExpensesSection({ month }: Props) {
+    const { refresh: refreshAccounts } = usePaymentAccounts();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [selectedDate, setSelectedDate] = useState<string>('');
@@ -89,9 +91,15 @@ export default function ExpensesSection({ month }: Props) {
         loadData().catch((err) => {
             setError(err instanceof Error ? err.message : 'Failed to refresh');
         });
-    }, [loadData]);
+        void refreshAccounts();
+    }, [loadData, refreshAccounts]);
 
-    const handleStale = useCallback(() => loadData({ silent: true }), [loadData]);
+    const handleStale = useCallback(() => {
+        loadData({ silent: true }).catch(() => {
+            // error left for next explicit refresh
+        });
+        void refreshAccounts();
+    }, [loadData, refreshAccounts]);
 
     useSmartRefresh({
         month,

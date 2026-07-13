@@ -14,8 +14,10 @@ import {
 } from '../../../AI Agent/src/services/expenseService';
 import {
     appendReimbursements,
+    deleteInvestmentFundingTransfer,
     getIncomesByExpenseIds,
     getReimbursementsByExpenseIds,
+    upsertInvestmentFundingTransfer,
 } from '../../../AI Agent/src/services/incomeService';
 import { enumerateDates, parseDateRange, parseMonth } from '../dateUtils';
 import {
@@ -149,8 +151,15 @@ router.get('/transactions', async (req, res) => {
             getIncomesByExpenseIds(expenseIds),
         ]);
         const reimbursementsByExpenseId = new Map<number, typeof incomeRows>();
+        const fundingToByExpenseId = new Map<number, string>();
         for (const income of incomeRows) {
             if (income.expenseId == null) continue;
+            if (income.category === 'Account transfer') {
+                if (income.paymentMethod) {
+                    fundingToByExpenseId.set(income.expenseId, income.paymentMethod);
+                }
+                continue;
+            }
             const list = reimbursementsByExpenseId.get(income.expenseId) || [];
             list.push(income);
             reimbursementsByExpenseId.set(income.expenseId, list);
@@ -160,7 +169,12 @@ router.get('/transactions', async (req, res) => {
             month,
             start,
             end,
-            entries: enrichExpenseTransactions(rows, reimbursedByExpenseId, reimbursementsByExpenseId),
+            entries: enrichExpenseTransactions(
+                rows,
+                reimbursedByExpenseId,
+                reimbursementsByExpenseId,
+                fundingToByExpenseId
+            ),
         });
     } catch (err) {
         console.error('GET /api/expenses/transactions', err);
@@ -221,17 +235,47 @@ router.post('/transactions', async (req, res) => {
                 ? body.paymentMethod.trim()
                 : null;
 
+        const category = body.category.trim();
+        const isInvestment = category.toLowerCase() === 'investment';
+        const toInvestmentAccount =
+            body.toInvestmentAccount != null && isNonEmptyString(body.toInvestmentAccount)
+                ? body.toInvestmentAccount.trim()
+                : null;
+
+        if (isInvestment) {
+            if (!paymentMethod) {
+                return res.status(400).json({ error: 'Investment expenses require a payment method (from account)' });
+            }
+            if (!toInvestmentAccount) {
+                return res.status(400).json({ error: 'Investment expenses require a destination investment account' });
+            }
+            if (paymentMethod === toInvestmentAccount) {
+                return res.status(400).json({ error: 'From and to accounts must be different' });
+            }
+        }
+
         const expenseId = await appendExpense(
             body.date,
             body.amount,
             currency,
-            body.category.trim(),
+            category,
             body.description.trim(),
             paymentMethod
         );
 
         if (reimbursements?.length) {
             await appendReimbursements(expenseId, reimbursements, body.date);
+        }
+
+        if (isInvestment && paymentMethod && toInvestmentAccount) {
+            await upsertInvestmentFundingTransfer({
+                expenseId,
+                date: body.date,
+                amount: body.amount,
+                description: body.description.trim(),
+                fromPaymentMethod: paymentMethod,
+                toInvestmentAccount,
+            });
         }
 
         res.json({ ok: true, id: expenseId });
@@ -274,16 +318,39 @@ router.post('/fixed', async (req, res) => {
             body.paymentMethod != null && isNonEmptyString(body.paymentMethod)
                 ? body.paymentMethod.trim()
                 : null;
+        const category = body.category.trim();
+        const isInvestment = category.toLowerCase() === 'investment';
+        const toInvestmentAccount =
+            body.toInvestmentAccount != null && isNonEmptyString(body.toInvestmentAccount)
+                ? body.toInvestmentAccount.trim()
+                : null;
+
+        if (isInvestment) {
+            if (!paymentMethod) {
+                return res.status(400).json({
+                    error: 'Investment fixed expenses require a payment method (from account)',
+                });
+            }
+            if (!toInvestmentAccount) {
+                return res.status(400).json({
+                    error: 'Investment fixed expenses require a destination investment account',
+                });
+            }
+            if (paymentMethod === toInvestmentAccount) {
+                return res.status(400).json({ error: 'From and to accounts must be different' });
+            }
+        }
 
         await addFixedExpense(
             body.dayOfMonth,
             body.amount,
             currency,
-            body.category.trim(),
+            category,
             body.description.trim(),
             body.frequencyMonths,
             startMonth,
-            paymentMethod
+            paymentMethod,
+            isInvestment ? toInvestmentAccount : null
         );
         res.json({ ok: true });
     } catch (err) {
@@ -345,12 +412,50 @@ router.patch('/transactions/:id', async (req, res) => {
             }
         }
 
-        if (Object.keys(fields).length === 0) {
+        if (Object.keys(fields).length === 0 && body.toInvestmentAccount === undefined) {
             return res.status(400).json({ error: 'No fields to update' });
         }
 
-        const ok = await updateExpense(id, fields);
-        if (!ok) return res.status(404).json({ error: 'Expense not found' });
+        if (Object.keys(fields).length > 0) {
+            const ok = await updateExpense(id, fields);
+            if (!ok) return res.status(404).json({ error: 'Expense not found' });
+        }
+
+        const db = requireDb();
+        const [updated] = await db.select().from(expenses).where(eq(expenses.id, id)).limit(1);
+        if (!updated) return res.status(404).json({ error: 'Expense not found' });
+
+        const category = updated.category;
+        const isInvestment = category.toLowerCase() === 'investment';
+        const paymentMethod = updated.paymentMethod;
+        const amount = parseFloat(updated.amount);
+
+        if (isInvestment) {
+            const toInvestmentAccount =
+                body.toInvestmentAccount != null && isNonEmptyString(body.toInvestmentAccount)
+                    ? body.toInvestmentAccount.trim()
+                    : null;
+            if (!paymentMethod) {
+                return res.status(400).json({ error: 'Investment expenses require a payment method (from account)' });
+            }
+            if (!toInvestmentAccount) {
+                return res.status(400).json({ error: 'Investment expenses require a destination investment account' });
+            }
+            if (paymentMethod === toInvestmentAccount) {
+                return res.status(400).json({ error: 'From and to accounts must be different' });
+            }
+            await upsertInvestmentFundingTransfer({
+                expenseId: id,
+                date: updated.date,
+                amount,
+                description: updated.description,
+                fromPaymentMethod: paymentMethod,
+                toInvestmentAccount,
+            });
+        } else if (body.category != null || body.toInvestmentAccount === null) {
+            await deleteInvestmentFundingTransfer(id);
+        }
+
         res.json({ ok: true });
     } catch (err) {
         console.error('PATCH /api/expenses/transactions/:id', err);
@@ -385,6 +490,7 @@ router.patch('/fixed/:id', async (req, res) => {
             dayOfMonth?: number;
             frequencyMonths?: number;
             paymentMethod?: string | null;
+            toInvestmentAccount?: string | null;
         } = {};
 
         if (body.description != null) {
@@ -425,6 +531,50 @@ router.patch('/fixed/:id', async (req, res) => {
             } else {
                 return res.status(400).json({ error: 'Invalid payment method' });
             }
+        }
+        if (body.toInvestmentAccount !== undefined) {
+            if (body.toInvestmentAccount === null || body.toInvestmentAccount === '') {
+                fields.toInvestmentAccount = null;
+            } else if (isNonEmptyString(body.toInvestmentAccount)) {
+                fields.toInvestmentAccount = body.toInvestmentAccount.trim();
+            } else {
+                return res.status(400).json({ error: 'Invalid investment account' });
+            }
+        }
+
+        const existing = (await getActiveFixedExpenses()).find((row) => row.id === id);
+        if (!existing && Object.keys(fields).length === 0) {
+            return res.status(404).json({ error: 'Fixed expense not found' });
+        }
+
+        const nextCategory = fields.category ?? existing?.category ?? '';
+        const isInvestment = nextCategory.toLowerCase() === 'investment';
+
+        if (isInvestment) {
+            const paymentMethod =
+                fields.paymentMethod !== undefined
+                    ? fields.paymentMethod
+                    : (existing?.paymentMethod ?? null);
+            const toInvestmentAccount =
+                fields.toInvestmentAccount !== undefined
+                    ? fields.toInvestmentAccount
+                    : (existing?.toInvestmentAccount ?? null);
+            if (!paymentMethod) {
+                return res.status(400).json({
+                    error: 'Investment fixed expenses require a payment method (from account)',
+                });
+            }
+            if (!toInvestmentAccount) {
+                return res.status(400).json({
+                    error: 'Investment fixed expenses require a destination investment account',
+                });
+            }
+            if (paymentMethod === toInvestmentAccount) {
+                return res.status(400).json({ error: 'From and to accounts must be different' });
+            }
+            fields.toInvestmentAccount = toInvestmentAccount;
+        } else if (fields.category != null) {
+            fields.toInvestmentAccount = null;
         }
 
         if (Object.keys(fields).length === 0) {

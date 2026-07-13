@@ -120,6 +120,8 @@ export default function PaymentAccountsPanel({ onChanged, formatAmount }: Props)
     const [saving, setSaving] = useState(false);
     const [modalError, setModalError] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
+    /** Live balance shown when edit opened; used to avoid resetting baseline on name-only saves. */
+    const [openedBalance, setOpenedBalance] = useState<number | null>(null);
 
     const debitAccounts = useMemo(
         () => sortByName(accounts.filter((a) => a.accountType === 'account')),
@@ -127,6 +129,10 @@ export default function PaymentAccountsPanel({ onChanged, formatAmount }: Props)
     );
     const creditAccounts = useMemo(
         () => sortByName(accounts.filter((a) => a.accountType === 'credit')),
+        [accounts]
+    );
+    const investmentAccounts = useMemo(
+        () => sortByName(accounts.filter((a) => a.accountType === 'investment')),
         [accounts]
     );
 
@@ -138,6 +144,7 @@ export default function PaymentAccountsPanel({ onChanged, formatAmount }: Props)
     const openCreate = (accountType: PaymentAccountType) => {
         setModalMode('create');
         setEditingEntry(null);
+        setOpenedBalance(null);
         setForm({ name: '', accountType, initialBalance: '0', creditLimit: '' });
         setModalError(null);
     };
@@ -145,10 +152,12 @@ export default function PaymentAccountsPanel({ onChanged, formatAmount }: Props)
     const openEdit = (row: PaymentAccount) => {
         setModalMode('edit');
         setEditingEntry(row);
+        const liveBalance = row.balance ?? row.initialBalance ?? 0;
+        setOpenedBalance(liveBalance);
         setForm({
             name: row.name,
             accountType: row.accountType,
-            initialBalance: String(row.initialBalance ?? 0),
+            initialBalance: String(liveBalance),
             creditLimit: row.creditLimit != null ? String(row.creditLimit) : '',
         });
         setModalError(null);
@@ -157,6 +166,7 @@ export default function PaymentAccountsPanel({ onChanged, formatAmount }: Props)
     const closeModal = () => {
         setModalMode('closed');
         setEditingEntry(null);
+        setOpenedBalance(null);
         setModalError(null);
     };
 
@@ -195,13 +205,19 @@ export default function PaymentAccountsPanel({ onChanged, formatAmount }: Props)
                 }
                 payload.creditLimit = limit;
             } else {
-                const initial = parseNonNegative(form.initialBalance);
-                if (initial === 'invalid') {
-                    setModalError('Initial balance must be a non-negative number.');
+                const balanceValue = parseNonNegative(form.initialBalance);
+                if (balanceValue === 'invalid') {
+                    setModalError('Current balance must be a non-negative number.');
                     setSaving(false);
                     return;
                 }
-                payload.initialBalance = initial;
+                const balanceChanged =
+                    modalMode === 'create' ||
+                    openedBalance == null ||
+                    Math.round(balanceValue * 100) !== Math.round(openedBalance * 100);
+                if (balanceChanged) {
+                    payload.initialBalance = balanceValue;
+                }
             }
 
             if (modalMode === 'create') {
@@ -253,6 +269,16 @@ export default function PaymentAccountsPanel({ onChanged, formatAmount }: Props)
                     onDelete={handleDelete}
                     onView={setViewingAccount}
                 />
+                <PaymentAccountColumn
+                    title="Investments"
+                    accountType="investment"
+                    accounts={investmentAccounts}
+                    formatAmount={formatAmount}
+                    onAdd={openCreate}
+                    onEdit={openEdit}
+                    onDelete={handleDelete}
+                    onView={setViewingAccount}
+                />
             </div>
             <RecordModal
                 title={modalMode === 'create' ? 'Add payment account' : 'Edit payment account'}
@@ -267,12 +293,31 @@ export default function PaymentAccountsPanel({ onChanged, formatAmount }: Props)
                     <input
                         id="pa-name"
                         type="text"
-                        placeholder="e.g. TnG, CIMB Visa"
+                        placeholder={
+                            form.accountType === 'investment'
+                                ? 'e.g. EPF, ASB, Brokerage'
+                                : 'e.g. TnG, CIMB Visa'
+                        }
                         value={form.name}
                         onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                     />
                 </div>
-                {form.accountType === 'account' ? (
+                {form.accountType === 'credit' ? (
+                    <div className="form-field">
+                        <label htmlFor="pa-limit">Credit limit (RM)</label>
+                        <input
+                            id="pa-limit"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="e.g. 5000"
+                            value={form.creditLimit}
+                            onChange={(e) =>
+                                setForm((f) => ({ ...f, creditLimit: e.target.value }))
+                            }
+                        />
+                    </div>
+                ) : (
                     <div className="form-field">
                         <label htmlFor="pa-initial">Current balance (RM)</label>
                         <input
@@ -290,21 +335,6 @@ export default function PaymentAccountsPanel({ onChanged, formatAmount }: Props)
                             Saving this value resets the account balance baseline to today.
                         </span>
                     </div>
-                ) : (
-                    <div className="form-field">
-                        <label htmlFor="pa-limit">Credit limit (RM)</label>
-                        <input
-                            id="pa-limit"
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            placeholder="e.g. 5000"
-                            value={form.creditLimit}
-                            onChange={(e) =>
-                                setForm((f) => ({ ...f, creditLimit: e.target.value }))
-                            }
-                        />
-                    </div>
                 )}
                 {modalMode === 'edit' && (
                     <div className="form-field">
@@ -321,6 +351,7 @@ export default function PaymentAccountsPanel({ onChanged, formatAmount }: Props)
                         >
                             <option value="account">Account</option>
                             <option value="credit">Credit</option>
+                            <option value="investment">Investment</option>
                         </select>
                     </div>
                 )}

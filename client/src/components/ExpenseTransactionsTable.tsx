@@ -1,8 +1,9 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import type { ExpenseTransaction } from '../api';
 import { createExpenseTransaction, deleteExpenseTransaction, updateExpenseTransaction } from '../api';
 import { usePagination } from '../hooks/usePagination';
+import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
 import ExpenseCategorySelect from './ExpenseCategorySelect';
 import PaymentMethodSelect from './PaymentMethodSelect';
 import RecordModal from './RecordModal';
@@ -27,6 +28,10 @@ function emptyReimbursement(): ReimbursementRow {
     return { source: '', amount: '' };
 }
 
+function isInvestmentCategory(category: string): boolean {
+    return category.trim().toLowerCase() === 'investment';
+}
+
 export default function ExpenseTransactionsTable({
     entries,
     variableCategories,
@@ -34,6 +39,15 @@ export default function ExpenseTransactionsTable({
     onChanged,
     defaultDate,
 }: Props) {
+    const { accounts } = usePaymentAccounts();
+    const investmentAccounts = useMemo(
+        () =>
+            [...accounts]
+                .filter((a) => a.accountType === 'investment')
+                .sort((a, b) => a.name.localeCompare(b.name, 'en-MY', { sensitivity: 'base' })),
+        [accounts]
+    );
+
     const [modalMode, setModalMode] = useState<ModalMode>('closed');
     const [editingEntry, setEditingEntry] = useState<ExpenseTransaction | null>(null);
     const [form, setForm] = useState({
@@ -42,6 +56,7 @@ export default function ExpenseTransactionsTable({
         amount: '',
         description: '',
         paymentMethod: '',
+        toInvestmentAccount: '',
     });
     const [showReimbursements, setShowReimbursements] = useState(false);
     const [reimbursements, setReimbursements] = useState<ReimbursementRow[]>([emptyReimbursement()]);
@@ -53,6 +68,8 @@ export default function ExpenseTransactionsTable({
         pageSize: DAY_PAGE_SIZE,
     });
 
+    const showInvestmentDestination = isInvestmentCategory(form.category);
+
     const openCreate = useCallback(() => {
         setModalMode('create');
         setEditingEntry(null);
@@ -62,6 +79,7 @@ export default function ExpenseTransactionsTable({
             amount: '',
             description: '',
             paymentMethod: '',
+            toInvestmentAccount: '',
         });
         setShowReimbursements(false);
         setReimbursements([emptyReimbursement()]);
@@ -77,6 +95,7 @@ export default function ExpenseTransactionsTable({
             amount: String(entry.grossAmount ?? entry.amount),
             description: entry.description,
             paymentMethod: entry.paymentMethod ?? '',
+            toInvestmentAccount: entry.toInvestmentAccount ?? '',
         });
         setModalError(null);
     };
@@ -112,8 +131,27 @@ export default function ExpenseTransactionsTable({
             return;
         }
 
+        const paymentMethod = form.paymentMethod.trim() || null;
+        const toInvestmentAccount = form.toInvestmentAccount.trim() || null;
+        const investment = isInvestmentCategory(form.category);
+
+        if (investment) {
+            if (!paymentMethod) {
+                setModalError('Select the account money is coming from.');
+                return;
+            }
+            if (!toInvestmentAccount) {
+                setModalError('Select the investment account to fund.');
+                return;
+            }
+            if (paymentMethod === toInvestmentAccount) {
+                setModalError('From and to accounts must be different.');
+                return;
+            }
+        }
+
         let reimbursementPayload: { source: string; amount: number }[] | undefined;
-        if (modalMode === 'create' && showReimbursements) {
+        if (modalMode === 'create' && showReimbursements && !investment) {
             const parsed = parseReimbursements();
             if (parsed === 'invalid') {
                 setModalError('Each reimbursement needs a person name and positive amount.');
@@ -125,13 +163,13 @@ export default function ExpenseTransactionsTable({
         setSaving(true);
         setModalError(null);
         try {
-            const paymentMethod = form.paymentMethod.trim() || null;
             const payload = {
                 date: form.date,
                 category: form.category.trim(),
                 amount,
                 description: form.description.trim(),
                 paymentMethod,
+                ...(investment ? { toInvestmentAccount } : { toInvestmentAccount: null }),
                 ...(reimbursementPayload ? { reimbursements: reimbursementPayload } : {}),
             };
             if (modalMode === 'create') {
@@ -143,6 +181,7 @@ export default function ExpenseTransactionsTable({
                     amount: payload.amount,
                     description: payload.description,
                     paymentMethod,
+                    toInvestmentAccount: investment ? toInvestmentAccount : null,
                 });
             }
             closeModal();
@@ -198,7 +237,15 @@ export default function ExpenseTransactionsTable({
                     value={form.category}
                     variableCategories={variableCategories}
                     usedCategories={entries.map((e) => e.category)}
-                    onChange={(category) => setForm((f) => ({ ...f, category }))}
+                    onChange={(category) =>
+                        setForm((f) => ({
+                            ...f,
+                            category,
+                            toInvestmentAccount: isInvestmentCategory(category)
+                                ? f.toInvestmentAccount
+                                : '',
+                        }))
+                    }
                 />
             </div>
             <div className="form-field">
@@ -222,14 +269,41 @@ export default function ExpenseTransactionsTable({
                 />
             </div>
             <div className="form-field">
-                <label htmlFor="tx-payment-method">Payment method</label>
+                <label htmlFor="tx-payment-method">
+                    {showInvestmentDestination ? 'From account' : 'Payment method'}
+                </label>
                 <PaymentMethodSelect
                     id="tx-payment-method"
                     value={form.paymentMethod}
                     onChange={(paymentMethod) => setForm((f) => ({ ...f, paymentMethod }))}
+                    excludeTypes={['investment']}
                 />
             </div>
-            {modalMode === 'create' && (
+            {showInvestmentDestination && (
+                <div className="form-field">
+                    <label htmlFor="tx-to-investment">To investment account</label>
+                    <select
+                        id="tx-to-investment"
+                        value={form.toInvestmentAccount}
+                        onChange={(e) =>
+                            setForm((f) => ({ ...f, toInvestmentAccount: e.target.value }))
+                        }
+                    >
+                        <option value="">—</option>
+                        {investmentAccounts.map((account) => (
+                            <option key={account.id} value={account.name}>
+                                {account.name}
+                            </option>
+                        ))}
+                    </select>
+                    {investmentAccounts.length === 0 && (
+                        <span className="muted form-hint">
+                            Add an investment account on the Income tab first.
+                        </span>
+                    )}
+                </div>
+            )}
+            {modalMode === 'create' && !showInvestmentDestination && (
                 <div className="form-field">
                     <label>
                         <input
@@ -323,6 +397,9 @@ export default function ExpenseTransactionsTable({
                                     <span className="day-entry-sub">
                                         {entry.category}
                                         {entry.paymentMethod ? ` · ${entry.paymentMethod}` : ''}
+                                        {entry.toInvestmentAccount
+                                            ? ` → ${entry.toInvestmentAccount}`
+                                            : ''}
                                         {' · '}
                                         {formatEntryAmount(entry)}
                                     </span>
