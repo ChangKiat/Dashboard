@@ -55,7 +55,13 @@ export default function HealthEntryDetailModal(props: Props) {
                             )}
                             <DetailField label="Sets" value={formatCell(entry.sets)} />
                             <DetailField label="Reps" value={formatCell(entry.reps)} />
-                            <DetailField label="Weight (kg)" value={formatCell(entry.weightKg)} />
+                            <DetailField
+                                label="Weight (kg)"
+                                value={formatCell(entry.weightsKg ?? entry.weightKg)}
+                            />
+                            {entry.supersetGroup != null && (
+                                <DetailField label="Superset group" value={String(entry.supersetGroup)} />
+                            )}
                             <DetailField label="Duration (min)" value={formatCell(entry.durationMin)} />
                             <DetailField label="Calories burned" value={formatCell(entry.caloriesBurned)} />
                             <DetailField label="Fat burned (g)" value={formatCell(entry.fatBurnG)} />

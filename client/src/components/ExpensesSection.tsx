@@ -94,11 +94,13 @@ export default function ExpensesSection({ month }: Props) {
         void refreshAccounts();
     }, [loadData, refreshAccounts]);
 
-    const handleStale = useCallback(() => {
-        loadData({ silent: true }).catch(() => {
+    const handleStale = useCallback(async () => {
+        try {
+            await loadData({ silent: true });
+        } catch {
             // error left for next explicit refresh
-        });
-        void refreshAccounts();
+        }
+        await refreshAccounts();
     }, [loadData, refreshAccounts]);
 
     useSmartRefresh({

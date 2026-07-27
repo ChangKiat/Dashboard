@@ -69,10 +69,12 @@ export default function WorkoutHistoryTable({
         sets: '',
         reps: '',
         weightKg: '',
+        weightsKg: '',
         durationMin: '',
         notes: '',
         caloriesBurned: '',
         fatBurnG: '',
+        supersetGroup: '',
     });
     const [sessionMode, setSessionMode] = useState<SessionMode>('standalone');
     const [sessionLabel, setSessionLabel] = useState('');
@@ -105,7 +107,9 @@ export default function WorkoutHistoryTable({
 
     const paginationSource = compact ? displayItems : filteredEntries;
 
-    const { page, setPage, pageItems, totalPages, totalItems } = usePagination(paginationSource, {
+    const { page, setPage, pageItems, totalPages, totalItems } = usePagination<
+        WorkoutEntry | WorkoutDisplayItem
+    >(paginationSource, {
         pageSize: compact ? 5 : 10,
     });
 
@@ -137,10 +141,12 @@ export default function WorkoutHistoryTable({
             sets: '',
             reps: '',
             weightKg: '',
+            weightsKg: '',
             durationMin: '',
             notes: '',
             caloriesBurned: '',
             fatBurnG: '',
+            supersetGroup: '',
         });
         resetSessionForm();
         setModalError(null);
@@ -155,10 +161,12 @@ export default function WorkoutHistoryTable({
             sets: entry.sets != null ? String(entry.sets) : '',
             reps: entry.reps != null ? String(entry.reps) : '',
             weightKg: entry.weightKg != null ? String(entry.weightKg) : '',
+            weightsKg: entry.weightsKg ?? '',
             durationMin: entry.durationMin != null ? String(entry.durationMin) : '',
             notes: entry.notes ?? '',
             caloriesBurned: entry.caloriesBurned != null ? String(entry.caloriesBurned) : '',
             fatBurnG: entry.fatBurnG != null ? String(entry.fatBurnG) : '',
+            supersetGroup: entry.supersetGroup != null ? String(entry.supersetGroup) : '',
         });
         resetSessionForm(entry);
         setModalError(null);
@@ -198,16 +206,32 @@ export default function WorkoutHistoryTable({
         setSaving(true);
         setModalError(null);
         try {
+            const weightsKg = form.weightsKg.trim() || null;
+            const supersetRaw = form.supersetGroup.trim();
+            const supersetGroup =
+                supersetRaw === ''
+                    ? null
+                    : (() => {
+                          const n = parseInt(supersetRaw, 10);
+                          return Number.isInteger(n) && n >= 1 ? n : ('invalid' as const);
+                      })();
+            if (supersetGroup === 'invalid') {
+                setModalError('Superset group must be a positive integer (e.g. 1).');
+                return;
+            }
+
             const payload = {
                 date: form.date,
                 exercise: form.exercise.trim(),
                 sets: parseOptionalInt(form.sets),
                 reps: parseOptionalInt(form.reps),
                 weightKg: parseOptionalNumber(form.weightKg),
+                weightsKg,
                 durationMin: parseOptionalNumber(form.durationMin),
                 notes: form.notes.trim() || null,
                 caloriesBurned: parseOptionalNumber(form.caloriesBurned),
                 fatBurnG: parseOptionalNumber(form.fatBurnG),
+                supersetGroup,
                 ...(sessionFields ?? {}),
             };
             if (modalMode === 'create') {
@@ -383,7 +407,33 @@ export default function WorkoutHistoryTable({
                     value={form.weightKg}
                     onChange={(e) => setForm((f) => ({ ...f, weightKg: e.target.value }))}
                 />
+                <span className="muted form-hint">Single load. Ignored if progressive weights are set.</span>
             </div>
+            <div className="form-field">
+                <label htmlFor="wo-weights">Progressive weights (kg)</label>
+                <input
+                    id="wo-weights"
+                    type="text"
+                    placeholder="e.g. 10/20/30"
+                    value={form.weightsKg}
+                    onChange={(e) => setForm((f) => ({ ...f, weightsKg: e.target.value }))}
+                />
+                <span className="muted form-hint">One weight per set, slash-separated. Sets count follows this list.</span>
+            </div>
+            {(sessionMode !== 'standalone' || editingEntry?.sessionId) && (
+                <div className="form-field">
+                    <label htmlFor="wo-superset">Superset group</label>
+                    <input
+                        id="wo-superset"
+                        type="number"
+                        min="1"
+                        placeholder="e.g. 1"
+                        value={form.supersetGroup}
+                        onChange={(e) => setForm((f) => ({ ...f, supersetGroup: e.target.value }))}
+                    />
+                    <span className="muted form-hint">Same number pairs exercises in this session (optional).</span>
+                </div>
+            )}
             <div className="form-field">
                 <label htmlFor="wo-duration">Duration (min)</label>
                 <input
@@ -467,6 +517,7 @@ export default function WorkoutHistoryTable({
                     <WorkoutSessionDetailModal
                         session={viewingSession}
                         onClose={() => setViewingSession(null)}
+                        onChanged={onChanged}
                         onEdit={(entry) => {
                             setViewingSession(null);
                             openEdit(entry);
@@ -537,6 +588,7 @@ export default function WorkoutHistoryTable({
                                         <th>Sets</th>
                                         <th>Reps</th>
                                         <th className="col-weight">Weight (kg)</th>
+                                        <th>Superset</th>
                                         <th className="col-duration">Duration (min)</th>
                                         <th className="col-calories">Calories</th>
                                         <th className="col-fat">Fat (g)</th>
@@ -552,7 +604,10 @@ export default function WorkoutHistoryTable({
                                             <td>{entry.exercise}</td>
                                             <td>{formatCell(entry.sets)}</td>
                                             <td>{formatCell(entry.reps)}</td>
-                                            <td className="col-weight">{formatCell(entry.weightKg)}</td>
+                                            <td className="col-weight">
+                                                {formatCell(entry.weightsKg ?? entry.weightKg)}
+                                            </td>
+                                            <td>{formatCell(entry.supersetGroup)}</td>
                                             <td className="col-duration">{formatCell(entry.durationMin)}</td>
                                             <td className="col-calories">{formatCell(entry.caloriesBurned)}</td>
                                             <td className="col-fat">{formatCell(entry.fatBurnG)}</td>

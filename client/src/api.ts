@@ -202,12 +202,16 @@ export interface WorkoutEntry {
     sets: number | null;
     reps: number | null;
     weightKg: number | null;
+    /** Progressive set weights, e.g. "10/20/30". */
+    weightsKg: string | null;
     durationMin: number | null;
     notes: string | null;
     caloriesBurned: number | null;
     fatBurnG: number | null;
     sessionId: string | null;
     sessionLabel: string | null;
+    /** Pair exercises in a session (same number = one superset). */
+    supersetGroup: number | null;
 }
 
 export interface WorkoutSession {
@@ -493,10 +497,12 @@ export function createWorkout(
         | 'sets'
         | 'reps'
         | 'weightKg'
+        | 'weightsKg'
         | 'durationMin'
         | 'notes'
         | 'caloriesBurned'
         | 'fatBurnG'
+        | 'supersetGroup'
     > & {
         sessionId?: string | null;
         sessionLabel?: string | null;
@@ -519,12 +525,14 @@ export function updateWorkout(
             | 'sets'
             | 'reps'
             | 'weightKg'
+            | 'weightsKg'
             | 'durationMin'
             | 'notes'
             | 'caloriesBurned'
             | 'fatBurnG'
             | 'sessionId'
             | 'sessionLabel'
+            | 'supersetGroup'
         >
     >
 ) {
@@ -537,6 +545,12 @@ export function updateWorkout(
 
 export function deleteWorkout(id: number) {
     return fetchJson<{ ok: true }>(`/api/workouts/${id}`, { method: 'DELETE' });
+}
+
+export function deleteWorkoutSession(sessionId: string) {
+    return fetchJson<{ ok: true }>(`/api/workouts/session/${encodeURIComponent(sessionId)}`, {
+        method: 'DELETE',
+    });
 }
 
 export function fetchNutritionDaily(range: DateRange) {

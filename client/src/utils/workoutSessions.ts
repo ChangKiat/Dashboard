@@ -1,9 +1,14 @@
 import type { WorkoutEntry, WorkoutSession } from '../api';
 
+export function formatWeightDisplay(entry: Pick<WorkoutEntry, 'weightKg' | 'weightsKg'>): string | null {
+    if (entry.weightsKg) return `${entry.weightsKg} kg`;
+    if (entry.weightKg != null) return `${entry.weightKg} kg`;
+    return null;
+}
+
 export function formatExerciseLine(entry: WorkoutEntry): string {
-    if (entry.weightKg != null) {
-        return `${entry.exercise} · ${entry.weightKg} kg`;
-    }
+    const weight = formatWeightDisplay(entry);
+    if (weight) return `${entry.exercise} · ${weight}`;
     return entry.exercise;
 }
 
@@ -22,26 +27,48 @@ export function formatWorkoutEntrySummary(entry: WorkoutEntry): string {
     const parts: string[] = [];
     if (entry.sets != null) parts.push(`${entry.sets} sets`);
     if (entry.reps != null) parts.push(`${entry.reps} reps`);
-    if (entry.weightKg != null) parts.push(`${entry.weightKg} kg`);
+    const weight = formatWeightDisplay(entry);
+    if (weight) parts.push(weight);
+    if (entry.supersetGroup != null) parts.push(`SS${entry.supersetGroup}`);
     if (entry.caloriesBurned != null) parts.push(`${entry.caloriesBurned} kcal`);
     if (entry.fatBurnG != null) parts.push(`${entry.fatBurnG}g fat`);
     return parts.length > 0 ? parts.join(' · ') : '—';
+}
+
+/** Format session exercises with supersets joined by " + ". */
+export function formatSessionExerciseLines(exercises: WorkoutEntry[]): string[] {
+    const used = new Set<number>();
+    const lines: string[] = [];
+    for (let i = 0; i < exercises.length; i++) {
+        if (used.has(i)) continue;
+        const entry = exercises[i];
+        const group = entry.supersetGroup;
+        if (group == null) {
+            lines.push(formatExerciseLine(entry));
+            continue;
+        }
+        const pair: string[] = [formatExerciseLine(entry)];
+        used.add(i);
+        for (let j = i + 1; j < exercises.length; j++) {
+            if (exercises[j].supersetGroup === group) {
+                pair.push(formatExerciseLine(exercises[j]));
+                used.add(j);
+            }
+        }
+        lines.push(pair.join(' + '));
+    }
+    return lines;
 }
 
 export function formatSessionSummary(session: WorkoutSession): string {
     const count = session.exercises.length;
     const countLabel = `${count} exercise${count === 1 ? '' : 's'}`;
     const setsReps = formatSessionSetsReps(session.exercises);
-    if (setsReps) return `${setsReps} · ${countLabel}`;
-
-    if (count <= 2) {
-        return session.exercises.map((e) => e.exercise).join(', ');
-    }
-    const preview = session.exercises
-        .slice(0, 2)
-        .map((e) => e.exercise)
-        .join(', ');
-    return `${preview} +${count - 2} more`;
+    const lines = formatSessionExerciseLines(session.exercises);
+    const head = setsReps ? `${setsReps} · ${countLabel}` : countLabel;
+    if (lines.length === 0) return head;
+    if (lines.length <= 2) return `${head} · ${lines.join(', ')}`;
+    return `${head} · ${lines.slice(0, 2).join(', ')} +${lines.length - 2} more`;
 }
 
 export function groupWorkoutEntries(entries: WorkoutEntry[]): {

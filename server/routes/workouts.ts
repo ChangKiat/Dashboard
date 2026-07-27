@@ -3,8 +3,10 @@ import { Router } from 'express';
 import {
     countWorkoutSessions,
     deleteWorkout,
+    deleteWorkoutsBySessionId,
     getWorkoutHistory,
     logWorkout,
+    normalizeWeightsKg,
     updateWorkout,
 } from '../../../AI Agent/src/services/gymService';
 import { enumerateDates, parseDateRange } from '../dateUtils';
@@ -23,6 +25,26 @@ import {
 import { getTelegramUserId } from '../telegramUser';
 
 const router = Router();
+
+/** Parse "10/20/30" progressive weights or clear. */
+function parseWeightsKgField(value: unknown): {
+    weightsKgText: string | null;
+    topWeightKg: number | undefined;
+    sets: number | undefined;
+} | 'invalid' {
+    if (value === null || value === '') {
+        return { weightsKgText: null, topWeightKg: undefined, sets: undefined };
+    }
+    if (typeof value !== 'string') return 'invalid';
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return { weightsKgText: null, topWeightKg: undefined, sets: undefined };
+    }
+    const parts = trimmed.split('/').map((part) => parseFloat(part.trim()));
+    if (parts.some((n) => !Number.isFinite(n) || n < 0)) return 'invalid';
+    const positive = parts.filter((n) => n > 0);
+    return normalizeWeightsKg(positive.length > 0 ? positive : undefined, undefined, undefined);
+}
 
 router.get('/daily', async (req, res) => {
     try {
@@ -144,6 +166,17 @@ router.post('/', async (req, res) => {
         if (body.fatBurnG != null && (typeof body.fatBurnG !== 'number' || body.fatBurnG < 0)) {
             return res.status(400).json({ error: 'Invalid fat burned' });
         }
+        if (
+            body.supersetGroup != null &&
+            (!Number.isInteger(body.supersetGroup) || body.supersetGroup < 1)
+        ) {
+            return res.status(400).json({ error: 'Invalid superset group' });
+        }
+
+        const progressive = parseWeightsKgField(body.weightsKg);
+        if (progressive === 'invalid') {
+            return res.status(400).json({ error: 'Invalid progressive weights (use e.g. 10/20/30)' });
+        }
 
         const userId = getTelegramUserId();
 
@@ -165,23 +198,50 @@ router.post('/', async (req, res) => {
             sessionId = randomUUID();
         }
 
+        const sets =
+            progressive.weightsKgText != null
+                ? (progressive.sets ?? body.sets ?? undefined)
+                : (body.sets ?? undefined);
+        const weightKg =
+            progressive.weightsKgText != null
+                ? progressive.topWeightKg
+                : (body.weightKg ?? undefined);
+
         await logWorkout(
             userId,
             body.date,
             body.exercise.trim(),
-            body.sets ?? undefined,
+            sets,
             body.reps ?? undefined,
-            body.weightKg ?? undefined,
+            weightKg,
             body.durationMin ?? undefined,
             body.notes != null && body.notes !== '' ? String(body.notes) : undefined,
             body.caloriesBurned ?? undefined,
             body.fatBurnG ?? undefined,
             sessionId ?? null,
-            sessionLabel ?? null
+            sessionLabel ?? null,
+            progressive.weightsKgText,
+            body.supersetGroup ?? null
         );
         res.json({ ok: true });
     } catch (err) {
         console.error('POST /api/workouts', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+    }
+});
+
+router.delete('/session/:sessionId', async (req, res) => {
+    try {
+        const sessionId = req.params.sessionId;
+        if (!sessionId || typeof sessionId !== 'string' || !sessionId.trim()) {
+            return res.status(400).json({ error: 'Invalid session id' });
+        }
+        const userId = getTelegramUserId();
+        const deleted = await deleteWorkoutsBySessionId(sessionId.trim(), userId);
+        if (deleted === 0) return res.status(404).json({ error: 'Session not found' });
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('DELETE /api/workouts/session/:sessionId', err);
         res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
     }
 });
@@ -198,12 +258,14 @@ router.patch('/:id', async (req, res) => {
             sets?: number | null;
             reps?: number | null;
             weightKg?: number | null;
+            weightsKgText?: string | null;
             durationMin?: number | null;
             notes?: string | null;
             caloriesBurned?: number | null;
             fatBurnG?: number | null;
             sessionId?: string | null;
             sessionLabel?: string | null;
+            supersetGroup?: number | null;
         } = {};
 
         if (body.date != null) {
@@ -233,6 +295,17 @@ router.patch('/:id', async (req, res) => {
                 return res.status(400).json({ error: 'Invalid weight' });
             }
             fields.weightKg = body.weightKg;
+        }
+        if (body.weightsKg !== undefined) {
+            const progressive = parseWeightsKgField(body.weightsKg);
+            if (progressive === 'invalid') {
+                return res.status(400).json({ error: 'Invalid progressive weights (use e.g. 10/20/30)' });
+            }
+            fields.weightsKgText = progressive.weightsKgText;
+            if (progressive.weightsKgText != null) {
+                fields.sets = progressive.sets ?? fields.sets ?? null;
+                fields.weightKg = progressive.topWeightKg ?? null;
+            }
         }
         if (body.durationMin !== undefined) {
             if (body.durationMin !== null && (typeof body.durationMin !== 'number' || body.durationMin < 0)) {
@@ -269,6 +342,15 @@ router.patch('/:id', async (req, res) => {
                 body.sessionLabel != null && isNonEmptyString(body.sessionLabel)
                     ? body.sessionLabel.trim()
                     : null;
+        }
+        if (body.supersetGroup !== undefined) {
+            if (
+                body.supersetGroup !== null &&
+                (!Number.isInteger(body.supersetGroup) || body.supersetGroup < 1)
+            ) {
+                return res.status(400).json({ error: 'Invalid superset group' });
+            }
+            fields.supersetGroup = body.supersetGroup;
         }
         if (fields.sessionLabel && fields.sessionId === undefined) {
             fields.sessionId = randomUUID();

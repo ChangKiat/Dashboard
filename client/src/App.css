@@ -1282,6 +1282,49 @@
   margin: 0;
 }
 
+.workout-session-superset-preview {
+  margin: 0 0 12px;
+  font-size: 0.9rem;
+}
+
+.workout-session-edit-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.workout-session-edit-row {
+  padding: 12px;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.workout-session-edit-row-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.form-row-inline {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.workout-session-delete-confirm {
+  margin-top: 16px;
+}
+
+@media (max-width: 640px) {
+  .form-row-inline {
+    grid-template-columns: 1fr;
+  }
+}
+
 .data-table .actions-col {
   width: 56px;
 }

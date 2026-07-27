@@ -157,12 +157,14 @@ export type WorkoutRow = {
     sets: number | null;
     reps: number | null;
     weightKg: number | null;
+    weightsKgText?: string | null;
     durationMin: number | null;
     notes: string | null;
     caloriesBurned: number | null;
     fatBurnG: number | null;
     sessionId?: string | null;
     sessionLabel?: string | null;
+    supersetGroup?: number | null;
 };
 
 export type PersonalRecord = {
@@ -249,12 +251,14 @@ export function formatWorkoutEntries(rows: WorkoutRow[]) {
         sets: row.sets,
         reps: row.reps,
         weightKg: row.weightKg,
+        weightsKg: row.weightsKgText ?? null,
         durationMin: row.durationMin,
         notes: row.notes,
         caloriesBurned: row.caloriesBurned,
         fatBurnG: row.fatBurnG,
         sessionId: row.sessionId ?? null,
         sessionLabel: row.sessionLabel ?? null,
+        supersetGroup: row.supersetGroup ?? null,
     }));
 }
 
