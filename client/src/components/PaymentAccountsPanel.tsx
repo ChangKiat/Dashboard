@@ -157,8 +157,8 @@ export default function PaymentAccountsPanel({ onChanged, formatAmount }: Props)
         setForm({
             name: row.name,
             accountType: row.accountType,
-            initialBalance: String(liveBalance),
-            creditLimit: row.creditLimit != null ? String(row.creditLimit) : '',
+            initialBalance: liveBalance.toFixed(2),
+            creditLimit: row.creditLimit != null ? row.creditLimit.toFixed(2) : '',
         });
         setModalError(null);
     };
@@ -175,7 +175,7 @@ export default function PaymentAccountsPanel({ onChanged, formatAmount }: Props)
         if (!trimmed) return 0;
         const n = parseFloat(trimmed);
         if (!Number.isFinite(n) || n < 0) return 'invalid';
-        return n;
+        return Math.round(n * 100) / 100;
     };
 
     const handleSave = async () => {
