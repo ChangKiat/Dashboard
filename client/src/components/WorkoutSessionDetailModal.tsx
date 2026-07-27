@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 
 import type { WorkoutEntry, WorkoutSession } from '../api';
 import {
@@ -79,6 +79,17 @@ function parseSupersetGroup(raw: string): number | null | 'invalid' {
     if (!trimmed) return null;
     const n = parseInt(trimmed, 10);
     return Number.isInteger(n) && n >= 1 ? n : 'invalid';
+}
+
+function rowWeightDisplay(row: EditRow): string {
+    return row.weightsKg || row.weightKg;
+}
+
+function applyRowWeight(value: string): Partial<EditRow> {
+    if (value.includes('/')) {
+        return { weightsKg: value, weightKg: '' };
+    }
+    return { weightKg: value, weightsKg: '' };
 }
 
 export default function WorkoutSessionDetailModal({
@@ -206,7 +217,12 @@ export default function WorkoutSessionDetailModal({
 
     if (editing) {
         return (
-            <DetailModal title={`Edit · ${title}`} open onClose={saving || deleting ? () => {} : cancelEdit}>
+            <DetailModal
+                title={`Edit · ${title}`}
+                open
+                className="workout-session-modal"
+                onClose={saving || deleting ? () => {} : cancelEdit}
+            >
                 {error && <p className="error">{error}</p>}
                 <div className="form-field">
                     <label htmlFor="session-edit-label">Session label</label>
@@ -218,111 +234,123 @@ export default function WorkoutSessionDetailModal({
                         disabled={saving || deleting}
                     />
                 </div>
-                <div className="workout-session-edit-rows">
-                    {rows.map((row, index) => (
-                        <div key={row.key} className="workout-session-edit-row">
-                            <div className="workout-session-edit-row-header">
-                                <span className="muted">Exercise {index + 1}</span>
-                                <button
-                                    type="button"
-                                    className="btn-danger-link"
-                                    disabled={saving || deleting}
-                                    onClick={() => setRows((prev) => prev.filter((r) => r.key !== row.key))}
-                                >
-                                    Remove
-                                </button>
-                            </div>
-                            <div className="form-field">
-                                <label>Name</label>
-                                <input
-                                    type="text"
-                                    value={row.exercise}
-                                    onChange={(e) => updateRow(row.key, { exercise: e.target.value })}
-                                    disabled={saving || deleting}
-                                />
-                            </div>
-                            <div className="form-row-inline">
-                                <div className="form-field">
-                                    <label>Sets</label>
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        value={row.sets}
-                                        onChange={(e) => updateRow(row.key, { sets: e.target.value })}
-                                        disabled={saving || deleting}
-                                    />
-                                </div>
-                                <div className="form-field">
-                                    <label>Reps</label>
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        value={row.reps}
-                                        onChange={(e) => updateRow(row.key, { reps: e.target.value })}
-                                        disabled={saving || deleting}
-                                    />
-                                </div>
-                                <div className="form-field">
-                                    <label>Weight (kg)</label>
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        step="0.5"
-                                        value={row.weightKg}
-                                        onChange={(e) => updateRow(row.key, { weightKg: e.target.value })}
-                                        disabled={saving || deleting}
-                                    />
-                                </div>
-                            </div>
-                            <div className="form-row-inline">
-                                <div className="form-field">
-                                    <label>Progressive weights</label>
-                                    <input
-                                        type="text"
-                                        placeholder="10/20/30"
-                                        value={row.weightsKg}
-                                        onChange={(e) => updateRow(row.key, { weightsKg: e.target.value })}
-                                        disabled={saving || deleting}
-                                    />
-                                </div>
-                                <div className="form-field">
-                                    <label>Superset group</label>
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        placeholder="1"
-                                        value={row.supersetGroup}
-                                        onChange={(e) =>
-                                            updateRow(row.key, { supersetGroup: e.target.value })
-                                        }
-                                        disabled={saving || deleting}
-                                    />
-                                </div>
-                                <div className="form-field">
-                                    <label>Duration (min)</label>
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        step="0.5"
-                                        value={row.durationMin}
-                                        onChange={(e) =>
-                                            updateRow(row.key, { durationMin: e.target.value })
-                                        }
-                                        disabled={saving || deleting}
-                                    />
-                                </div>
-                            </div>
-                            <div className="form-field">
-                                <label>Notes</label>
-                                <input
-                                    type="text"
-                                    value={row.notes}
-                                    onChange={(e) => updateRow(row.key, { notes: e.target.value })}
-                                    disabled={saving || deleting}
-                                />
-                            </div>
-                        </div>
-                    ))}
+                <div className="workout-session-edit-table-wrap">
+                    <table className="workout-session-edit-table">
+                        <thead>
+                            <tr>
+                                <th className="col-exercise">Exercise</th>
+                                <th className="col-num">Sets</th>
+                                <th className="col-num">Reps</th>
+                                <th className="col-weight">Weight</th>
+                                <th className="col-num">SS</th>
+                                <th className="col-num">Min</th>
+                                <th className="col-actions" aria-label="Actions" />
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {rows.map((row) => (
+                                <Fragment key={row.key}>
+                                    <tr>
+                                        <td className="col-exercise">
+                                            <input
+                                                type="text"
+                                                placeholder="Exercise"
+                                                value={row.exercise}
+                                                onChange={(e) =>
+                                                    updateRow(row.key, { exercise: e.target.value })
+                                                }
+                                                disabled={saving || deleting}
+                                            />
+                                        </td>
+                                        <td className="col-num">
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                value={row.sets}
+                                                onChange={(e) =>
+                                                    updateRow(row.key, { sets: e.target.value })
+                                                }
+                                                disabled={saving || deleting}
+                                            />
+                                        </td>
+                                        <td className="col-num">
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                value={row.reps}
+                                                onChange={(e) =>
+                                                    updateRow(row.key, { reps: e.target.value })
+                                                }
+                                                disabled={saving || deleting}
+                                            />
+                                        </td>
+                                        <td className="col-weight">
+                                            <input
+                                                type="text"
+                                                placeholder="kg or 10/20/30"
+                                                value={rowWeightDisplay(row)}
+                                                onChange={(e) =>
+                                                    updateRow(row.key, applyRowWeight(e.target.value))
+                                                }
+                                                disabled={saving || deleting}
+                                            />
+                                        </td>
+                                        <td className="col-num">
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                placeholder="1"
+                                                value={row.supersetGroup}
+                                                onChange={(e) =>
+                                                    updateRow(row.key, { supersetGroup: e.target.value })
+                                                }
+                                                disabled={saving || deleting}
+                                            />
+                                        </td>
+                                        <td className="col-num">
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                step="0.5"
+                                                value={row.durationMin}
+                                                onChange={(e) =>
+                                                    updateRow(row.key, { durationMin: e.target.value })
+                                                }
+                                                disabled={saving || deleting}
+                                            />
+                                        </td>
+                                        <td className="col-actions">
+                                            <button
+                                                type="button"
+                                                className="btn-danger-link"
+                                                disabled={saving || deleting}
+                                                onClick={() =>
+                                                    setRows((prev) =>
+                                                        prev.filter((r) => r.key !== row.key)
+                                                    )
+                                                }
+                                            >
+                                                ×
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    <tr className="row-notes">
+                                        <td colSpan={7}>
+                                            <input
+                                                type="text"
+                                                placeholder="Notes (optional)"
+                                                value={row.notes}
+                                                onChange={(e) =>
+                                                    updateRow(row.key, { notes: e.target.value })
+                                                }
+                                                disabled={saving || deleting}
+                                            />
+                                        </td>
+                                    </tr>
+                                </Fragment>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
                 <button
                     type="button"
@@ -393,7 +421,7 @@ export default function WorkoutSessionDetailModal({
     }
 
     return (
-        <DetailModal title={title} open onClose={onClose}>
+        <DetailModal title={title} open className="workout-session-modal" onClose={onClose}>
             {setsReps && <p className="day-detail-stat">{setsReps}</p>}
             {exerciseLines.length > 0 && (
                 <p className="muted workout-session-superset-preview">{exerciseLines.join(' · ')}</p>

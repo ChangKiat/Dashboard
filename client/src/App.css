@@ -1155,6 +1155,76 @@
   overflow: hidden;
 }
 
+.record-modal.workout-record-modal,
+.detail-modal.workout-session-modal {
+  max-width: min(720px, 96vw);
+}
+
+.workout-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.workout-form-grid .span-full {
+  grid-column: 1 / -1;
+}
+
+.segment-toggle {
+  display: flex;
+  border: 1px solid #2a2f3a;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.segment-toggle button {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: #9aa0a6;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.segment-toggle button:hover:not(.active) {
+  background: #222733;
+}
+
+.segment-toggle button.active {
+  background: #2a2f3a;
+  color: #e8eaed;
+}
+
+.workout-session-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #2a2f3a;
+  border-radius: 8px;
+  background: #151922;
+}
+
+.workout-more-options {
+  margin-top: 4px;
+}
+
+.workout-more-options summary {
+  cursor: pointer;
+  color: #9aa0a6;
+  font-size: 0.875rem;
+  user-select: none;
+}
+
+.workout-more-options[open] summary {
+  margin-bottom: 12px;
+}
+
+.workout-more-options .workout-form-grid {
+  margin-top: 0;
+}
+
 .record-modal h4 {
   margin: 0 0 16px;
   font-size: 1rem;
@@ -1319,8 +1389,74 @@
   margin-top: 16px;
 }
 
+.workout-session-edit-table-wrap {
+  overflow-x: auto;
+  margin-bottom: 12px;
+}
+
+.workout-session-edit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.workout-session-edit-table th {
+  text-align: left;
+  padding: 6px 8px;
+  color: #9aa0a6;
+  font-weight: 500;
+  border-bottom: 1px solid #2a2f3a;
+  white-space: nowrap;
+}
+
+.workout-session-edit-table td {
+  padding: 6px 4px;
+  vertical-align: middle;
+}
+
+.workout-session-edit-table input {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid #2a2f3a;
+  border-radius: 4px;
+  background: #151922;
+  color: #e8eaed;
+  font-size: 0.875rem;
+}
+
+.workout-session-edit-table .col-exercise input {
+  min-width: 120px;
+}
+
+.workout-session-edit-table .col-weight input {
+  min-width: 72px;
+}
+
+.workout-session-edit-table .col-num input {
+  min-width: 48px;
+}
+
+.workout-session-edit-table .col-actions {
+  width: 56px;
+  text-align: right;
+}
+
+.workout-session-edit-table .row-notes td {
+  padding-top: 0;
+  padding-bottom: 8px;
+}
+
+.workout-session-edit-table .row-notes input {
+  font-size: 0.8125rem;
+}
+
 @media (max-width: 640px) {
   .form-row-inline {
+    grid-template-columns: 1fr;
+  }
+
+  .workout-form-grid {
     grid-template-columns: 1fr;
   }
 }

@@ -4,10 +4,11 @@ interface Props {
     title: string;
     open: boolean;
     onClose: () => void;
+    className?: string;
     children: ReactNode;
 }
 
-export default function DetailModal({ title, open, onClose, children }: Props) {
+export default function DetailModal({ title, open, onClose, className, children }: Props) {
     useEffect(() => {
         if (!open) return;
         const onKeyDown = (e: KeyboardEvent) => {
@@ -19,9 +20,11 @@ export default function DetailModal({ title, open, onClose, children }: Props) {
 
     if (!open) return null;
 
+    const modalClass = ['record-modal', 'detail-modal', className].filter(Boolean).join(' ');
+
     return (
         <div className="record-modal-backdrop" onClick={onClose}>
-            <div className="record-modal detail-modal" onClick={(e) => e.stopPropagation()}>
+            <div className={modalClass} onClick={(e) => e.stopPropagation()}>
                 <div className="detail-modal-header">
                     <h4>{title}</h4>
                     <button type="button" className="detail-modal-close" onClick={onClose} aria-label="Close">

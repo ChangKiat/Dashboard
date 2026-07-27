@@ -7,6 +7,7 @@ interface Props {
     error: string | null;
     onClose: () => void;
     onSave: () => void;
+    className?: string;
     children: ReactNode;
 }
 
@@ -17,13 +18,16 @@ export default function RecordModal({
     error,
     onClose,
     onSave,
+    className,
     children,
 }: Props) {
     if (!open) return null;
 
+    const modalClass = ['record-modal', className].filter(Boolean).join(' ');
+
     return (
         <div className="record-modal-backdrop" onClick={onClose}>
-            <div className="record-modal" onClick={(e) => e.stopPropagation()}>
+            <div className={modalClass} onClick={(e) => e.stopPropagation()}>
                 <h4>{title}</h4>
                 <div className="record-modal-body">{children}</div>
                 {error && <p className="error">{error}</p>}

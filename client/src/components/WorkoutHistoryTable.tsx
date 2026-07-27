@@ -19,7 +19,9 @@ import TablePagination from './TablePagination';
 import WorkoutSessionDetailModal from './WorkoutSessionDetailModal';
 
 type ModalMode = 'closed' | 'create' | 'edit';
-type SessionMode = 'standalone' | 'new' | 'join';
+type WeightMode = 'same' | 'progressive';
+
+const NEW_SESSION = '__new__';
 
 interface Props {
     entries: WorkoutEntry[];
@@ -30,25 +32,32 @@ interface Props {
 }
 
 function resolveSessionFields(
-    sessionMode: SessionMode,
+    inSession: boolean,
+    sessionChoice: string,
     sessionLabel: string,
-    existingSessionId: string,
     sameDaySessions: { sessionId: string; sessionLabel: string | null }[]
 ): { sessionId: string | null; sessionLabel: string | null } | 'invalid' {
-    if (sessionMode === 'standalone') {
+    if (!inSession) {
         return { sessionId: null, sessionLabel: null };
     }
-    if (sessionMode === 'new') {
+    if (sessionChoice === NEW_SESSION) {
         const label = sessionLabel.trim();
         if (!label) return 'invalid';
         return { sessionId: crypto.randomUUID(), sessionLabel: label };
     }
-    if (!existingSessionId) return 'invalid';
-    const match = sameDaySessions.find((s) => s.sessionId === existingSessionId);
+    if (!sessionChoice) return 'invalid';
+    const match = sameDaySessions.find((s) => s.sessionId === sessionChoice);
     return {
-        sessionId: existingSessionId,
+        sessionId: sessionChoice,
         sessionLabel: match?.sessionLabel ?? null,
     };
+}
+
+function pickDefaultSession(
+    sessions: { sessionId: string; sessionLabel: string | null }[]
+): string {
+    if (sessions.length === 0) return NEW_SESSION;
+    return [...sessions].sort((a, b) => b.sessionId.localeCompare(a.sessionId))[0].sessionId;
 }
 
 export default function WorkoutHistoryTable({
@@ -76,9 +85,10 @@ export default function WorkoutHistoryTable({
         fatBurnG: '',
         supersetGroup: '',
     });
-    const [sessionMode, setSessionMode] = useState<SessionMode>('standalone');
+    const [inSession, setInSession] = useState(false);
+    const [sessionChoice, setSessionChoice] = useState(NEW_SESSION);
     const [sessionLabel, setSessionLabel] = useState('');
-    const [existingSessionId, setExistingSessionId] = useState('');
+    const [weightMode, setWeightMode] = useState<WeightMode>('same');
     const [saving, setSaving] = useState(false);
     const [modalError, setModalError] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
@@ -118,14 +128,18 @@ export default function WorkoutHistoryTable({
     }, [entries]);
 
     const resetSessionForm = useCallback(
-        (entry?: WorkoutEntry) => {
+        (entry?: WorkoutEntry, sessions: { sessionId: string; sessionLabel: string | null }[] = []) => {
             if (entry?.sessionId) {
-                setSessionMode('join');
-                setExistingSessionId(entry.sessionId);
+                setInSession(true);
+                setSessionChoice(entry.sessionId);
                 setSessionLabel(entry.sessionLabel ?? '');
+            } else if (sessions.length > 0) {
+                setInSession(true);
+                setSessionChoice(pickDefaultSession(sessions));
+                setSessionLabel('');
             } else {
-                setSessionMode('standalone');
-                setExistingSessionId('');
+                setInSession(false);
+                setSessionChoice(NEW_SESSION);
                 setSessionLabel('');
             }
         },
@@ -133,6 +147,10 @@ export default function WorkoutHistoryTable({
     );
 
     const openCreate = useCallback(() => {
+        const daySessions = listSameDaySessions(
+            allEntries.length > 0 ? allEntries : entries,
+            defaultDate ?? ''
+        );
         setModalMode('create');
         setEditingEntry(null);
         setForm({
@@ -148,9 +166,10 @@ export default function WorkoutHistoryTable({
             fatBurnG: '',
             supersetGroup: '',
         });
-        resetSessionForm();
+        setWeightMode('same');
+        resetSessionForm(undefined, daySessions);
         setModalError(null);
-    }, [defaultDate, resetSessionForm]);
+    }, [allEntries, defaultDate, entries, resetSessionForm]);
 
     const openEdit = (entry: WorkoutEntry) => {
         setModalMode('edit');
@@ -168,7 +187,8 @@ export default function WorkoutHistoryTable({
             fatBurnG: entry.fatBurnG != null ? String(entry.fatBurnG) : '',
             supersetGroup: entry.supersetGroup != null ? String(entry.supersetGroup) : '',
         });
-        resetSessionForm(entry);
+        setWeightMode(entry.weightsKg ? 'progressive' : 'same');
+        resetSessionForm(entry, sameDaySessions);
         setModalError(null);
     };
 
@@ -187,16 +207,16 @@ export default function WorkoutHistoryTable({
         let sessionFields: { sessionId: string | null; sessionLabel: string | null } | undefined;
         if (showSessionFields) {
             const resolved = resolveSessionFields(
-                sessionMode,
+                inSession,
+                sessionChoice,
                 sessionLabel,
-                existingSessionId,
                 sameDaySessions
             );
             if (resolved === 'invalid') {
                 setModalError(
-                    sessionMode === 'new'
+                    sessionChoice === NEW_SESSION
                         ? 'Session label is required for a new session.'
-                        : 'Select an existing session to join.'
+                        : 'Select a session.'
                 );
                 return;
             }
@@ -206,7 +226,10 @@ export default function WorkoutHistoryTable({
         setSaving(true);
         setModalError(null);
         try {
-            const weightsKg = form.weightsKg.trim() || null;
+            const weightsKg =
+                weightMode === 'progressive' ? form.weightsKg.trim() || null : null;
+            const weightKg =
+                weightMode === 'same' ? parseOptionalNumber(form.weightKg) : null;
             const supersetRaw = form.supersetGroup.trim();
             const supersetGroup =
                 supersetRaw === ''
@@ -225,7 +248,7 @@ export default function WorkoutHistoryTable({
                 exercise: form.exercise.trim(),
                 sets: parseOptionalInt(form.sets),
                 reps: parseOptionalInt(form.reps),
-                weightKg: parseOptionalNumber(form.weightKg),
+                weightKg,
                 weightsKg,
                 durationMin: parseOptionalNumber(form.durationMin),
                 notes: form.notes.trim() || null,
@@ -311,169 +334,236 @@ export default function WorkoutHistoryTable({
             error={modalError}
             onClose={closeModal}
             onSave={handleSave}
+            className="workout-record-modal"
         >
-            <div className="form-field">
-                <label htmlFor="wo-date">Date</label>
-                <input
-                    id="wo-date"
-                    type="date"
-                    value={form.date}
-                    onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
-                />
-            </div>
-            {showSessionFields && (
-                <>
-                    <div className="form-field">
-                        <label htmlFor="wo-session-mode">Session</label>
-                        <select
-                            id="wo-session-mode"
-                            value={sessionMode}
-                            onChange={(e) => setSessionMode(e.target.value as SessionMode)}
-                        >
-                            <option value="standalone">Standalone exercise</option>
-                            <option value="new">New session</option>
-                            {sameDaySessions.length > 0 && (
-                                <option value="join">Join existing session</option>
-                            )}
-                        </select>
+            <div className="workout-form-grid">
+                {!showSessionFields && (
+                    <div className="form-field span-full">
+                        <label htmlFor="wo-date">Date</label>
+                        <input
+                            id="wo-date"
+                            type="date"
+                            value={form.date}
+                            onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+                        />
                     </div>
-                    {sessionMode === 'new' && (
+                )}
+
+                {showSessionFields && (
+                    <div className="workout-session-block span-full">
                         <div className="form-field">
-                            <label htmlFor="wo-session-label">Session label</label>
+                            <label>Type</label>
+                            <div className="segment-toggle" role="group" aria-label="Exercise type">
+                                <button
+                                    type="button"
+                                    className={!inSession ? 'active' : ''}
+                                    onClick={() => setInSession(false)}
+                                >
+                                    Single exercise
+                                </button>
+                                <button
+                                    type="button"
+                                    className={inSession ? 'active' : ''}
+                                    onClick={() => {
+                                        setInSession(true);
+                                        if (sessionChoice === NEW_SESSION && sameDaySessions.length > 0) {
+                                            setSessionChoice(pickDefaultSession(sameDaySessions));
+                                        }
+                                    }}
+                                >
+                                    Part of session
+                                </button>
+                            </div>
+                        </div>
+                        {inSession && (
+                            <>
+                                <div className="form-field">
+                                    <label htmlFor="wo-session-picker">Session</label>
+                                    <select
+                                        id="wo-session-picker"
+                                        value={sessionChoice}
+                                        onChange={(e) => setSessionChoice(e.target.value)}
+                                    >
+                                        <option value={NEW_SESSION}>New session…</option>
+                                        {sameDaySessions.map((session) => (
+                                            <option key={session.sessionId} value={session.sessionId}>
+                                                {session.sessionLabel || 'Workout'}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                {sessionChoice === NEW_SESSION && (
+                                    <div className="form-field">
+                                        <label htmlFor="wo-session-label">Session label</label>
+                                        <input
+                                            id="wo-session-label"
+                                            type="text"
+                                            placeholder="Shoulder + Abs"
+                                            value={sessionLabel}
+                                            onChange={(e) => setSessionLabel(e.target.value)}
+                                        />
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+                )}
+
+                <div className="form-field span-full">
+                    <label htmlFor="wo-exercise">Exercise</label>
+                    <input
+                        id="wo-exercise"
+                        type="text"
+                        placeholder="Bench press"
+                        value={form.exercise}
+                        onChange={(e) => setForm((f) => ({ ...f, exercise: e.target.value }))}
+                    />
+                </div>
+
+                <div className="form-field">
+                    <label htmlFor="wo-sets">Sets</label>
+                    <input
+                        id="wo-sets"
+                        type="number"
+                        min="0"
+                        value={form.sets}
+                        onChange={(e) => setForm((f) => ({ ...f, sets: e.target.value }))}
+                    />
+                </div>
+                <div className="form-field">
+                    <label htmlFor="wo-reps">Reps</label>
+                    <input
+                        id="wo-reps"
+                        type="number"
+                        min="0"
+                        value={form.reps}
+                        onChange={(e) => setForm((f) => ({ ...f, reps: e.target.value }))}
+                    />
+                </div>
+
+                <div className="form-field span-full">
+                    <label>Weight</label>
+                    <div className="segment-toggle" role="group" aria-label="Weight mode">
+                        <button
+                            type="button"
+                            className={weightMode === 'same' ? 'active' : ''}
+                            onClick={() => {
+                                setWeightMode('same');
+                                setForm((f) => ({ ...f, weightsKg: '' }));
+                            }}
+                        >
+                            Same weight
+                        </button>
+                        <button
+                            type="button"
+                            className={weightMode === 'progressive' ? 'active' : ''}
+                            onClick={() => {
+                                setWeightMode('progressive');
+                                setForm((f) => ({ ...f, weightKg: '' }));
+                            }}
+                        >
+                            Progressive
+                        </button>
+                    </div>
+                </div>
+
+                {weightMode === 'same' ? (
+                    <div className="form-field">
+                        <label htmlFor="wo-weight">Weight (kg)</label>
+                        <input
+                            id="wo-weight"
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            placeholder="20"
+                            value={form.weightKg}
+                            onChange={(e) => setForm((f) => ({ ...f, weightKg: e.target.value }))}
+                        />
+                    </div>
+                ) : (
+                    <div className="form-field">
+                        <label htmlFor="wo-weights">Progressive (kg)</label>
+                        <input
+                            id="wo-weights"
+                            type="text"
+                            placeholder="10/20/30"
+                            value={form.weightsKg}
+                            onChange={(e) => setForm((f) => ({ ...f, weightsKg: e.target.value }))}
+                        />
+                    </div>
+                )}
+
+                {(inSession || editingEntry?.sessionId) && (
+                    <div className="form-field">
+                        <label htmlFor="wo-superset">Superset</label>
+                        <input
+                            id="wo-superset"
+                            type="number"
+                            min="1"
+                            placeholder="1"
+                            value={form.supersetGroup}
+                            onChange={(e) => setForm((f) => ({ ...f, supersetGroup: e.target.value }))}
+                        />
+                    </div>
+                )}
+
+                <details className="workout-more-options span-full">
+                    <summary>More options</summary>
+                    <div className="workout-form-grid">
+                        {showSessionFields && (
+                            <div className="form-field span-full">
+                                <label htmlFor="wo-date">Date</label>
+                                <input
+                                    id="wo-date"
+                                    type="date"
+                                    value={form.date}
+                                    onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+                                />
+                            </div>
+                        )}
+                        <div className="form-field">
+                            <label htmlFor="wo-duration">Duration (min)</label>
                             <input
-                                id="wo-session-label"
-                                type="text"
-                                placeholder="e.g. Shoulder + Abs day"
-                                value={sessionLabel}
-                                onChange={(e) => setSessionLabel(e.target.value)}
+                                id="wo-duration"
+                                type="number"
+                                min="0"
+                                step="0.1"
+                                value={form.durationMin}
+                                onChange={(e) => setForm((f) => ({ ...f, durationMin: e.target.value }))}
                             />
                         </div>
-                    )}
-                    {sessionMode === 'join' && (
                         <div className="form-field">
-                            <label htmlFor="wo-session-existing">Existing session</label>
-                            <select
-                                id="wo-session-existing"
-                                value={existingSessionId}
-                                onChange={(e) => setExistingSessionId(e.target.value)}
-                            >
-                                <option value="">Select session</option>
-                                {sameDaySessions.map((session) => (
-                                    <option key={session.sessionId} value={session.sessionId}>
-                                        {session.sessionLabel || 'Workout'}
-                                    </option>
-                                ))}
-                            </select>
+                            <label htmlFor="wo-calories">Calories burned</label>
+                            <input
+                                id="wo-calories"
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={form.caloriesBurned}
+                                onChange={(e) => setForm((f) => ({ ...f, caloriesBurned: e.target.value }))}
+                            />
                         </div>
-                    )}
-                </>
-            )}
-            <div className="form-field">
-                <label htmlFor="wo-exercise">Exercise</label>
-                <input
-                    id="wo-exercise"
-                    type="text"
-                    value={form.exercise}
-                    onChange={(e) => setForm((f) => ({ ...f, exercise: e.target.value }))}
-                />
-            </div>
-            <div className="form-field">
-                <label htmlFor="wo-sets">Sets</label>
-                <input
-                    id="wo-sets"
-                    type="number"
-                    min="0"
-                    value={form.sets}
-                    onChange={(e) => setForm((f) => ({ ...f, sets: e.target.value }))}
-                />
-            </div>
-            <div className="form-field">
-                <label htmlFor="wo-reps">Reps</label>
-                <input
-                    id="wo-reps"
-                    type="number"
-                    min="0"
-                    value={form.reps}
-                    onChange={(e) => setForm((f) => ({ ...f, reps: e.target.value }))}
-                />
-            </div>
-            <div className="form-field">
-                <label htmlFor="wo-weight">Weight (kg)</label>
-                <input
-                    id="wo-weight"
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    value={form.weightKg}
-                    onChange={(e) => setForm((f) => ({ ...f, weightKg: e.target.value }))}
-                />
-                <span className="muted form-hint">Single load. Ignored if progressive weights are set.</span>
-            </div>
-            <div className="form-field">
-                <label htmlFor="wo-weights">Progressive weights (kg)</label>
-                <input
-                    id="wo-weights"
-                    type="text"
-                    placeholder="e.g. 10/20/30"
-                    value={form.weightsKg}
-                    onChange={(e) => setForm((f) => ({ ...f, weightsKg: e.target.value }))}
-                />
-                <span className="muted form-hint">One weight per set, slash-separated. Sets count follows this list.</span>
-            </div>
-            {(sessionMode !== 'standalone' || editingEntry?.sessionId) && (
-                <div className="form-field">
-                    <label htmlFor="wo-superset">Superset group</label>
-                    <input
-                        id="wo-superset"
-                        type="number"
-                        min="1"
-                        placeholder="e.g. 1"
-                        value={form.supersetGroup}
-                        onChange={(e) => setForm((f) => ({ ...f, supersetGroup: e.target.value }))}
-                    />
-                    <span className="muted form-hint">Same number pairs exercises in this session (optional).</span>
-                </div>
-            )}
-            <div className="form-field">
-                <label htmlFor="wo-duration">Duration (min)</label>
-                <input
-                    id="wo-duration"
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={form.durationMin}
-                    onChange={(e) => setForm((f) => ({ ...f, durationMin: e.target.value }))}
-                />
-            </div>
-            <div className="form-field">
-                <label htmlFor="wo-calories">Calories burned</label>
-                <input
-                    id="wo-calories"
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={form.caloriesBurned}
-                    onChange={(e) => setForm((f) => ({ ...f, caloriesBurned: e.target.value }))}
-                />
-            </div>
-            <div className="form-field">
-                <label htmlFor="wo-fat">Fat burned (g)</label>
-                <input
-                    id="wo-fat"
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={form.fatBurnG}
-                    onChange={(e) => setForm((f) => ({ ...f, fatBurnG: e.target.value }))}
-                />
-            </div>
-            <div className="form-field">
-                <label htmlFor="wo-notes">Notes</label>
-                <textarea
-                    id="wo-notes"
-                    value={form.notes}
-                    onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                />
+                        <div className="form-field">
+                            <label htmlFor="wo-fat">Fat burned (g)</label>
+                            <input
+                                id="wo-fat"
+                                type="number"
+                                min="0"
+                                step="0.1"
+                                value={form.fatBurnG}
+                                onChange={(e) => setForm((f) => ({ ...f, fatBurnG: e.target.value }))}
+                            />
+                        </div>
+                        <div className="form-field span-full">
+                            <label htmlFor="wo-notes">Notes</label>
+                            <textarea
+                                id="wo-notes"
+                                value={form.notes}
+                                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                            />
+                        </div>
+                    </div>
+                </details>
             </div>
         </RecordModal>
     );
