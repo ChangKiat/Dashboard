@@ -44,6 +44,7 @@ export type AccountActivityEntry = {
     category: string;
     amount: number;
     direction: 'in' | 'out';
+    beforeBaseline: boolean;
     runningBalance?: number;
     runningOwed?: number;
 };
@@ -63,7 +64,6 @@ function getBaselineDate(account: PaymentAccount): string {
 }
 
 function isOnOrAfterBaseline(date: string, account: PaymentAccount): boolean {
-    if (!isDebitBalanceType(account.accountType)) return true;
     return date >= getBaselineDate(account);
 }
 
@@ -151,7 +151,7 @@ export function computeAccountBalances(
     return accounts.map((account) => {
         const { debitDelta, creditOwedDelta } = deltas.get(account.id)!;
         if (account.accountType === 'credit') {
-            const amountOwed = Math.max(0, creditOwedDelta);
+            const amountOwed = Math.max(0, account.initialBalance + creditOwedDelta);
             const limit = account.creditLimit ?? 0;
             return {
                 ...account,
@@ -180,29 +180,34 @@ export function buildAccountActivity(
         }
     }
 
+    function pushEntry(
+        partial: Omit<AccountActivityEntry, 'runningBalance' | 'runningOwed' | 'beforeBaseline'>
+    ) {
+        entries.push({
+            ...partial,
+            beforeBaseline: !isOnOrAfterBaseline(partial.date, account),
+        });
+    }
+
     for (const expense of expenses) {
         if (fundedExpenseIds.has(expense.id)) continue;
         if (!matchesAccount(expense.paymentMethod, account.name)) continue;
-        if (!isOnOrAfterBaseline(expense.date, account)) continue;
-        entries.push({
+        pushEntry({
             id: expense.id,
             date: expense.date,
             type: 'expense',
             description: expense.description,
             category: expense.category,
             amount: parseAmount(expense.amount),
-            direction: account.accountType === 'credit' ? 'out' : 'out',
+            direction: 'out',
         });
     }
 
     for (const income of incomes) {
         const amount = parseAmount(income.amount);
         if (income.category === 'Account transfer') {
-            if (
-                matchesAccount(income.paymentMethod, account.name) &&
-                isOnOrAfterBaseline(income.date, account)
-            ) {
-                entries.push({
+            if (matchesAccount(income.paymentMethod, account.name)) {
+                pushEntry({
                     id: income.id,
                     date: income.date,
                     type: 'transfer_in',
@@ -212,11 +217,8 @@ export function buildAccountActivity(
                     direction: 'in',
                 });
             }
-            if (
-                matchesAccount(income.fromPaymentMethod, account.name) &&
-                isOnOrAfterBaseline(income.date, account)
-            ) {
-                entries.push({
+            if (matchesAccount(income.fromPaymentMethod, account.name)) {
+                pushEntry({
                     id: income.id,
                     date: income.date,
                     type: 'transfer_out',
@@ -230,8 +232,7 @@ export function buildAccountActivity(
         }
 
         if (!matchesAccount(income.paymentMethod, account.name)) continue;
-        if (!isOnOrAfterBaseline(income.date, account)) continue;
-        entries.push({
+        pushEntry({
             id: income.id,
             date: income.date,
             type: 'income',
@@ -247,7 +248,7 @@ export function buildAccountActivity(
     let runningDebit = isDebitBalanceType(account.accountType)
         ? account.initialBalance
         : undefined;
-    let runningOwed = account.accountType === 'credit' ? 0 : undefined;
+    let runningOwed = account.accountType === 'credit' ? account.initialBalance : undefined;
 
     const chronological = [...entries].sort(
         (a, b) => a.date.localeCompare(b.date) || a.id - b.id
@@ -255,6 +256,8 @@ export function buildAccountActivity(
     const runningByKey = new Map<string, { runningBalance?: number; runningOwed?: number }>();
 
     for (const entry of chronological) {
+        if (entry.beforeBaseline) continue;
+
         if (isDebitBalanceType(account.accountType)) {
             runningDebit =
                 (runningDebit ?? account.initialBalance) +
@@ -264,7 +267,7 @@ export function buildAccountActivity(
             });
         } else {
             runningOwed =
-                (runningOwed ?? 0) +
+                (runningOwed ?? account.initialBalance) +
                 (entry.direction === 'out' ? entry.amount : -entry.amount);
             runningOwed = Math.max(0, runningOwed);
             runningByKey.set(`${entry.date}:${entry.id}:${entry.type}`, {

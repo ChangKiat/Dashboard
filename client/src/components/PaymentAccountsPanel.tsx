@@ -152,12 +152,15 @@ export default function PaymentAccountsPanel({ onChanged, formatAmount }: Props)
     const openEdit = (row: PaymentAccount) => {
         setModalMode('edit');
         setEditingEntry(row);
-        const liveBalance = row.balance ?? row.initialBalance ?? 0;
-        setOpenedBalance(liveBalance);
+        const liveValue =
+            row.accountType === 'credit'
+                ? (row.amountOwed ?? row.initialBalance ?? 0)
+                : (row.balance ?? row.initialBalance ?? 0);
+        setOpenedBalance(liveValue);
         setForm({
             name: row.name,
             accountType: row.accountType,
-            initialBalance: liveBalance.toFixed(2),
+            initialBalance: liveValue.toFixed(2),
             creditLimit: row.creditLimit != null ? row.creditLimit.toFixed(2) : '',
         });
         setModalError(null);
@@ -204,6 +207,20 @@ export default function PaymentAccountsPanel({ onChanged, formatAmount }: Props)
                     return;
                 }
                 payload.creditLimit = limit;
+
+                const owedValue = parseNonNegative(form.initialBalance);
+                if (owedValue === 'invalid') {
+                    setModalError('Amount owed must be a non-negative number.');
+                    setSaving(false);
+                    return;
+                }
+                const owedChanged =
+                    modalMode === 'create' ||
+                    openedBalance == null ||
+                    Math.round(owedValue * 100) !== Math.round(openedBalance * 100);
+                if (owedChanged) {
+                    payload.initialBalance = owedValue;
+                }
             } else {
                 const balanceValue = parseNonNegative(form.initialBalance);
                 if (balanceValue === 'invalid') {
@@ -303,20 +320,39 @@ export default function PaymentAccountsPanel({ onChanged, formatAmount }: Props)
                     />
                 </div>
                 {form.accountType === 'credit' ? (
-                    <div className="form-field">
-                        <label htmlFor="pa-limit">Credit limit (RM)</label>
-                        <input
-                            id="pa-limit"
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            placeholder="e.g. 5000"
-                            value={form.creditLimit}
-                            onChange={(e) =>
-                                setForm((f) => ({ ...f, creditLimit: e.target.value }))
-                            }
-                        />
-                    </div>
+                    <>
+                        <div className="form-field">
+                            <label htmlFor="pa-limit">Credit limit (RM)</label>
+                            <input
+                                id="pa-limit"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                placeholder="e.g. 5000"
+                                value={form.creditLimit}
+                                onChange={(e) =>
+                                    setForm((f) => ({ ...f, creditLimit: e.target.value }))
+                                }
+                            />
+                        </div>
+                        <div className="form-field">
+                            <label htmlFor="pa-owed">Amount owed (RM)</label>
+                            <input
+                                id="pa-owed"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                placeholder="0.00"
+                                value={form.initialBalance}
+                                onChange={(e) =>
+                                    setForm((f) => ({ ...f, initialBalance: e.target.value }))
+                                }
+                            />
+                            <span className="muted form-hint">
+                                Saving this value resets the account balance baseline to today.
+                            </span>
+                        </div>
+                    </>
                 ) : (
                     <div className="form-field">
                         <label htmlFor="pa-initial">Current balance (RM)</label>

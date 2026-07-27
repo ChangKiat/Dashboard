@@ -12,8 +12,8 @@ import {
     fetchIncomeDaily,
     fetchIncomeTransactions,
 } from '../api';
-import { countIncomeDays, sumIncomeDailyTotals } from '../utils/incomeAggregates';
 import { monthToDateRange, pickDefaultIncomeDate } from '../utils/dateRange';
+import { sumIncomeDailyTotals } from '../utils/incomeAggregates';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
 
 import IncomeCalendar from './IncomeCalendar';
@@ -31,7 +31,7 @@ function formatMYR(amount: number) {
 }
 
 export default function IncomeSection({ month }: Props) {
-    const { refresh: refreshAccounts } = usePaymentAccounts();
+    const { accounts, refresh: refreshAccounts } = usePaymentAccounts();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [selectedDate, setSelectedDate] = useState<string>('');
@@ -87,8 +87,21 @@ export default function IncomeSection({ month }: Props) {
     }, [loadData, refreshAccounts]);
 
     const monthTotal = useMemo(() => sumIncomeDailyTotals(dailySeries), [dailySeries]);
-    const incomeDays = useMemo(() => countIncomeDays(dailySeries), [dailySeries]);
-    const avgPerIncomeDay = incomeDays > 0 ? monthTotal / incomeDays : null;
+
+    const paymentTotals = useMemo(() => {
+        let cashOnHand = 0;
+        let creditUsed = 0;
+        let availableCredit = 0;
+        for (const account of accounts) {
+            if (account.accountType === 'credit') {
+                creditUsed += account.amountOwed ?? 0;
+                availableCredit += account.availableCredit ?? 0;
+            } else {
+                cashOnHand += account.balance ?? account.initialBalance ?? 0;
+            }
+        }
+        return { cashOnHand, creditUsed, availableCredit };
+    }, [accounts]);
 
     const dayIncomes = useMemo(
         () =>
@@ -117,18 +130,21 @@ export default function IncomeSection({ month }: Props) {
                         value={formatMYR(monthTotal)}
                         variant="highlight"
                     />
-                    <SummaryCard label="Income days" value={String(incomeDays)} />
                     <SummaryCard
-                        label="Avg per income day"
-                        value={avgPerIncomeDay != null ? formatMYR(avgPerIncomeDay) : '—'}
+                        label="Cash on hand"
+                        value={formatMYR(paymentTotals.cashOnHand)}
+                    />
+                    <SummaryCard
+                        label="Credit used"
+                        value={formatMYR(paymentTotals.creditUsed)}
+                    />
+                    <SummaryCard
+                        label="Available credit"
+                        value={formatMYR(paymentTotals.availableCredit)}
                     />
                     <SummaryCard
                         label="Net cashflow"
                         value={formatMYR(overview.totals.netCashflow)}
-                    />
-                    <SummaryCard
-                        label="Reimbursements"
-                        value={formatMYR(overview.totals.totalReimbursed)}
                     />
                 </div>
 

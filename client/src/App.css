@@ -422,9 +422,33 @@
   color: #d1d5db;
 }
 
+.account-activity-baseline-note {
+  margin: -4px 0 12px;
+  font-size: 0.8rem;
+}
+
 .account-activity-body {
-  overflow: auto;
-  max-height: 50vh;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.record-modal.account-activity-modal > .account-activity-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-top: 12px;
+}
+
+.record-modal.account-activity-modal > .account-activity-footer .table-pagination {
+  flex: 1;
+  margin-top: 0;
+  min-width: 0;
+}
+
+.record-modal.account-activity-modal > .account-activity-footer > .btn-secondary:last-child {
+  margin-left: auto;
 }
 
 .account-activity-table {
@@ -473,6 +497,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.account-activity-table tr.account-activity-before-baseline td {
+  opacity: 0.55;
 }
 
 .account-activity-in {

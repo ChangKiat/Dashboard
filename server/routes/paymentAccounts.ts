@@ -85,14 +85,13 @@ router.post('/', async (req, res) => {
                 : 'account';
 
         const fields: { initialBalance?: number; creditLimit?: number | null } = {};
-        if (accountType === 'account' || accountType === 'investment') {
-            if (body.initialBalance != null) {
-                if (!isNonNegativeNumber(body.initialBalance)) {
-                    return res.status(400).json({ error: 'initialBalance must be a non-negative number' });
-                }
-                fields.initialBalance = body.initialBalance;
+        if (body.initialBalance != null) {
+            if (!isNonNegativeNumber(body.initialBalance)) {
+                return res.status(400).json({ error: 'initialBalance must be a non-negative number' });
             }
-        } else {
+            fields.initialBalance = body.initialBalance;
+        }
+        if (accountType === 'credit') {
             if (body.creditLimit == null || !isNonNegativeNumber(body.creditLimit)) {
                 return res.status(400).json({ error: 'creditLimit is required for credit accounts' });
             }

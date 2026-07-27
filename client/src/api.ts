@@ -148,6 +148,7 @@ export interface AccountActivityEntry {
     category: string;
     amount: number;
     direction: 'in' | 'out';
+    beforeBaseline?: boolean;
     runningBalance?: number;
     runningOwed?: number;
 }
