@@ -3,10 +3,16 @@ import { useEffect, useMemo, useState } from 'react';
 import type { AccountActivityEntry, PaymentAccount } from '../api';
 import { fetchAccountActivity } from '../api';
 import { usePagination } from '../hooks/usePagination';
+import {
+    accountPeriodToDateRange,
+    formatPeriodLabel,
+    isDateInRange,
+} from '../utils/statementPeriod';
 import TablePagination from './TablePagination';
 
 interface Props {
     account: PaymentAccount | null;
+    month: string;
     formatAmount: (amount: number) => string;
     onClose: () => void;
 }
@@ -32,7 +38,7 @@ function entryMatchesQuery(entry: AccountActivityEntry, query: string): boolean 
     return false;
 }
 
-export default function AccountActivityModal({ account, formatAmount, onClose }: Props) {
+export default function AccountActivityModal({ account, month, formatAmount, onClose }: Props) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [accountData, setAccountData] = useState<PaymentAccount | null>(null);
@@ -63,20 +69,45 @@ export default function AccountActivityModal({ account, formatAmount, onClose }:
         };
     }, [account]);
 
+    const periodAccount = accountData ?? account;
+    const periodRange = useMemo(() => {
+        if (!periodAccount || !month) return null;
+        return accountPeriodToDateRange(periodAccount, month);
+    }, [periodAccount, month]);
+
+    const periodEntries = useMemo(() => {
+        if (!periodRange) return entries;
+        return entries.filter((entry) => isDateInRange(entry.date, periodRange));
+    }, [entries, periodRange]);
+
+    const periodTotals = useMemo(() => {
+        let totalOut = 0;
+        let totalIn = 0;
+        for (const entry of periodEntries) {
+            if (entry.direction === 'out') totalOut += entry.amount;
+            else totalIn += entry.amount;
+        }
+        return { totalOut, totalIn, net: totalIn - totalOut };
+    }, [periodEntries]);
+
     const hasPreBaseline = useMemo(
-        () => entries.some((entry) => entry.beforeBaseline),
-        [entries]
+        () => periodEntries.some((entry) => entry.beforeBaseline),
+        [periodEntries]
     );
 
     const filteredEntries = useMemo(() => {
         const q = searchQuery.trim().toLowerCase();
-        if (!q) return entries;
-        return entries.filter((entry) => entryMatchesQuery(entry, q));
-    }, [entries, searchQuery]);
+        if (!q) return periodEntries;
+        return periodEntries.filter((entry) => entryMatchesQuery(entry, q));
+    }, [periodEntries, searchQuery]);
 
     const { page, setPage, pageItems, totalPages, totalItems } = usePagination(filteredEntries, {
         pageSize: 5,
     });
+
+    useEffect(() => {
+        setPage(1);
+    }, [month, searchQuery, setPage]);
 
     if (!account) return null;
 
@@ -117,6 +148,39 @@ export default function AccountActivityModal({ account, formatAmount, onClose }:
                         )}
                     </div>
                 )}
+                {periodAccount && month && (
+                    <div className="account-activity-period">
+                        <span className="account-activity-period-range">
+                            {formatPeriodLabel(periodAccount, month)}
+                        </span>
+                        <span className="muted account-activity-period-hint">
+                            Follows month in header
+                        </span>
+                    </div>
+                )}
+                {!loading && !error && periodEntries.length > 0 && (
+                    <div className="account-activity-period-summary">
+                        <span>
+                            Charges: <strong>{formatAmount(periodTotals.totalOut)}</strong>
+                        </span>
+                        <span>
+                            Credits: <strong>{formatAmount(periodTotals.totalIn)}</strong>
+                        </span>
+                        <span>
+                            Net:{' '}
+                            <strong
+                                className={
+                                    periodTotals.net >= 0
+                                        ? 'account-activity-in'
+                                        : 'account-activity-out'
+                                }
+                            >
+                                {periodTotals.net >= 0 ? '+' : '−'}
+                                {formatAmount(Math.abs(periodTotals.net))}
+                            </strong>
+                        </span>
+                    </div>
+                )}
                 {hasPreBaseline && accountData && (
                     <p className="muted account-activity-baseline-note">
                         Older transactions shown for history; balance starts from{' '}
@@ -129,7 +193,10 @@ export default function AccountActivityModal({ account, formatAmount, onClose }:
                     {!loading && !error && entries.length === 0 && (
                         <p className="muted">No transactions linked to this account yet.</p>
                     )}
-                    {!loading && !error && entries.length > 0 && (
+                    {!loading && !error && entries.length > 0 && periodEntries.length === 0 && (
+                        <p className="muted">No transactions in this period.</p>
+                    )}
+                    {!loading && !error && periodEntries.length > 0 && (
                         <>
                             <div className="category-detail-search">
                                 <input

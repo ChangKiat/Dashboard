@@ -8,6 +8,7 @@ import {
     deactivatePaymentAccount,
     getPaymentAccountById,
     isValidPaymentAccountType,
+    isValidStatementDay,
     listActivePaymentAccounts,
     normalizePaymentAccountName,
     updatePaymentAccount,
@@ -84,7 +85,7 @@ router.post('/', async (req, res) => {
                 ? body.accountType
                 : 'account';
 
-        const fields: { initialBalance?: number; creditLimit?: number | null } = {};
+        const fields: { initialBalance?: number; creditLimit?: number | null; statementDay?: number | null } = {};
         if (body.initialBalance != null) {
             if (!isNonNegativeNumber(body.initialBalance)) {
                 return res.status(400).json({ error: 'initialBalance must be a non-negative number' });
@@ -96,6 +97,12 @@ router.post('/', async (req, res) => {
                 return res.status(400).json({ error: 'creditLimit is required for credit accounts' });
             }
             fields.creditLimit = body.creditLimit;
+            if (body.statementDay != null) {
+                if (!isValidStatementDay(body.statementDay)) {
+                    return res.status(400).json({ error: 'statementDay must be an integer from 1 to 31' });
+                }
+                fields.statementDay = body.statementDay;
+            }
         }
 
         const id = await createPaymentAccount(body.name, accountType, fields);
@@ -122,6 +129,7 @@ router.patch('/:id', async (req, res) => {
             accountType?: 'account' | 'credit';
             initialBalance?: number;
             creditLimit?: number | null;
+            statementDay?: number | null;
             active?: boolean;
         } = {};
 
@@ -148,6 +156,12 @@ router.patch('/:id', async (req, res) => {
                 return res.status(400).json({ error: 'creditLimit must be a non-negative number' });
             }
             fields.creditLimit = body.creditLimit;
+        }
+        if (body.statementDay !== undefined) {
+            if (body.statementDay != null && !isValidStatementDay(body.statementDay)) {
+                return res.status(400).json({ error: 'statementDay must be an integer from 1 to 31' });
+            }
+            fields.statementDay = body.statementDay;
         }
         if (body.active != null) {
             if (typeof body.active !== 'boolean') {

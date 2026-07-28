@@ -14,6 +14,7 @@ import RowActions from './RowActions';
 type ModalMode = 'closed' | 'create' | 'edit';
 
 interface Props {
+    month: string;
     onChanged?: () => void;
     formatAmount: (amount: number) => string;
 }
@@ -106,7 +107,7 @@ function PaymentAccountColumn({
     );
 }
 
-export default function PaymentAccountsPanel({ onChanged, formatAmount }: Props) {
+export default function PaymentAccountsPanel({ month, onChanged, formatAmount }: Props) {
     const { accounts, refresh } = usePaymentAccounts();
     const [modalMode, setModalMode] = useState<ModalMode>('closed');
     const [viewingAccount, setViewingAccount] = useState<PaymentAccount | null>(null);
@@ -116,6 +117,7 @@ export default function PaymentAccountsPanel({ onChanged, formatAmount }: Props)
         accountType: 'account' as PaymentAccountType,
         initialBalance: '',
         creditLimit: '',
+        statementDay: '',
     });
     const [saving, setSaving] = useState(false);
     const [modalError, setModalError] = useState<string | null>(null);
@@ -145,7 +147,7 @@ export default function PaymentAccountsPanel({ onChanged, formatAmount }: Props)
         setModalMode('create');
         setEditingEntry(null);
         setOpenedBalance(null);
-        setForm({ name: '', accountType, initialBalance: '0', creditLimit: '' });
+        setForm({ name: '', accountType, initialBalance: '0', creditLimit: '', statementDay: '' });
         setModalError(null);
     };
 
@@ -162,6 +164,7 @@ export default function PaymentAccountsPanel({ onChanged, formatAmount }: Props)
             accountType: row.accountType,
             initialBalance: liveValue.toFixed(2),
             creditLimit: row.creditLimit != null ? row.creditLimit.toFixed(2) : '',
+            statementDay: row.statementDay != null ? String(row.statementDay) : '',
         });
         setModalError(null);
     };
@@ -194,6 +197,7 @@ export default function PaymentAccountsPanel({ onChanged, formatAmount }: Props)
                 accountType: PaymentAccountType;
                 initialBalance?: number;
                 creditLimit?: number;
+                statementDay?: number | null;
             } = {
                 name: form.name.trim(),
                 accountType: form.accountType,
@@ -207,6 +211,19 @@ export default function PaymentAccountsPanel({ onChanged, formatAmount }: Props)
                     return;
                 }
                 payload.creditLimit = limit;
+
+                const statementDayRaw = form.statementDay.trim();
+                if (statementDayRaw) {
+                    const day = parseInt(statementDayRaw, 10);
+                    if (!Number.isInteger(day) || day < 1 || day > 31) {
+                        setModalError('Statement day must be an integer from 1 to 31.');
+                        setSaving(false);
+                        return;
+                    }
+                    payload.statementDay = day;
+                } else if (modalMode === 'edit') {
+                    payload.statementDay = null;
+                }
 
                 const owedValue = parseNonNegative(form.initialBalance);
                 if (owedValue === 'invalid') {
@@ -352,6 +369,25 @@ export default function PaymentAccountsPanel({ onChanged, formatAmount }: Props)
                                 Saving this value resets the account balance baseline to today.
                             </span>
                         </div>
+                        <div className="form-field">
+                            <label htmlFor="pa-statement-day">Statement day</label>
+                            <input
+                                id="pa-statement-day"
+                                type="number"
+                                min="1"
+                                max="31"
+                                step="1"
+                                placeholder="e.g. 23"
+                                value={form.statementDay}
+                                onChange={(e) =>
+                                    setForm((f) => ({ ...f, statementDay: e.target.value }))
+                                }
+                            />
+                            <span className="muted form-hint">
+                                Transactions group by statement cycle. Day 23 → Jun 23–Jul 22
+                                counts as July.
+                            </span>
+                        </div>
                     </>
                 ) : (
                     <div className="form-field">
@@ -394,6 +430,7 @@ export default function PaymentAccountsPanel({ onChanged, formatAmount }: Props)
             </RecordModal>
             <AccountActivityModal
                 account={viewingAccount}
+                month={month}
                 formatAmount={formatAmount}
                 onClose={() => setViewingAccount(null)}
             />

@@ -422,6 +422,38 @@
   color: #d1d5db;
 }
 
+.account-activity-period {
+  margin: 0 0 12px;
+}
+
+.account-activity-period-range {
+  display: block;
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+
+.account-activity-period-hint {
+  display: block;
+  font-size: 0.75rem;
+  margin-top: 2px;
+}
+
+.account-activity-period-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.875rem;
+  color: #d1d5db;
+}
+
+.account-activity-period-summary strong {
+  font-weight: 600;
+}
+
 .account-activity-baseline-note {
   margin: -4px 0 12px;
   font-size: 0.8rem;

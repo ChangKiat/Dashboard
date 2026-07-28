@@ -128,6 +128,7 @@ export interface PaymentAccount {
     initialBalance: number;
     balanceBaselineDate: string;
     creditLimit: number | null;
+    statementDay?: number | null;
     active: boolean;
     balance?: number;
     amountOwed?: number;
@@ -395,6 +396,7 @@ export function createPaymentAccount(fields: {
     accountType: PaymentAccountType;
     initialBalance?: number;
     creditLimit?: number;
+    statementDay?: number | null;
 }) {
     return fetchJson<{ ok: true; id: number }>('/api/payment-accounts', {
         method: 'POST',
@@ -406,7 +408,10 @@ export function createPaymentAccount(fields: {
 export function updatePaymentAccount(
     id: number,
     fields: Partial<
-        Pick<PaymentAccount, 'name' | 'accountType' | 'active' | 'initialBalance' | 'creditLimit'>
+        Pick<
+            PaymentAccount,
+            'name' | 'accountType' | 'active' | 'initialBalance' | 'creditLimit' | 'statementDay'
+        >
     >
 ) {
     return fetchJson<{ ok: true }>(`/api/payment-accounts/${id}`, {
