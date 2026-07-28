@@ -1,4 +1,4 @@
-export const INCOME_CATEGORIES = ['Claim', 'Transfer', 'Salary', 'Account transfer', 'Other'] as const;
+export const INCOME_CATEGORIES = ['Claim', 'Transfer', 'Salary', 'Account transfer', 'Cashback', 'Other'] as const;
 
 export type IncomeCategory = (typeof INCOME_CATEGORIES)[number];
 

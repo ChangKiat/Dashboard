@@ -8,15 +8,19 @@ import {
     deactivatePaymentAccount,
     getPaymentAccountById,
     isValidPaymentAccountType,
+    isValidRebateConfig,
     isValidStatementDay,
     listActivePaymentAccounts,
     normalizePaymentAccountName,
+    normalizeRebateConfig,
     updatePaymentAccount,
 } from '../../../AI Agent/src/services/paymentAccountService';
 import {
     buildAccountActivity,
     computeAccountBalances,
 } from '../accountBalances';
+import { parseMonth } from '../dateUtils';
+import { computeAndSyncRebate } from '../rebate';
 import { isNonEmptyString, parseIdParam } from '../validation';
 
 const router = Router();
@@ -48,6 +52,28 @@ router.get('/', async (_req, res) => {
         res.json({ entries });
     } catch (err) {
         console.error('GET /api/payment-accounts', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+    }
+});
+
+router.get('/:id/rebate', async (req, res) => {
+    try {
+        const id = parseIdParam(req.params.id);
+        if (!id) return res.status(400).json({ error: 'Invalid id' });
+
+        const month =
+            typeof req.query.month === 'string' && /^\d{4}-\d{2}$/.test(req.query.month)
+                ? req.query.month
+                : parseMonth().month;
+
+        const summary = await computeAndSyncRebate(id, month);
+        if (!summary) {
+            return res.status(404).json({ error: 'Rebate tracking not enabled for this account' });
+        }
+
+        res.json(summary);
+    } catch (err) {
+        console.error('GET /api/payment-accounts/:id/rebate', err);
         res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
     }
 });
@@ -85,7 +111,12 @@ router.post('/', async (req, res) => {
                 ? body.accountType
                 : 'account';
 
-        const fields: { initialBalance?: number; creditLimit?: number | null; statementDay?: number | null } = {};
+        const fields: {
+            initialBalance?: number;
+            creditLimit?: number | null;
+            statementDay?: number | null;
+            rebateConfig?: import('../../../AI Agent/src/services/paymentAccountService').RebateConfig | null;
+        } = {};
         if (body.initialBalance != null) {
             if (!isNonNegativeNumber(body.initialBalance)) {
                 return res.status(400).json({ error: 'initialBalance must be a non-negative number' });
@@ -102,6 +133,12 @@ router.post('/', async (req, res) => {
                     return res.status(400).json({ error: 'statementDay must be an integer from 1 to 31' });
                 }
                 fields.statementDay = body.statementDay;
+            }
+            if (body.rebateConfig != null) {
+                if (!isValidRebateConfig(body.rebateConfig)) {
+                    return res.status(400).json({ error: 'Invalid rebateConfig' });
+                }
+                fields.rebateConfig = normalizeRebateConfig(body.rebateConfig);
             }
         }
 
@@ -130,6 +167,7 @@ router.patch('/:id', async (req, res) => {
             initialBalance?: number;
             creditLimit?: number | null;
             statementDay?: number | null;
+            rebateConfig?: import('../../../AI Agent/src/services/paymentAccountService').RebateConfig | null;
             active?: boolean;
         } = {};
 
@@ -162,6 +200,12 @@ router.patch('/:id', async (req, res) => {
                 return res.status(400).json({ error: 'statementDay must be an integer from 1 to 31' });
             }
             fields.statementDay = body.statementDay;
+        }
+        if (body.rebateConfig !== undefined) {
+            if (!isValidRebateConfig(body.rebateConfig)) {
+                return res.status(400).json({ error: 'Invalid rebateConfig' });
+            }
+            fields.rebateConfig = normalizeRebateConfig(body.rebateConfig);
         }
         if (body.active != null) {
             if (typeof body.active !== 'boolean') {

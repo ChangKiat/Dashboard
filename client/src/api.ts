@@ -121,6 +121,61 @@ export interface FixedExpensesResponse {
 
 export type PaymentAccountType = 'account' | 'credit' | 'investment';
 
+export const REBATE_CATEGORIES = ['Petrol', 'Groceries', 'Dining', 'Grab'] as const;
+
+export type RebateRuleType = 'simple' | 'tiered';
+
+export interface DescriptionMappingRule {
+    keywords: string[];
+    rebateCategory: string;
+    expenseCategory?: string;
+}
+
+export interface SimpleRebateCategory {
+    name: string;
+    cap: number | null;
+    isDefault?: boolean;
+    fixedRate?: number;
+}
+
+export interface SimpleRebateConfig {
+    enabled: true;
+    ruleType: 'simple';
+    minSpendThreshold: number;
+    highRate: number;
+    lowRate: number;
+    categoryCap: number;
+    rebateCategories: string[];
+    categories?: SimpleRebateCategory[];
+    categoryMappings: Record<string, string>;
+    descriptionRules?: DescriptionMappingRule[];
+}
+
+export interface RebateCategoryDef {
+    name: string;
+    cap: number | null;
+    isDefault?: boolean;
+    fixedRate?: number;
+    minSpendPerMapping?: number;
+    minTotalSpend?: number;
+}
+
+export interface RebateTier {
+    minTotalSpend: number;
+    rates: Record<string, number>;
+}
+
+export interface TieredRebateConfig {
+    enabled: true;
+    ruleType: 'tiered';
+    tiers: RebateTier[];
+    categories: RebateCategoryDef[];
+    categoryMappings: Record<string, string>;
+    descriptionRules?: DescriptionMappingRule[];
+}
+
+export type RebateConfig = SimpleRebateConfig | TieredRebateConfig;
+
 export interface PaymentAccount {
     id: number;
     name: string;
@@ -129,6 +184,7 @@ export interface PaymentAccount {
     balanceBaselineDate: string;
     creditLimit: number | null;
     statementDay?: number | null;
+    rebateConfig?: RebateConfig | null;
     active: boolean;
     balance?: number;
     amountOwed?: number;
@@ -157,6 +213,43 @@ export interface AccountActivityEntry {
 export interface AccountActivityResponse {
     account: PaymentAccount;
     entries: AccountActivityEntry[];
+}
+
+export interface RebateCategoryResult {
+    category: string;
+    spend: number;
+    rate: number;
+    earned: number;
+    cap: number | null;
+    remaining: number | null;
+    fullyClaimed: boolean;
+    requirementMet: boolean;
+    requirementNote?: string;
+    isDefault?: boolean;
+}
+
+export interface RebateEligibleExpense {
+    id: number;
+    date: string;
+    description: string;
+    category: string;
+    rebateCategory: string;
+    amount: number;
+}
+
+export interface RebateSummary {
+    month: string;
+    periodStart: string;
+    periodEnd: string;
+    ruleType: RebateRuleType;
+    totalSpend: number;
+    minSpendThreshold?: number;
+    minSpendMet?: boolean;
+    rate?: number;
+    activeTier?: { minTotalSpend: number; label: string } | null;
+    categories: RebateCategoryResult[];
+    totalEarned: number;
+    eligibleExpenses: RebateEligibleExpense[];
 }
 
 export interface WorkoutDailyPoint {
@@ -410,7 +503,13 @@ export function updatePaymentAccount(
     fields: Partial<
         Pick<
             PaymentAccount,
-            'name' | 'accountType' | 'active' | 'initialBalance' | 'creditLimit' | 'statementDay'
+            | 'name'
+            | 'accountType'
+            | 'active'
+            | 'initialBalance'
+            | 'creditLimit'
+            | 'statementDay'
+            | 'rebateConfig'
         >
     >
 ) {
@@ -427,6 +526,10 @@ export function deletePaymentAccount(id: number) {
 
 export function fetchAccountActivity(id: number) {
     return fetchJson<AccountActivityResponse>(`/api/payment-accounts/${id}/activity`);
+}
+
+export function fetchAccountRebate(id: number, month: string) {
+    return fetchJson<RebateSummary>(`/api/payment-accounts/${id}/rebate?month=${encodeURIComponent(month)}`);
 }
 
 export function fetchIncomeTransactions(month: string) {

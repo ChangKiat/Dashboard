@@ -1,15 +1,36 @@
-import { useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 
-import type { PaymentAccount, PaymentAccountType } from '../api';
+import type { PaymentAccount, PaymentAccountType, RebateConfig } from '../api';
 import {
     createPaymentAccount,
     deletePaymentAccount,
+    fetchExpenseOverview,
     updatePaymentAccount,
 } from '../api';
+import {
+    buildRebateConfig,
+    emptyRebateForm,
+    rebateFormFromConfig,
+    type RebateFormState,
+} from '../utils/rebateForm';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
 import AccountActivityModal from './AccountActivityModal';
+import CreditAccountForm, { type CreditSettingsTab } from './CreditAccountForm';
 import RecordModal from './RecordModal';
 import RowActions from './RowActions';
+
+const DEFAULT_EXPENSE_CATEGORIES = [
+    'Drink',
+    'Entertainment',
+    'Food',
+    'Shopping',
+    'Transport',
+    'Loan',
+    'Investment',
+    'Insurance',
+    'Utility',
+    'Other',
+];
 
 type ModalMode = 'closed' | 'create' | 'edit';
 
@@ -124,6 +145,20 @@ export default function PaymentAccountsPanel({ month, onChanged, formatAmount }:
     const [actionError, setActionError] = useState<string | null>(null);
     /** Live balance shown when edit opened; used to avoid resetting baseline on name-only saves. */
     const [openedBalance, setOpenedBalance] = useState<number | null>(null);
+    const [rebateForm, setRebateForm] = useState<RebateFormState>(emptyRebateForm);
+    const [creditTab, setCreditTab] = useState<CreditSettingsTab>('account');
+    const [expenseCategories, setExpenseCategories] = useState<string[]>(DEFAULT_EXPENSE_CATEGORIES);
+
+    useEffect(() => {
+        fetchExpenseOverview(month)
+            .then((res) => {
+                const cats = res.variable.map((v) => v.category);
+                if (cats.length > 0) setExpenseCategories(cats);
+            })
+            .catch(() => {
+                /* keep defaults */
+            });
+    }, [month]);
 
     const debitAccounts = useMemo(
         () => sortByName(accounts.filter((a) => a.accountType === 'account')),
@@ -148,24 +183,36 @@ export default function PaymentAccountsPanel({ month, onChanged, formatAmount }:
         setEditingEntry(null);
         setOpenedBalance(null);
         setForm({ name: '', accountType, initialBalance: '0', creditLimit: '', statementDay: '' });
+        setRebateForm(emptyRebateForm());
+        setCreditTab('account');
         setModalError(null);
     };
 
     const openEdit = (row: PaymentAccount) => {
         setModalMode('edit');
         setEditingEntry(row);
-        const liveValue =
-            row.accountType === 'credit'
-                ? (row.amountOwed ?? row.initialBalance ?? 0)
-                : (row.balance ?? row.initialBalance ?? 0);
-        setOpenedBalance(liveValue);
-        setForm({
-            name: row.name,
-            accountType: row.accountType,
-            initialBalance: liveValue.toFixed(2),
-            creditLimit: row.creditLimit != null ? row.creditLimit.toFixed(2) : '',
-            statementDay: row.statementDay != null ? String(row.statementDay) : '',
-        });
+        if (row.accountType === 'credit') {
+            setOpenedBalance(null);
+            setForm({
+                name: row.name,
+                accountType: row.accountType,
+                initialBalance: '0',
+                creditLimit: row.creditLimit != null ? row.creditLimit.toFixed(2) : '',
+                statementDay: row.statementDay != null ? String(row.statementDay) : '',
+            });
+        } else {
+            const liveValue = row.balance ?? row.initialBalance ?? 0;
+            setOpenedBalance(liveValue);
+            setForm({
+                name: row.name,
+                accountType: row.accountType,
+                initialBalance: liveValue.toFixed(2),
+                creditLimit: '',
+                statementDay: '',
+            });
+        }
+        setRebateForm(rebateFormFromConfig(row.rebateConfig));
+        setCreditTab('account');
         setModalError(null);
     };
 
@@ -174,6 +221,8 @@ export default function PaymentAccountsPanel({ month, onChanged, formatAmount }:
         setEditingEntry(null);
         setOpenedBalance(null);
         setModalError(null);
+        setCreditTab('account');
+        setRebateForm(emptyRebateForm());
     };
 
     const parseNonNegative = (value: string): number | 'invalid' => {
@@ -198,6 +247,7 @@ export default function PaymentAccountsPanel({ month, onChanged, formatAmount }:
                 initialBalance?: number;
                 creditLimit?: number;
                 statementDay?: number | null;
+                rebateConfig?: RebateConfig | null;
             } = {
                 name: form.name.trim(),
                 accountType: form.accountType,
@@ -225,19 +275,13 @@ export default function PaymentAccountsPanel({ month, onChanged, formatAmount }:
                     payload.statementDay = null;
                 }
 
-                const owedValue = parseNonNegative(form.initialBalance);
-                if (owedValue === 'invalid') {
-                    setModalError('Amount owed must be a non-negative number.');
+                const rebateConfig = buildRebateConfig(rebateForm);
+                if (rebateForm.enabled && !rebateConfig) {
+                    setModalError('Invalid cashback settings.');
                     setSaving(false);
                     return;
                 }
-                const owedChanged =
-                    modalMode === 'create' ||
-                    openedBalance == null ||
-                    Math.round(owedValue * 100) !== Math.round(openedBalance * 100);
-                if (owedChanged) {
-                    payload.initialBalance = owedValue;
-                }
+                payload.rebateConfig = rebateConfig;
             } else {
                 const balanceValue = parseNonNegative(form.initialBalance);
                 if (balanceValue === 'invalid') {
@@ -321,41 +365,39 @@ export default function PaymentAccountsPanel({ month, onChanged, formatAmount }:
                 error={modalError}
                 onClose={closeModal}
                 onSave={handleSave}
+                className={form.accountType === 'credit' ? 'payment-account-modal' : undefined}
             >
-                <div className="form-field">
-                    <label htmlFor="pa-name">Name</label>
-                    <input
-                        id="pa-name"
-                        type="text"
-                        placeholder={
-                            form.accountType === 'investment'
-                                ? 'e.g. EPF, ASB, Brokerage'
-                                : 'e.g. TnG, CIMB Visa'
-                        }
-                        value={form.name}
-                        onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                    />
-                </div>
                 {form.accountType === 'credit' ? (
+                    <CreditAccountForm
+                        form={form}
+                        setForm={setForm}
+                        rebateForm={rebateForm}
+                        setRebateForm={setRebateForm}
+                        creditTab={creditTab}
+                        setCreditTab={setCreditTab}
+                        expenseCategories={expenseCategories}
+                        modalMode={modalMode === 'edit' ? 'edit' : 'create'}
+                    />
+                ) : (
                     <>
                         <div className="form-field">
-                            <label htmlFor="pa-limit">Credit limit (RM)</label>
+                            <label htmlFor="pa-name">Name</label>
                             <input
-                                id="pa-limit"
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                placeholder="e.g. 5000"
-                                value={form.creditLimit}
-                                onChange={(e) =>
-                                    setForm((f) => ({ ...f, creditLimit: e.target.value }))
+                                id="pa-name"
+                                type="text"
+                                placeholder={
+                                    form.accountType === 'investment'
+                                        ? 'e.g. EPF, ASB, Brokerage'
+                                        : 'e.g. TnG, CIMB Visa'
                                 }
+                                value={form.name}
+                                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                             />
                         </div>
                         <div className="form-field">
-                            <label htmlFor="pa-owed">Amount owed (RM)</label>
+                            <label htmlFor="pa-initial">Current balance (RM)</label>
                             <input
-                                id="pa-owed"
+                                id="pa-initial"
                                 type="number"
                                 min="0"
                                 step="0.01"
@@ -369,63 +411,26 @@ export default function PaymentAccountsPanel({ month, onChanged, formatAmount }:
                                 Saving this value resets the account balance baseline to today.
                             </span>
                         </div>
-                        <div className="form-field">
-                            <label htmlFor="pa-statement-day">Statement day</label>
-                            <input
-                                id="pa-statement-day"
-                                type="number"
-                                min="1"
-                                max="31"
-                                step="1"
-                                placeholder="e.g. 23"
-                                value={form.statementDay}
-                                onChange={(e) =>
-                                    setForm((f) => ({ ...f, statementDay: e.target.value }))
-                                }
-                            />
-                            <span className="muted form-hint">
-                                Transactions group by statement cycle. Day 23 → Jun 23–Jul 22
-                                counts as July.
-                            </span>
-                        </div>
+                        {modalMode === 'edit' && (
+                            <div className="form-field">
+                                <label htmlFor="pa-type">Type</label>
+                                <select
+                                    id="pa-type"
+                                    value={form.accountType}
+                                    onChange={(e) =>
+                                        setForm((f) => ({
+                                            ...f,
+                                            accountType: e.target.value as PaymentAccountType,
+                                        }))
+                                    }
+                                >
+                                    <option value="account">Account</option>
+                                    <option value="credit">Credit</option>
+                                    <option value="investment">Investment</option>
+                                </select>
+                            </div>
+                        )}
                     </>
-                ) : (
-                    <div className="form-field">
-                        <label htmlFor="pa-initial">Current balance (RM)</label>
-                        <input
-                            id="pa-initial"
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            placeholder="0.00"
-                            value={form.initialBalance}
-                            onChange={(e) =>
-                                setForm((f) => ({ ...f, initialBalance: e.target.value }))
-                            }
-                        />
-                        <span className="muted form-hint">
-                            Saving this value resets the account balance baseline to today.
-                        </span>
-                    </div>
-                )}
-                {modalMode === 'edit' && (
-                    <div className="form-field">
-                        <label htmlFor="pa-type">Type</label>
-                        <select
-                            id="pa-type"
-                            value={form.accountType}
-                            onChange={(e) =>
-                                setForm((f) => ({
-                                    ...f,
-                                    accountType: e.target.value as PaymentAccountType,
-                                }))
-                            }
-                        >
-                            <option value="account">Account</option>
-                            <option value="credit">Credit</option>
-                            <option value="investment">Investment</option>
-                        </select>
-                    </div>
                 )}
             </RecordModal>
             <AccountActivityModal

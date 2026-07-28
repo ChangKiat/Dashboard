@@ -413,29 +413,294 @@
   color: #f87171;
 }
 
+.account-activity-header {
+  margin: 0 0 12px;
+  flex-shrink: 0;
+}
+
+.account-activity-header-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.account-activity-header-top h4 {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+
 .account-activity-summary {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px 16px;
-  margin: 0 0 12px;
-  font-size: 0.875rem;
-  color: #d1d5db;
-}
-
-.account-activity-period {
-  margin: 0 0 12px;
-}
-
-.account-activity-period-range {
-  display: block;
+  align-items: baseline;
+  gap: 4px 6px;
+  margin: 0;
   font-size: 0.8rem;
   color: #9ca3af;
 }
 
-.account-activity-period-hint {
-  display: block;
+.account-activity-sep {
+  color: #4b5563;
+}
+
+.account-activity-period-range {
+  margin: 4px 0 0;
   font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.account-activity-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.rebate-tier-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(96, 165, 250, 0.2);
+  color: #93c5fd;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.rebate-default-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(156, 163, 175, 0.25);
+  color: #d1d5db;
+  font-size: 0.65rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.rebate-status-unlimited {
+  color: #93c5fd;
+  font-weight: 600;
+}
+
+.rebate-requirement-unmet {
+  color: #f87171;
+  font-weight: 600;
+}
+
+.rebate-requirement-note {
+  display: block;
+  font-size: 0.7rem;
+  color: #9ca3af;
   margin-top: 2px;
+}
+
+.rebate-requirement-row-unmet {
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.rebate-tier-editor,
+.rebate-category-editor {
+  margin-top: 8px;
+}
+
+.rebate-category-def-header,
+.rebate-tier-header {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 4px;
+  padding: 0 8px;
+  font-size: 0.7rem;
+  color: #9ca3af;
+  font-weight: 600;
+}
+
+.rebate-category-def-header {
+  grid-template-columns: 1.6fr 0.8fr 0.7fr 0.5fr 1fr 1fr auto;
+}
+
+.rebate-category-def-header.simple {
+  grid-template-columns: 1.6fr 0.8fr 0.7fr 0.5fr auto;
+}
+
+.rebate-tier-header {
+  grid-template-columns: 1.2fr repeat(auto-fit, minmax(90px, 1fr)) auto;
+}
+
+.rebate-tier-row,
+.rebate-category-def-row {
+  display: grid;
+  align-items: end;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.rebate-category-def-row {
+  grid-template-columns: 1.6fr 0.8fr 0.7fr 0.5fr 1fr 1fr auto;
+}
+
+.rebate-category-def-row.simple {
+  grid-template-columns: 1.6fr 0.8fr 0.7fr 0.5fr auto;
+}
+
+.rebate-default-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding-bottom: 6px;
+}
+
+.rebate-tier-row {
+  grid-template-columns: 1.2fr repeat(auto-fit, minmax(90px, 1fr)) auto;
+}
+
+.rebate-tier-row label {
+  font-size: 0.75rem;
+  min-width: 0;
+}
+
+.rebate-tier-row label input,
+.rebate-category-def-row input {
+  display: block;
+  width: 100%;
+  margin-top: 2px;
+}
+
+.rebate-summary {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.rebate-summary-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.rebate-summary-header h5 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.rebate-summary-note {
+  font-size: 0.75rem;
+}
+
+.rebate-summary-threshold {
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+  color: #d1d5db;
+}
+
+.rebate-summary-table {
+  font-size: 0.8rem;
+}
+
+.rebate-summary-table th,
+.rebate-summary-table td {
+  padding: 6px 8px;
+}
+
+.rebate-not-maxed {
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.rebate-status-maxed {
+  color: #86efac;
+  font-weight: 600;
+}
+
+.rebate-status-remaining {
+  color: #fbbf24;
+  font-weight: 600;
+}
+
+.rebate-summary-total {
+  margin: 8px 0 0;
+  font-size: 0.875rem;
+}
+
+.rebate-settings-fields {
+  margin-top: 8px;
+}
+
+.rebate-settings-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.rebate-enable-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.rebate-mappings {
+  margin-top: 8px;
+}
+
+.rebate-mappings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 0.875rem;
+}
+
+.rebate-mapping-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.rebate-mapping-row select {
+  flex: 1;
+  min-width: 0;
+}
+
+.rebate-mapping-arrow {
+  color: #9ca3af;
+  flex-shrink: 0;
+}
+
+.rebate-mapping-remove {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+}
+
+.rebate-description-rules {
+  margin-top: 12px;
+}
+
+.rebate-description-rule-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.rebate-description-rule-row select {
+  flex: 0 1 140px;
+  min-width: 120px;
+}
+
+.rebate-description-keywords {
+  flex: 2;
+  min-width: 180px;
 }
 
 .account-activity-period-summary {
@@ -462,7 +727,7 @@
 .account-activity-body {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .record-modal.account-activity-modal > .account-activity-footer {
@@ -1204,6 +1469,98 @@
   max-width: 420px;
   max-height: 90vh;
   overflow-y: auto;
+}
+
+.record-modal.payment-account-modal {
+  width: max(720px, min(960px, 96vw));
+  max-width: 96vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.record-modal.payment-account-modal .record-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.record-modal.payment-account-modal .record-modal-actions {
+  flex-shrink: 0;
+  margin-top: 12px;
+}
+
+.record-modal.payment-account-modal input:not([type='checkbox']),
+.record-modal.payment-account-modal select,
+.record-modal.payment-account-modal textarea {
+  padding: 8px 10px;
+  border: 1px solid #2a2f3a;
+  border-radius: 6px;
+  background: #161b26;
+  color: #e8eaed;
+  font-size: 0.875rem;
+}
+
+.record-modal.payment-account-modal input::placeholder {
+  color: #6b7280;
+}
+
+.record-modal.payment-account-modal input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #2563eb;
+  flex-shrink: 0;
+}
+
+.credit-account-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pa-settings-tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-bottom: 8px;
+  background: #1a1f2b;
+  border-bottom: 1px solid #2a2f3a;
+  margin-bottom: 4px;
+}
+
+.pa-settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pa-settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.pa-settings-grid .form-field:first-child {
+  grid-column: 1 / -1;
+}
+
+.pa-section-title {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #e8eaed;
+}
+
+.pa-cashback-toggle {
+  margin-top: 4px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .record-modal.account-activity-modal {

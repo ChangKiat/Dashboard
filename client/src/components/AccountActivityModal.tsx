@@ -8,6 +8,7 @@ import {
     formatPeriodLabel,
     isDateInRange,
 } from '../utils/statementPeriod';
+import RebateSummary from './RebateSummary';
 import TablePagination from './TablePagination';
 
 interface Props {
@@ -16,6 +17,8 @@ interface Props {
     formatAmount: (amount: number) => string;
     onClose: () => void;
 }
+
+type ActivityTab = 'activity' | 'cashback';
 
 function formatTypeLabel(type: AccountActivityEntry['type']): string {
     switch (type) {
@@ -44,6 +47,7 @@ export default function AccountActivityModal({ account, month, formatAmount, onC
     const [accountData, setAccountData] = useState<PaymentAccount | null>(null);
     const [entries, setEntries] = useState<AccountActivityEntry[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
+    const [activeTab, setActiveTab] = useState<ActivityTab>('activity');
 
     useEffect(() => {
         if (!account) return;
@@ -51,6 +55,7 @@ export default function AccountActivityModal({ account, month, formatAmount, onC
         setLoading(true);
         setError(null);
         setSearchQuery('');
+        setActiveTab('activity');
         fetchAccountActivity(account.id)
             .then((res) => {
                 if (cancelled) return;
@@ -70,6 +75,9 @@ export default function AccountActivityModal({ account, month, formatAmount, onC
     }, [account]);
 
     const periodAccount = accountData ?? account;
+    const rebateEnabled =
+        accountData?.accountType === 'credit' && accountData.rebateConfig?.enabled === true;
+
     const periodRange = useMemo(() => {
         if (!periodAccount || !month) return null;
         return accountPeriodToDateRange(periodAccount, month);
@@ -111,54 +119,71 @@ export default function AccountActivityModal({ account, month, formatAmount, onC
 
     if (!account) return null;
 
+    const showActivityContent = !rebateEnabled || activeTab === 'activity';
+
     return (
         <div className="record-modal-backdrop" onClick={onClose}>
             <div className="record-modal account-activity-modal" onClick={(e) => e.stopPropagation()}>
-                <h4>{account.name}</h4>
-                {accountData && (
-                    <div className="account-activity-summary">
-                        {accountData.accountType === 'credit' ? (
-                            <>
-                                <span>
-                                    Limit: {formatAmount(accountData.creditLimit ?? 0)}
-                                </span>
-                                <span>
-                                    Used: {formatAmount(accountData.amountOwed ?? 0)}
-                                </span>
+                <div className="account-activity-header">
+                    <div className="account-activity-header-top">
+                        <h4>{account.name}</h4>
+                        {rebateEnabled && (
+                            <div className="account-activity-tabs">
+                                <button
+                                    type="button"
+                                    className={`section-tab${activeTab === 'activity' ? ' active' : ''}`}
+                                    onClick={() => setActiveTab('activity')}
+                                >
+                                    Activity
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`section-tab${activeTab === 'cashback' ? ' active' : ''}`}
+                                    onClick={() => setActiveTab('cashback')}
+                                >
+                                    Cashback
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                    {accountData && (
+                        <div className="account-activity-summary">
+                            {accountData.accountType === 'credit' ? (
+                                <>
+                                    <span>Limit {formatAmount(accountData.creditLimit ?? 0)}</span>
+                                    <span className="account-activity-sep">·</span>
+                                    <span>Used {formatAmount(accountData.amountOwed ?? 0)}</span>
+                                    <span className="account-activity-sep">·</span>
+                                    <span
+                                        className={
+                                            (accountData.availableCredit ?? 0) < 0
+                                                ? 'account-balance-negative'
+                                                : 'account-balance-positive'
+                                        }
+                                    >
+                                        Avail {formatAmount(accountData.availableCredit ?? 0)}
+                                    </span>
+                                </>
+                            ) : (
                                 <span
                                     className={
-                                        (accountData.availableCredit ?? 0) < 0
+                                        (accountData.balance ?? 0) < 0
                                             ? 'account-balance-negative'
                                             : 'account-balance-positive'
                                     }
                                 >
-                                    Available: {formatAmount(accountData.availableCredit ?? 0)}
+                                    Balance {formatAmount(accountData.balance ?? 0)}
                                 </span>
-                            </>
-                        ) : (
-                            <span
-                                className={
-                                    (accountData.balance ?? 0) < 0
-                                        ? 'account-balance-negative'
-                                        : 'account-balance-positive'
-                                }
-                            >
-                                Balance: {formatAmount(accountData.balance ?? 0)}
-                            </span>
-                        )}
-                    </div>
-                )}
-                {periodAccount && month && (
-                    <div className="account-activity-period">
-                        <span className="account-activity-period-range">
+                            )}
+                        </div>
+                    )}
+                    {periodAccount && month && (
+                        <p className="account-activity-period-range">
                             {formatPeriodLabel(periodAccount, month)}
-                        </span>
-                        <span className="muted account-activity-period-hint">
-                            Follows month in header
-                        </span>
-                    </div>
-                )}
-                {!loading && !error && periodEntries.length > 0 && (
+                        </p>
+                    )}
+                </div>
+                {showActivityContent && !loading && !error && periodEntries.length > 0 && (
                     <div className="account-activity-period-summary">
                         <span>
                             Charges: <strong>{formatAmount(periodTotals.totalOut)}</strong>
@@ -181,22 +206,32 @@ export default function AccountActivityModal({ account, month, formatAmount, onC
                         </span>
                     </div>
                 )}
-                {hasPreBaseline && accountData && (
-                    <p className="muted account-activity-baseline-note">
-                        Older transactions shown for history; balance starts from{' '}
-                        {accountData.balanceBaselineDate}.
-                    </p>
-                )}
+                {showActivityContent &&
+                    hasPreBaseline &&
+                    accountData &&
+                    accountData.accountType !== 'credit' && (
+                        <p className="muted account-activity-baseline-note">
+                            Older transactions shown for history; balance starts from{' '}
+                            {accountData.balanceBaselineDate}.
+                        </p>
+                    )}
                 <div className="record-modal-body account-activity-body">
                     {loading && <p className="muted">Loading activity…</p>}
                     {error && <p className="error">{error}</p>}
-                    {!loading && !error && entries.length === 0 && (
+                    {!loading && !error && rebateEnabled && activeTab === 'cashback' && (
+                        <RebateSummary
+                            accountId={accountData!.id}
+                            month={month}
+                            formatAmount={formatAmount}
+                        />
+                    )}
+                    {showActivityContent && !loading && !error && entries.length === 0 && (
                         <p className="muted">No transactions linked to this account yet.</p>
                     )}
-                    {!loading && !error && entries.length > 0 && periodEntries.length === 0 && (
+                    {showActivityContent && !loading && !error && entries.length > 0 && periodEntries.length === 0 && (
                         <p className="muted">No transactions in this period.</p>
                     )}
-                    {!loading && !error && periodEntries.length > 0 && (
+                    {showActivityContent && !loading && !error && periodEntries.length > 0 && (
                         <>
                             <div className="category-detail-search">
                                 <input
@@ -270,7 +305,7 @@ export default function AccountActivityModal({ account, month, formatAmount, onC
                     )}
                 </div>
                 <div className="account-activity-footer">
-                    {!loading && !error && filteredEntries.length > 0 && (
+                    {showActivityContent && !loading && !error && filteredEntries.length > 0 && (
                         <TablePagination
                             page={page}
                             totalPages={totalPages}
