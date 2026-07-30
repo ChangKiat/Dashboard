@@ -581,10 +581,10 @@
 
 .rebate-summary-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
 .rebate-summary-header h5 {
@@ -592,8 +592,15 @@
   font-size: 0.9rem;
 }
 
+.rebate-summary-header .btn-primary {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+}
+
 .rebate-summary-note {
   font-size: 0.75rem;
+  margin: 0 0 8px;
 }
 
 .rebate-summary-threshold {

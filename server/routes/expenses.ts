@@ -28,7 +28,6 @@ import {
 import { loadExpenseCategories } from '../../../AI Agent/src/config/expenseCategories';
 import { getSalaryAfterTax } from '../../../AI Agent/src/services/financeSettings';
 import { getTelegramUserId } from '../telegramUser';
-import { syncRebateForPaymentMethod } from '../rebate';
 import {
     isDayOfMonth,
     isNonEmptyString,
@@ -38,15 +37,6 @@ import {
 } from '../validation';
 
 const router = Router();
-
-function monthFromDate(date?: string): string {
-    if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) return date.slice(0, 7);
-    return parseMonth().month;
-}
-
-function triggerRebateSync(paymentMethod: string | null | undefined, date?: string): void {
-    void syncRebateForPaymentMethod(paymentMethod, monthFromDate(date));
-}
 
 function parseReimbursements(
     value: unknown
@@ -288,8 +278,6 @@ router.post('/transactions', async (req, res) => {
             });
         }
 
-        triggerRebateSync(paymentMethod, body.date);
-
         res.json({ ok: true, id: expenseId });
     } catch (err) {
         console.error('POST /api/expenses/transactions', err);
@@ -471,9 +459,6 @@ router.patch('/transactions/:id', async (req, res) => {
             await deleteInvestmentFundingTransfer(id);
         }
 
-        triggerRebateSync(beforeUpdate.paymentMethod, beforeUpdate.date);
-        triggerRebateSync(updated.paymentMethod, updated.date);
-
         res.json({ ok: true });
     } catch (err) {
         console.error('PATCH /api/expenses/transactions/:id', err);
@@ -486,15 +471,8 @@ router.delete('/transactions/:id', async (req, res) => {
         const id = parseIdParam(req.params.id);
         if (!id) return res.status(400).json({ error: 'Invalid id' });
 
-        const db = requireDb();
-        const [existing] = await db.select().from(expenses).where(eq(expenses.id, id)).limit(1);
-
         const ok = await deleteExpense(id);
         if (!ok) return res.status(404).json({ error: 'Expense not found' });
-
-        if (existing) {
-            triggerRebateSync(existing.paymentMethod, existing.date);
-        }
 
         res.json({ ok: true });
     } catch (err) {

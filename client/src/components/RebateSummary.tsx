@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import type { RebateSummary as RebateSummaryData } from '../api';
-import { fetchAccountRebate } from '../api';
+import { fetchAccountRebate, syncAccountRebate } from '../api';
 
 interface Props {
     accountId: number;
@@ -15,6 +15,7 @@ function formatRate(rate: number): string {
 
 export default function RebateSummary({ accountId, month, formatAmount }: Props) {
     const [loading, setLoading] = useState(true);
+    const [generating, setGenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [summary, setSummary] = useState<RebateSummaryData | null>(null);
 
@@ -39,8 +40,21 @@ export default function RebateSummary({ accountId, month, formatAmount }: Props)
         };
     }, [accountId, month]);
 
+    async function handleGenerate() {
+        setGenerating(true);
+        setError(null);
+        try {
+            const res = await syncAccountRebate(accountId, month);
+            setSummary(res);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to generate cashback');
+        } finally {
+            setGenerating(false);
+        }
+    }
+
     if (loading) return <p className="muted rebate-summary-loading">Loading cashback…</p>;
-    if (error) return <p className="error">{error}</p>;
+    if (error && !summary) return <p className="error">{error}</p>;
     if (!summary) return null;
 
     const isTiered = summary.ruleType === 'tiered';
@@ -49,8 +63,19 @@ export default function RebateSummary({ accountId, month, formatAmount }: Props)
         <div className="rebate-summary">
             <div className="rebate-summary-header">
                 <h5>Cashback</h5>
-                <span className="muted rebate-summary-note">Cashback income auto-synced</span>
+                <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={handleGenerate}
+                    disabled={generating}
+                >
+                    {generating ? 'Generating…' : 'Generate cashback'}
+                </button>
             </div>
+            <p className="muted rebate-summary-note">
+                Incomes are written for this period when you generate
+            </p>
+            {error && <p className="error">{error}</p>}
             {isTiered ? (
                 <p className="rebate-summary-threshold">
                     Total spend: <strong>{formatAmount(summary.totalSpend)}</strong>

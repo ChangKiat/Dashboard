@@ -10,7 +10,6 @@ import {
     getPaymentAccountById,
     isSimpleRebateConfig,
     isTieredRebateConfig,
-    listActivePaymentAccounts,
 } from '../../AI Agent/src/services/paymentAccountService';
 import { upsertRebateIncomes } from '../../AI Agent/src/services/incomeService';
 import { requireDb } from '../../AI Agent/src/db/client';
@@ -368,7 +367,7 @@ export function computeRebate(
     return computeSimpleRebate(account, config, expenseRows, month, fundedExpenseIds);
 }
 
-export async function computeAndSyncRebate(
+export async function computeAccountRebate(
     accountId: number,
     month?: string
 ): Promise<RebateSummary | null> {
@@ -384,7 +383,20 @@ export async function computeAndSyncRebate(
     const expenseRows = await db.select().from(expenses);
     const fundedExpenseIds = await getFundedExpenseIds();
 
-    const summary = computeRebate(account, config, expenseRows, resolvedMonth, fundedExpenseIds);
+    return computeRebate(account, config, expenseRows, resolvedMonth, fundedExpenseIds);
+}
+
+export async function computeAndSyncRebate(
+    accountId: number,
+    month?: string
+): Promise<RebateSummary | null> {
+    const summary = await computeAccountRebate(accountId, month);
+    if (!summary) return null;
+
+    const account = await getPaymentAccountById(accountId);
+    if (!account) return null;
+
+    const resolvedMonth = month && /^\d{4}-\d{2}$/.test(month) ? month : parseMonth().month;
 
     await upsertRebateIncomes(
         account.id,
@@ -395,26 +407,4 @@ export async function computeAndSyncRebate(
     );
 
     return summary;
-}
-
-export async function syncRebateForPaymentMethod(
-    paymentMethod: string | null | undefined,
-    month?: string
-): Promise<void> {
-    if (!paymentMethod) return;
-
-    const resolved = resolvePaymentMethod(paymentMethod);
-    if (!resolved) return;
-
-    const accounts = await listActivePaymentAccounts();
-    const account = accounts.find(
-        (a) => a.name.toLowerCase() === resolved.toLowerCase() && a.accountType === 'credit'
-    );
-    if (!account?.rebateConfig?.enabled) return;
-
-    try {
-        await computeAndSyncRebate(account.id, month);
-    } catch (err) {
-        console.error('syncRebateForPaymentMethod', err);
-    }
 }

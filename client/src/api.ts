@@ -532,6 +532,13 @@ export function fetchAccountRebate(id: number, month: string) {
     return fetchJson<RebateSummary>(`/api/payment-accounts/${id}/rebate?month=${encodeURIComponent(month)}`);
 }
 
+export function syncAccountRebate(id: number, month: string) {
+    return fetchJson<RebateSummary>(
+        `/api/payment-accounts/${id}/rebate/sync?month=${encodeURIComponent(month)}`,
+        { method: 'POST' }
+    );
+}
+
 export function fetchIncomeTransactions(month: string) {
     return fetchJson<IncomeTransactionsResponse>(`/api/incomes/transactions?month=${month}`);
 }

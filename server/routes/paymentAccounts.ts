@@ -20,7 +20,7 @@ import {
     computeAccountBalances,
 } from '../accountBalances';
 import { parseMonth } from '../dateUtils';
-import { computeAndSyncRebate } from '../rebate';
+import { computeAccountRebate, computeAndSyncRebate } from '../rebate';
 import { isNonEmptyString, parseIdParam } from '../validation';
 
 const router = Router();
@@ -66,7 +66,7 @@ router.get('/:id/rebate', async (req, res) => {
                 ? req.query.month
                 : parseMonth().month;
 
-        const summary = await computeAndSyncRebate(id, month);
+        const summary = await computeAccountRebate(id, month);
         if (!summary) {
             return res.status(404).json({ error: 'Rebate tracking not enabled for this account' });
         }
@@ -74,6 +74,28 @@ router.get('/:id/rebate', async (req, res) => {
         res.json(summary);
     } catch (err) {
         console.error('GET /api/payment-accounts/:id/rebate', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+    }
+});
+
+router.post('/:id/rebate/sync', async (req, res) => {
+    try {
+        const id = parseIdParam(req.params.id);
+        if (!id) return res.status(400).json({ error: 'Invalid id' });
+
+        const month =
+            typeof req.query.month === 'string' && /^\d{4}-\d{2}$/.test(req.query.month)
+                ? req.query.month
+                : parseMonth().month;
+
+        const summary = await computeAndSyncRebate(id, month);
+        if (!summary) {
+            return res.status(404).json({ error: 'Rebate tracking not enabled for this account' });
+        }
+
+        res.json(summary);
+    } catch (err) {
+        console.error('POST /api/payment-accounts/:id/rebate/sync', err);
         res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
     }
 });
