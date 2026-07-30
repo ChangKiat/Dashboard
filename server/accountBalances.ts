@@ -64,6 +64,7 @@ function getBaselineDate(account: PaymentAccount): string {
 }
 
 function isOnOrAfterBaseline(date: string, account: PaymentAccount): boolean {
+    if (account.accountType === 'credit') return true;
     return date >= getBaselineDate(account);
 }
 
