@@ -38,6 +38,12 @@ import {
 
 const router = Router();
 
+/** Investment and Other expenses create a linked from→to Account transfer. */
+function requiresAccountTransfer(category: string): boolean {
+    const c = category.trim().toLowerCase();
+    return c === 'investment' || c === 'other';
+}
+
 function parseReimbursements(
     value: unknown
 ): { source: string; amount: number }[] | undefined | 'invalid' {
@@ -236,18 +242,18 @@ router.post('/transactions', async (req, res) => {
                 : null;
 
         const category = body.category.trim();
-        const isInvestment = category.toLowerCase() === 'investment';
+        const needsTransfer = requiresAccountTransfer(category);
         const toInvestmentAccount =
             body.toInvestmentAccount != null && isNonEmptyString(body.toInvestmentAccount)
                 ? body.toInvestmentAccount.trim()
                 : null;
 
-        if (isInvestment) {
+        if (needsTransfer) {
             if (!paymentMethod) {
-                return res.status(400).json({ error: 'Investment expenses require a payment method (from account)' });
+                return res.status(400).json({ error: 'This expense requires a payment method (from account)' });
             }
             if (!toInvestmentAccount) {
-                return res.status(400).json({ error: 'Investment expenses require a destination investment account' });
+                return res.status(400).json({ error: 'This expense requires a destination account' });
             }
             if (paymentMethod === toInvestmentAccount) {
                 return res.status(400).json({ error: 'From and to accounts must be different' });
@@ -267,7 +273,7 @@ router.post('/transactions', async (req, res) => {
             await appendReimbursements(expenseId, reimbursements, body.date);
         }
 
-        if (isInvestment && paymentMethod && toInvestmentAccount) {
+        if (needsTransfer && paymentMethod && toInvestmentAccount) {
             await upsertInvestmentFundingTransfer({
                 expenseId,
                 date: body.date,
@@ -319,21 +325,21 @@ router.post('/fixed', async (req, res) => {
                 ? body.paymentMethod.trim()
                 : null;
         const category = body.category.trim();
-        const isInvestment = category.toLowerCase() === 'investment';
+        const needsTransfer = requiresAccountTransfer(category);
         const toInvestmentAccount =
             body.toInvestmentAccount != null && isNonEmptyString(body.toInvestmentAccount)
                 ? body.toInvestmentAccount.trim()
                 : null;
 
-        if (isInvestment) {
+        if (needsTransfer) {
             if (!paymentMethod) {
                 return res.status(400).json({
-                    error: 'Investment fixed expenses require a payment method (from account)',
+                    error: 'This fixed expense requires a payment method (from account)',
                 });
             }
             if (!toInvestmentAccount) {
                 return res.status(400).json({
-                    error: 'Investment fixed expenses require a destination investment account',
+                    error: 'This fixed expense requires a destination account',
                 });
             }
             if (paymentMethod === toInvestmentAccount) {
@@ -350,7 +356,7 @@ router.post('/fixed', async (req, res) => {
             body.frequencyMonths,
             startMonth,
             paymentMethod,
-            isInvestment ? toInvestmentAccount : null
+            needsTransfer ? toInvestmentAccount : null
         );
         res.json({ ok: true });
     } catch (err) {
@@ -429,20 +435,20 @@ router.patch('/transactions/:id', async (req, res) => {
         if (!updated) return res.status(404).json({ error: 'Expense not found' });
 
         const category = updated.category;
-        const isInvestment = category.toLowerCase() === 'investment';
+        const needsTransfer = requiresAccountTransfer(category);
         const paymentMethod = updated.paymentMethod;
         const amount = parseFloat(updated.amount);
 
-        if (isInvestment) {
+        if (needsTransfer) {
             const toInvestmentAccount =
                 body.toInvestmentAccount != null && isNonEmptyString(body.toInvestmentAccount)
                     ? body.toInvestmentAccount.trim()
                     : null;
             if (!paymentMethod) {
-                return res.status(400).json({ error: 'Investment expenses require a payment method (from account)' });
+                return res.status(400).json({ error: 'This expense requires a payment method (from account)' });
             }
             if (!toInvestmentAccount) {
-                return res.status(400).json({ error: 'Investment expenses require a destination investment account' });
+                return res.status(400).json({ error: 'This expense requires a destination account' });
             }
             if (paymentMethod === toInvestmentAccount) {
                 return res.status(400).json({ error: 'From and to accounts must be different' });
@@ -552,9 +558,9 @@ router.patch('/fixed/:id', async (req, res) => {
         }
 
         const nextCategory = fields.category ?? existing?.category ?? '';
-        const isInvestment = nextCategory.toLowerCase() === 'investment';
+        const needsTransfer = requiresAccountTransfer(nextCategory);
 
-        if (isInvestment) {
+        if (needsTransfer) {
             const paymentMethod =
                 fields.paymentMethod !== undefined
                     ? fields.paymentMethod
@@ -565,12 +571,12 @@ router.patch('/fixed/:id', async (req, res) => {
                     : (existing?.toInvestmentAccount ?? null);
             if (!paymentMethod) {
                 return res.status(400).json({
-                    error: 'Investment fixed expenses require a payment method (from account)',
+                    error: 'This fixed expense requires a payment method (from account)',
                 });
             }
             if (!toInvestmentAccount) {
                 return res.status(400).json({
-                    error: 'Investment fixed expenses require a destination investment account',
+                    error: 'This fixed expense requires a destination account',
                 });
             }
             if (paymentMethod === toInvestmentAccount) {

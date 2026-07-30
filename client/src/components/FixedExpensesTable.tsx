@@ -4,6 +4,7 @@ import type { FixedExpenseConfig } from '../api';
 import { createFixedExpense, deleteFixedExpense, updateFixedExpense } from '../api';
 import { usePagination } from '../hooks/usePagination';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
+import { isInvestmentCategory, requiresAccountTransfer } from '../utils/expenseCategories';
 import ExpenseCategorySelect from './ExpenseCategorySelect';
 import PaymentMethodSelect from './PaymentMethodSelect';
 import RecordModal from './RecordModal';
@@ -18,10 +19,6 @@ function formatFrequencyMonths(months: number): string {
     if (months === 3) return 'Quarterly';
     if (months === 12) return 'Yearly';
     return `Every ${months} months`;
-}
-
-function isInvestmentCategory(category: string): boolean {
-    return category.trim().toLowerCase() === 'investment';
 }
 
 interface Props {
@@ -64,7 +61,8 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
     const [modalError, setModalError] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
 
-    const showInvestmentDestination = isInvestmentCategory(form.category);
+    const showTransferDestination = requiresAccountTransfer(form.category);
+    const investment = isInvestmentCategory(form.category);
 
     const openCreate = () => {
         setModalMode('create');
@@ -123,15 +121,19 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
 
         const paymentMethod = form.paymentMethod.trim() || null;
         const toInvestmentAccount = form.toInvestmentAccount.trim() || null;
-        const investment = isInvestmentCategory(form.category);
+        const needsTransfer = requiresAccountTransfer(form.category);
 
-        if (investment) {
+        if (needsTransfer) {
             if (!paymentMethod) {
                 setModalError('Select the account money is coming from.');
                 return;
             }
             if (!toInvestmentAccount) {
-                setModalError('Select the investment account to fund.');
+                setModalError(
+                    investment
+                        ? 'Select the investment account to fund.'
+                        : 'Select the destination account.'
+                );
                 return;
             }
             if (paymentMethod === toInvestmentAccount) {
@@ -150,7 +152,7 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
                 dayOfMonth,
                 frequencyMonths,
                 paymentMethod,
-                toInvestmentAccount: investment ? toInvestmentAccount : null,
+                toInvestmentAccount: needsTransfer ? toInvestmentAccount : null,
             };
             if (modalMode === 'create') {
                 await createFixedExpense({
@@ -269,7 +271,7 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
                             setForm((f) => ({
                                 ...f,
                                 category,
-                                toInvestmentAccount: isInvestmentCategory(category)
+                                toInvestmentAccount: requiresAccountTransfer(category)
                                     ? f.toInvestmentAccount
                                     : '',
                             }))
@@ -278,7 +280,7 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
                 </div>
                 <div className="form-field">
                     <label htmlFor="fx-payment-method">
-                        {showInvestmentDestination ? 'From account' : 'Payment method'}
+                        {showTransferDestination ? 'From account' : 'Payment method'}
                     </label>
                     <PaymentMethodSelect
                         id="fx-payment-method"
@@ -287,7 +289,7 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
                         excludeTypes={['investment']}
                     />
                 </div>
-                {showInvestmentDestination && (
+                {showTransferDestination && investment && (
                     <div className="form-field">
                         <label htmlFor="fx-to-investment">To investment account</label>
                         <select
@@ -309,6 +311,18 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
                                 Add an investment account on the Income tab first.
                             </span>
                         )}
+                    </div>
+                )}
+                {showTransferDestination && !investment && (
+                    <div className="form-field">
+                        <label htmlFor="fx-to-account">To account</label>
+                        <PaymentMethodSelect
+                            id="fx-to-account"
+                            value={form.toInvestmentAccount}
+                            onChange={(toInvestmentAccount) =>
+                                setForm((f) => ({ ...f, toInvestmentAccount }))
+                            }
+                        />
                     </div>
                 )}
                 <div className="form-field">
