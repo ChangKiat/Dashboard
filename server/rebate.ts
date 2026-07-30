@@ -10,11 +10,12 @@ import {
     getPaymentAccountById,
     isSimpleRebateConfig,
     isTieredRebateConfig,
+    listActivePaymentAccounts,
 } from '../../AI Agent/src/services/paymentAccountService';
 import { upsertRebateIncomes } from '../../AI Agent/src/services/incomeService';
 import { requireDb } from '../../AI Agent/src/db/client';
 import { expenses, incomes } from '../../AI Agent/src/db/schema';
-import type { ExpenseRow } from './accountBalances';
+import type { ExpenseRow, IncomeRow } from './accountBalances';
 import { accountPeriodToDateRange, isDateInRange } from './statementPeriod';
 import { parseMonth } from './dateUtils';
 
@@ -69,9 +70,7 @@ function matchesAccount(stored: string | null | undefined, accountName: string):
     return resolvePaymentMethod(stored) === accountName;
 }
 
-async function getFundedExpenseIds(): Promise<Set<number>> {
-    const db = requireDb();
-    const incomeRows = await db.select().from(incomes);
+function getFundedExpenseIds(incomeRows: IncomeRow[]): Set<number> {
     const funded = new Set<number>();
     for (const income of incomeRows) {
         if (income.category === 'Account transfer' && income.expenseId != null) {
@@ -81,20 +80,56 @@ async function getFundedExpenseIds(): Promise<Set<number>> {
     return funded;
 }
 
+/** Account transfer-outs from the credit card (non-investment destinations) as synthetic spend. */
+function transferOutsAsSpend(
+    account: PaymentAccount,
+    incomeRows: IncomeRow[],
+    range: { start: string; end: string },
+    accountsByName: Map<string, PaymentAccount>
+): ExpenseRow[] {
+    const rows: ExpenseRow[] = [];
+    for (const income of incomeRows) {
+        if (income.category !== 'Account transfer') continue;
+        if (!matchesAccount(income.fromPaymentMethod, account.name)) continue;
+        if (!isDateInRange(income.date, range)) continue;
+
+        const destName = income.paymentMethod
+            ? resolvePaymentMethod(income.paymentMethod)
+            : null;
+        if (!destName) continue;
+
+        const destAccount = accountsByName.get(destName.toLowerCase());
+        if (destAccount?.accountType === 'investment') continue;
+
+        rows.push({
+            id: -income.id,
+            date: income.date,
+            amount: String(income.amount),
+            category: destName,
+            description: income.description || '',
+            paymentMethod: account.name,
+        });
+    }
+    return rows;
+}
+
 function filterPeriodExpenses(
     account: PaymentAccount,
     expenseRows: ExpenseRow[],
+    incomeRows: IncomeRow[],
     month: string,
-    fundedExpenseIds: Set<number>
+    fundedExpenseIds: Set<number>,
+    accountsByName: Map<string, PaymentAccount>
 ): { start: string; end: string; periodExpenses: ExpenseRow[] } {
     const { start, end } = accountPeriodToDateRange(account, month);
-    const periodExpenses = expenseRows.filter(
+    const fromExpenses = expenseRows.filter(
         (expense) =>
             !fundedExpenseIds.has(expense.id) &&
             matchesAccount(expense.paymentMethod, account.name) &&
             isDateInRange(expense.date, { start, end })
     );
-    return { start, end, periodExpenses };
+    const fromTransfers = transferOutsAsSpend(account, incomeRows, { start, end }, accountsByName);
+    return { start, end, periodExpenses: [...fromExpenses, ...fromTransfers] };
 }
 
 function buildEligibleExpenses(
@@ -147,10 +182,11 @@ function applyCap(rawEarned: number, cap: number | null): {
 
 function resolveRebateCategory(expense: ExpenseRow, config: RebateConfig): string | null {
     const descriptionRules = config.descriptionRules ?? [];
-    const descLower = expense.description.toLowerCase();
+    // Include category (destination account for transfers) so keyword rules like "Shopee" match.
+    const searchText = `${expense.description} ${expense.category}`.toLowerCase();
     for (const rule of descriptionRules) {
         if (rule.expenseCategory && rule.expenseCategory !== expense.category) continue;
-        if (rule.keywords.some((kw) => descLower.includes(kw.toLowerCase()))) {
+        if (rule.keywords.some((kw) => searchText.includes(kw.toLowerCase()))) {
             return rule.rebateCategory;
         }
     }
@@ -163,14 +199,18 @@ function computeSimpleRebate(
     account: PaymentAccount,
     config: SimpleRebateConfig,
     expenseRows: ExpenseRow[],
+    incomeRows: IncomeRow[],
     month: string,
-    fundedExpenseIds: Set<number>
+    fundedExpenseIds: Set<number>,
+    accountsByName: Map<string, PaymentAccount>
 ): RebateSummary {
     const { start, end, periodExpenses } = filterPeriodExpenses(
         account,
         expenseRows,
+        incomeRows,
         month,
-        fundedExpenseIds
+        fundedExpenseIds,
+        accountsByName
     );
 
     const totalSpend = periodExpenses.reduce((sum, e) => sum + parseAmount(e.amount), 0);
@@ -279,14 +319,18 @@ function computeTieredRebate(
     account: PaymentAccount,
     config: TieredRebateConfig,
     expenseRows: ExpenseRow[],
+    incomeRows: IncomeRow[],
     month: string,
-    fundedExpenseIds: Set<number>
+    fundedExpenseIds: Set<number>,
+    accountsByName: Map<string, PaymentAccount>
 ): RebateSummary {
     const { start, end, periodExpenses } = filterPeriodExpenses(
         account,
         expenseRows,
+        incomeRows,
         month,
-        fundedExpenseIds
+        fundedExpenseIds,
+        accountsByName
     );
 
     const totalSpend = periodExpenses.reduce((sum, e) => sum + parseAmount(e.amount), 0);
@@ -358,13 +402,31 @@ export function computeRebate(
     account: PaymentAccount,
     config: RebateConfig,
     expenseRows: ExpenseRow[],
+    incomeRows: IncomeRow[],
     month: string,
-    fundedExpenseIds: Set<number>
+    fundedExpenseIds: Set<number>,
+    accountsByName: Map<string, PaymentAccount>
 ): RebateSummary {
     if (isTieredRebateConfig(config)) {
-        return computeTieredRebate(account, config, expenseRows, month, fundedExpenseIds);
+        return computeTieredRebate(
+            account,
+            config,
+            expenseRows,
+            incomeRows,
+            month,
+            fundedExpenseIds,
+            accountsByName
+        );
     }
-    return computeSimpleRebate(account, config, expenseRows, month, fundedExpenseIds);
+    return computeSimpleRebate(
+        account,
+        config,
+        expenseRows,
+        incomeRows,
+        month,
+        fundedExpenseIds,
+        accountsByName
+    );
 }
 
 export async function computeAccountRebate(
@@ -380,10 +442,42 @@ export async function computeAccountRebate(
     const config = account.rebateConfig;
 
     const db = requireDb();
-    const expenseRows = await db.select().from(expenses);
-    const fundedExpenseIds = await getFundedExpenseIds();
+    const [expenseDbRows, incomeDbRows, accounts] = await Promise.all([
+        db.select().from(expenses),
+        db.select().from(incomes),
+        listActivePaymentAccounts(),
+    ]);
 
-    return computeRebate(account, config, expenseRows, resolvedMonth, fundedExpenseIds);
+    const expenseRows: ExpenseRow[] = expenseDbRows.map((row) => ({
+        id: row.id,
+        date: row.date,
+        amount: String(row.amount),
+        category: row.category,
+        description: row.description,
+        paymentMethod: row.paymentMethod,
+    }));
+    const incomeRows: IncomeRow[] = incomeDbRows.map((row) => ({
+        id: row.id,
+        date: row.date,
+        amount: String(row.amount),
+        category: row.category,
+        description: row.description,
+        paymentMethod: row.paymentMethod,
+        fromPaymentMethod: row.fromPaymentMethod,
+        expenseId: row.expenseId,
+    }));
+    const fundedExpenseIds = getFundedExpenseIds(incomeRows);
+    const accountsByName = new Map(accounts.map((a) => [a.name.toLowerCase(), a]));
+
+    return computeRebate(
+        account,
+        config,
+        expenseRows,
+        incomeRows,
+        resolvedMonth,
+        fundedExpenseIds,
+        accountsByName
+    );
 }
 
 export async function computeAndSyncRebate(
