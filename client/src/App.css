@@ -922,6 +922,27 @@
   grid-row: 5;
 }
 
+.fixed-expense-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.fixed-expense-filters select {
+  max-width: 180px;
+  min-width: 0;
+  padding: 6px 8px;
+  font-size: 0.85rem;
+  border-radius: 6px;
+  border: 1px solid #3c4043;
+  background: #202124;
+  color: #e8eaed;
+}
+
 .expenses-table-card h3 {
   margin: 0 0 12px;
   font-size: 0.95rem;

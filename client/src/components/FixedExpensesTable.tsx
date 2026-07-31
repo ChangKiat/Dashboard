@@ -38,14 +38,8 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
         [accounts]
     );
 
-    const sortedRows = useMemo(
-        () =>
-            [...rows].sort((a, b) =>
-                a.description.localeCompare(b.description, 'en-MY', { sensitivity: 'base' })
-            ),
-        [rows]
-    );
-    const { page, setPage, pageItems, totalPages, totalItems } = usePagination(sortedRows);
+    const [categoryFilter, setCategoryFilter] = useState('');
+    const [paymentFilter, setPaymentFilter] = useState('');
     const [modalMode, setModalMode] = useState<ModalMode>('closed');
     const [editingEntry, setEditingEntry] = useState<FixedExpenseConfig | null>(null);
     const [form, setForm] = useState({
@@ -60,6 +54,49 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
     const [saving, setSaving] = useState(false);
     const [modalError, setModalError] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
+
+    const categoryOptions = useMemo(
+        () =>
+            [...new Set(rows.map((r) => r.category))].sort((a, b) =>
+                a.localeCompare(b, 'en-MY', { sensitivity: 'base' })
+            ),
+        [rows]
+    );
+
+    const paymentOptions = useMemo(
+        () =>
+            [
+                ...new Set(
+                    rows
+                        .map((r) => r.paymentMethod)
+                        .filter((m): m is string => Boolean(m))
+                ),
+            ].sort((a, b) => a.localeCompare(b, 'en-MY', { sensitivity: 'base' })),
+        [rows]
+    );
+
+    const hasUnsetPaymentMethod = useMemo(
+        () => rows.some((r) => !r.paymentMethod),
+        [rows]
+    );
+
+    const filteredRows = useMemo(() => {
+        return rows.filter((r) => {
+            if (categoryFilter && r.category !== categoryFilter) return false;
+            if (paymentFilter === '__none__') return !r.paymentMethod;
+            if (paymentFilter && r.paymentMethod !== paymentFilter) return false;
+            return true;
+        });
+    }, [rows, categoryFilter, paymentFilter]);
+
+    const sortedRows = useMemo(
+        () =>
+            [...filteredRows].sort((a, b) =>
+                a.description.localeCompare(b.description, 'en-MY', { sensitivity: 'base' })
+            ),
+        [filteredRows]
+    );
+    const { page, setPage, pageItems, totalPages, totalItems } = usePagination(sortedRows);
 
     const showTransferDestination = requiresAccountTransfer(form.category);
     const investment = isInvestmentCategory(form.category);
@@ -185,6 +222,35 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
         <div className="expenses-table-card expenses-fixed-expenses">
             <div className="section-header-row">
                 <h3>Fixed Expenses</h3>
+                <div className="fixed-expense-filters">
+                    <select
+                        aria-label="Filter by category"
+                        value={categoryFilter}
+                        onChange={(e) => setCategoryFilter(e.target.value)}
+                    >
+                        <option value="">All categories</option>
+                        {categoryOptions.map((category) => (
+                            <option key={category} value={category}>
+                                {category}
+                            </option>
+                        ))}
+                    </select>
+                    <select
+                        aria-label="Filter by payment method"
+                        value={paymentFilter}
+                        onChange={(e) => setPaymentFilter(e.target.value)}
+                    >
+                        <option value="">All payment methods</option>
+                        {paymentOptions.map((method) => (
+                            <option key={method} value={method}>
+                                {method}
+                            </option>
+                        ))}
+                        {hasUnsetPaymentMethod && (
+                            <option value="__none__">No payment method</option>
+                        )}
+                    </select>
+                </div>
                 <button type="button" className="btn-add" onClick={openCreate}>
                     + Add
                 </button>
@@ -208,6 +274,12 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
                             <tr>
                                 <td colSpan={7} className="muted">
                                     No fixed expenses configured
+                                </td>
+                            </tr>
+                        ) : sortedRows.length === 0 ? (
+                            <tr>
+                                <td colSpan={7} className="muted">
+                                    No fixed expenses match these filters
                                 </td>
                             </tr>
                         ) : (
