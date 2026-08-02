@@ -2,6 +2,8 @@
 
 Charts for daily expenses, workouts, and meal macros. Reads data from your [AI Agent](../AI%20Agent) Supabase database via a local Express API.
 
+For a fuller product/architecture summary, see [docs/PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md).
+
 ## Setup
 
 1. Install dependencies:

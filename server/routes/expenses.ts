@@ -38,10 +38,70 @@ import {
 
 const router = Router();
 
-/** Investment and Other expenses create a linked from→to Account transfer. */
-function requiresAccountTransfer(category: string): boolean {
-    const c = category.trim().toLowerCase();
-    return c === 'investment' || c === 'other';
+/** Investment always requires from→to; Other may optionally create a linked transfer. */
+function isInvestmentCategory(category: string): boolean {
+    return category.trim().toLowerCase() === 'investment';
+}
+
+function isOtherCategory(category: string): boolean {
+    return category.trim().toLowerCase() === 'other';
+}
+
+/** To-only Other → treat destination as payment method (no transfer). */
+function normalizeOtherAccounts(
+    paymentMethod: string | null,
+    toInvestmentAccount: string | null
+): { paymentMethod: string | null; toInvestmentAccount: string | null } {
+    if (paymentMethod && toInvestmentAccount) {
+        return { paymentMethod, toInvestmentAccount };
+    }
+    if (paymentMethod) {
+        return { paymentMethod, toInvestmentAccount: null };
+    }
+    if (toInvestmentAccount) {
+        return { paymentMethod: toInvestmentAccount, toInvestmentAccount: null };
+    }
+    return { paymentMethod: null, toInvestmentAccount: null };
+}
+
+/** Validate from/to for Investment (required) or Other (optional pair). Returns error message or null. */
+function validateFundingAccounts(
+    category: string,
+    paymentMethod: string | null,
+    toInvestmentAccount: string | null,
+    kind: 'expense' | 'fixed' = 'expense'
+): string | null {
+    const label = kind === 'fixed' ? 'fixed expense' : 'expense';
+    if (isInvestmentCategory(category)) {
+        if (!paymentMethod) {
+            return `This ${label} requires a payment method (from account)`;
+        }
+        if (!toInvestmentAccount) {
+            return `This ${label} requires a destination investment account`;
+        }
+        if (paymentMethod === toInvestmentAccount) {
+            return 'From and to accounts must be different';
+        }
+        return null;
+    }
+    if (isOtherCategory(category)) {
+        if (paymentMethod && toInvestmentAccount && paymentMethod === toInvestmentAccount) {
+            return 'From and to accounts must be different';
+        }
+    }
+    return null;
+}
+
+function fundingDestination(
+    category: string,
+    paymentMethod: string | null,
+    toInvestmentAccount: string | null
+): string | null {
+    if (isInvestmentCategory(category)) return toInvestmentAccount;
+    if (isOtherCategory(category) && paymentMethod && toInvestmentAccount) {
+        return toInvestmentAccount;
+    }
+    return null;
 }
 
 function parseReimbursements(
@@ -236,28 +296,27 @@ router.post('/transactions', async (req, res) => {
             return res.status(400).json({ error: 'Invalid reimbursements' });
         }
 
-        const paymentMethod =
+        let paymentMethod =
             body.paymentMethod != null && isNonEmptyString(body.paymentMethod)
                 ? body.paymentMethod.trim()
                 : null;
 
         const category = body.category.trim();
-        const needsTransfer = requiresAccountTransfer(category);
-        const toInvestmentAccount =
+        let toInvestmentAccount =
             body.toInvestmentAccount != null && isNonEmptyString(body.toInvestmentAccount)
                 ? body.toInvestmentAccount.trim()
                 : null;
 
-        if (needsTransfer) {
-            if (!paymentMethod) {
-                return res.status(400).json({ error: 'This expense requires a payment method (from account)' });
-            }
-            if (!toInvestmentAccount) {
-                return res.status(400).json({ error: 'This expense requires a destination account' });
-            }
-            if (paymentMethod === toInvestmentAccount) {
-                return res.status(400).json({ error: 'From and to accounts must be different' });
-            }
+        if (isOtherCategory(category)) {
+            ({ paymentMethod, toInvestmentAccount } = normalizeOtherAccounts(
+                paymentMethod,
+                toInvestmentAccount
+            ));
+        }
+
+        const fundingError = validateFundingAccounts(category, paymentMethod, toInvestmentAccount);
+        if (fundingError) {
+            return res.status(400).json({ error: fundingError });
         }
 
         const expenseId = await appendExpense(
@@ -273,14 +332,15 @@ router.post('/transactions', async (req, res) => {
             await appendReimbursements(expenseId, reimbursements, body.date);
         }
 
-        if (needsTransfer && paymentMethod && toInvestmentAccount) {
+        const destination = fundingDestination(category, paymentMethod, toInvestmentAccount);
+        if (paymentMethod && destination) {
             await upsertInvestmentFundingTransfer({
                 expenseId,
                 date: body.date,
                 amount: body.amount,
                 description: body.description.trim(),
                 fromPaymentMethod: paymentMethod,
-                toInvestmentAccount,
+                toInvestmentAccount: destination,
             });
         }
 
@@ -320,31 +380,31 @@ router.post('/fixed', async (req, res) => {
             body.currency != null && isNonEmptyString(body.currency)
                 ? body.currency.trim()
                 : 'MYR';
-        const paymentMethod =
+        let paymentMethod =
             body.paymentMethod != null && isNonEmptyString(body.paymentMethod)
                 ? body.paymentMethod.trim()
                 : null;
         const category = body.category.trim();
-        const needsTransfer = requiresAccountTransfer(category);
-        const toInvestmentAccount =
+        let toInvestmentAccount =
             body.toInvestmentAccount != null && isNonEmptyString(body.toInvestmentAccount)
                 ? body.toInvestmentAccount.trim()
                 : null;
 
-        if (needsTransfer) {
-            if (!paymentMethod) {
-                return res.status(400).json({
-                    error: 'This fixed expense requires a payment method (from account)',
-                });
-            }
-            if (!toInvestmentAccount) {
-                return res.status(400).json({
-                    error: 'This fixed expense requires a destination account',
-                });
-            }
-            if (paymentMethod === toInvestmentAccount) {
-                return res.status(400).json({ error: 'From and to accounts must be different' });
-            }
+        if (isOtherCategory(category)) {
+            ({ paymentMethod, toInvestmentAccount } = normalizeOtherAccounts(
+                paymentMethod,
+                toInvestmentAccount
+            ));
+        }
+
+        const fundingError = validateFundingAccounts(
+            category,
+            paymentMethod,
+            toInvestmentAccount,
+            'fixed'
+        );
+        if (fundingError) {
+            return res.status(400).json({ error: fundingError });
         }
 
         await addFixedExpense(
@@ -356,7 +416,7 @@ router.post('/fixed', async (req, res) => {
             body.frequencyMonths,
             startMonth,
             paymentMethod,
-            needsTransfer ? toInvestmentAccount : null
+            fundingDestination(category, paymentMethod, toInvestmentAccount)
         );
         res.json({ ok: true });
     } catch (err) {
@@ -435,32 +495,67 @@ router.patch('/transactions/:id', async (req, res) => {
         if (!updated) return res.status(404).json({ error: 'Expense not found' });
 
         const category = updated.category;
-        const needsTransfer = requiresAccountTransfer(category);
         const paymentMethod = updated.paymentMethod;
         const amount = parseFloat(updated.amount);
+        const toInvestmentAccount =
+            body.toInvestmentAccount != null && isNonEmptyString(body.toInvestmentAccount)
+                ? body.toInvestmentAccount.trim()
+                : null;
 
-        if (needsTransfer) {
-            const toInvestmentAccount =
-                body.toInvestmentAccount != null && isNonEmptyString(body.toInvestmentAccount)
-                    ? body.toInvestmentAccount.trim()
-                    : null;
-            if (!paymentMethod) {
-                return res.status(400).json({ error: 'This expense requires a payment method (from account)' });
-            }
-            if (!toInvestmentAccount) {
-                return res.status(400).json({ error: 'This expense requires a destination account' });
-            }
-            if (paymentMethod === toInvestmentAccount) {
-                return res.status(400).json({ error: 'From and to accounts must be different' });
+        if (isInvestmentCategory(category)) {
+            const fundingError = validateFundingAccounts(
+                category,
+                paymentMethod,
+                toInvestmentAccount
+            );
+            if (fundingError) {
+                return res.status(400).json({ error: fundingError });
             }
             await upsertInvestmentFundingTransfer({
                 expenseId: id,
                 date: updated.date,
                 amount,
                 description: updated.description,
-                fromPaymentMethod: paymentMethod,
-                toInvestmentAccount,
+                fromPaymentMethod: paymentMethod!,
+                toInvestmentAccount: toInvestmentAccount!,
             });
+        } else if (isOtherCategory(category)) {
+            const rawTo =
+                body.toInvestmentAccount != null && isNonEmptyString(body.toInvestmentAccount)
+                    ? body.toInvestmentAccount.trim()
+                    : null;
+            const rawFrom =
+                body.paymentMethod !== undefined
+                    ? body.paymentMethod === null || body.paymentMethod === ''
+                        ? null
+                        : isNonEmptyString(body.paymentMethod)
+                          ? body.paymentMethod.trim()
+                          : paymentMethod
+                    : paymentMethod;
+            const normalized = normalizeOtherAccounts(rawFrom, rawTo);
+            const fundingError = validateFundingAccounts(
+                category,
+                normalized.paymentMethod,
+                normalized.toInvestmentAccount
+            );
+            if (fundingError) {
+                return res.status(400).json({ error: fundingError });
+            }
+            if (normalized.paymentMethod !== paymentMethod) {
+                await updateExpense(id, { paymentMethod: normalized.paymentMethod });
+            }
+            if (normalized.paymentMethod && normalized.toInvestmentAccount) {
+                await upsertInvestmentFundingTransfer({
+                    expenseId: id,
+                    date: updated.date,
+                    amount,
+                    description: updated.description,
+                    fromPaymentMethod: normalized.paymentMethod,
+                    toInvestmentAccount: normalized.toInvestmentAccount,
+                });
+            } else {
+                await deleteInvestmentFundingTransfer(id);
+            }
         } else if (body.category != null || body.toInvestmentAccount === null) {
             await deleteInvestmentFundingTransfer(id);
         }
@@ -558,31 +653,43 @@ router.patch('/fixed/:id', async (req, res) => {
         }
 
         const nextCategory = fields.category ?? existing?.category ?? '';
-        const needsTransfer = requiresAccountTransfer(nextCategory);
+        const paymentMethod =
+            fields.paymentMethod !== undefined
+                ? fields.paymentMethod
+                : (existing?.paymentMethod ?? null);
+        const toInvestmentAccount =
+            fields.toInvestmentAccount !== undefined
+                ? fields.toInvestmentAccount
+                : (existing?.toInvestmentAccount ?? null);
 
-        if (needsTransfer) {
-            const paymentMethod =
-                fields.paymentMethod !== undefined
-                    ? fields.paymentMethod
-                    : (existing?.paymentMethod ?? null);
-            const toInvestmentAccount =
-                fields.toInvestmentAccount !== undefined
-                    ? fields.toInvestmentAccount
-                    : (existing?.toInvestmentAccount ?? null);
-            if (!paymentMethod) {
-                return res.status(400).json({
-                    error: 'This fixed expense requires a payment method (from account)',
-                });
-            }
-            if (!toInvestmentAccount) {
-                return res.status(400).json({
-                    error: 'This fixed expense requires a destination account',
-                });
-            }
-            if (paymentMethod === toInvestmentAccount) {
-                return res.status(400).json({ error: 'From and to accounts must be different' });
+        if (isInvestmentCategory(nextCategory)) {
+            const fundingError = validateFundingAccounts(
+                nextCategory,
+                paymentMethod,
+                toInvestmentAccount,
+                'fixed'
+            );
+            if (fundingError) {
+                return res.status(400).json({ error: fundingError });
             }
             fields.toInvestmentAccount = toInvestmentAccount;
+        } else if (isOtherCategory(nextCategory)) {
+            const normalized = normalizeOtherAccounts(paymentMethod, toInvestmentAccount);
+            const fundingError = validateFundingAccounts(
+                nextCategory,
+                normalized.paymentMethod,
+                normalized.toInvestmentAccount,
+                'fixed'
+            );
+            if (fundingError) {
+                return res.status(400).json({ error: fundingError });
+            }
+            fields.paymentMethod = normalized.paymentMethod;
+            fields.toInvestmentAccount = fundingDestination(
+                nextCategory,
+                normalized.paymentMethod,
+                normalized.toInvestmentAccount
+            );
         } else if (fields.category != null) {
             fields.toInvestmentAccount = null;
         }

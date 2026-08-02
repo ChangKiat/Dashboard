@@ -4,7 +4,7 @@ import type { ExpenseTransaction } from '../api';
 import { createExpenseTransaction, deleteExpenseTransaction, updateExpenseTransaction } from '../api';
 import { usePagination } from '../hooks/usePagination';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
-import { isInvestmentCategory, requiresAccountTransfer } from '../utils/expenseCategories';
+import { isInvestmentCategory, isOtherCategory, requiresAccountTransfer, resolveOtherAccountFields } from '../utils/expenseCategories';
 import ExpenseCategorySelect from './ExpenseCategorySelect';
 import PaymentMethodSelect from './PaymentMethodSelect';
 import RecordModal from './RecordModal';
@@ -129,31 +129,39 @@ export default function ExpenseTransactionsTable({
             return;
         }
 
-        const paymentMethod = form.paymentMethod.trim() || null;
-        const toInvestmentAccount = form.toInvestmentAccount.trim() || null;
-        const needsTransfer = requiresAccountTransfer(form.category);
+        const rawFrom = form.paymentMethod.trim() || null;
+        const rawTo = form.toInvestmentAccount.trim() || null;
 
-        if (needsTransfer) {
+        let paymentMethod = rawFrom;
+        let toInvestmentAccount = rawTo;
+
+        if (investment) {
             if (!paymentMethod) {
                 setModalError('Select the account money is coming from.');
                 return;
             }
             if (!toInvestmentAccount) {
-                setModalError(
-                    investment
-                        ? 'Select the investment account to fund.'
-                        : 'Select the destination account.'
-                );
+                setModalError('Select the investment account to fund.');
                 return;
             }
             if (paymentMethod === toInvestmentAccount) {
                 setModalError('From and to accounts must be different.');
                 return;
             }
+        } else if (isOtherCategory(form.category)) {
+            if (rawFrom && rawTo && rawFrom === rawTo) {
+                setModalError('From and to accounts must be different.');
+                return;
+            }
+            const resolved = resolveOtherAccountFields(rawFrom, rawTo);
+            paymentMethod = resolved.paymentMethod;
+            toInvestmentAccount = resolved.toInvestmentAccount;
         }
 
+        const hasFundingTransfer = Boolean(paymentMethod && toInvestmentAccount);
+
         let reimbursementPayload: { source: string; amount: number }[] | undefined;
-        if (modalMode === 'create' && showReimbursements && !needsTransfer) {
+        if (modalMode === 'create' && showReimbursements && !showTransferDestination) {
             const parsed = parseReimbursements();
             if (parsed === 'invalid') {
                 setModalError('Each reimbursement needs a person name and positive amount.');
@@ -171,7 +179,7 @@ export default function ExpenseTransactionsTable({
                 amount,
                 description: form.description.trim(),
                 paymentMethod,
-                ...(needsTransfer ? { toInvestmentAccount } : { toInvestmentAccount: null }),
+                toInvestmentAccount: hasFundingTransfer ? toInvestmentAccount : null,
                 ...(reimbursementPayload ? { reimbursements: reimbursementPayload } : {}),
             };
             if (modalMode === 'create') {
@@ -183,7 +191,7 @@ export default function ExpenseTransactionsTable({
                     amount: payload.amount,
                     description: payload.description,
                     paymentMethod,
-                    toInvestmentAccount: needsTransfer ? toInvestmentAccount : null,
+                    toInvestmentAccount: hasFundingTransfer ? toInvestmentAccount : null,
                 });
             }
             closeModal();
@@ -272,7 +280,11 @@ export default function ExpenseTransactionsTable({
             </div>
             <div className="form-field">
                 <label htmlFor="tx-payment-method">
-                    {showTransferDestination ? 'From account' : 'Payment method'}
+                    {investment
+                        ? 'From account'
+                        : showTransferDestination
+                          ? 'From account (optional)'
+                          : 'Payment method'}
                 </label>
                 <PaymentMethodSelect
                     id="tx-payment-method"
@@ -307,7 +319,7 @@ export default function ExpenseTransactionsTable({
             )}
             {showTransferDestination && !investment && (
                 <div className="form-field">
-                    <label htmlFor="tx-to-account">To account</label>
+                    <label htmlFor="tx-to-account">To account (optional)</label>
                     <PaymentMethodSelect
                         id="tx-to-account"
                         value={form.toInvestmentAccount}

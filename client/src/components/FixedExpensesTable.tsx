@@ -4,7 +4,7 @@ import type { FixedExpenseConfig } from '../api';
 import { createFixedExpense, deleteFixedExpense, updateFixedExpense } from '../api';
 import { usePagination } from '../hooks/usePagination';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
-import { isInvestmentCategory, requiresAccountTransfer } from '../utils/expenseCategories';
+import { isInvestmentCategory, isOtherCategory, requiresAccountTransfer, resolveOtherAccountFields } from '../utils/expenseCategories';
 import ExpenseCategorySelect from './ExpenseCategorySelect';
 import PaymentMethodSelect from './PaymentMethodSelect';
 import RecordModal from './RecordModal';
@@ -156,28 +156,36 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
             return;
         }
 
-        const paymentMethod = form.paymentMethod.trim() || null;
-        const toInvestmentAccount = form.toInvestmentAccount.trim() || null;
-        const needsTransfer = requiresAccountTransfer(form.category);
+        const rawFrom = form.paymentMethod.trim() || null;
+        const rawTo = form.toInvestmentAccount.trim() || null;
 
-        if (needsTransfer) {
+        let paymentMethod = rawFrom;
+        let toInvestmentAccount = rawTo;
+
+        if (investment) {
             if (!paymentMethod) {
                 setModalError('Select the account money is coming from.');
                 return;
             }
             if (!toInvestmentAccount) {
-                setModalError(
-                    investment
-                        ? 'Select the investment account to fund.'
-                        : 'Select the destination account.'
-                );
+                setModalError('Select the investment account to fund.');
                 return;
             }
             if (paymentMethod === toInvestmentAccount) {
                 setModalError('From and to accounts must be different.');
                 return;
             }
+        } else if (isOtherCategory(form.category)) {
+            if (rawFrom && rawTo && rawFrom === rawTo) {
+                setModalError('From and to accounts must be different.');
+                return;
+            }
+            const resolved = resolveOtherAccountFields(rawFrom, rawTo);
+            paymentMethod = resolved.paymentMethod;
+            toInvestmentAccount = resolved.toInvestmentAccount;
         }
+
+        const hasFundingTransfer = Boolean(paymentMethod && toInvestmentAccount);
 
         setSaving(true);
         setModalError(null);
@@ -189,7 +197,7 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
                 dayOfMonth,
                 frequencyMonths,
                 paymentMethod,
-                toInvestmentAccount: needsTransfer ? toInvestmentAccount : null,
+                toInvestmentAccount: hasFundingTransfer ? toInvestmentAccount : null,
             };
             if (modalMode === 'create') {
                 await createFixedExpense({
@@ -352,7 +360,11 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
                 </div>
                 <div className="form-field">
                     <label htmlFor="fx-payment-method">
-                        {showTransferDestination ? 'From account' : 'Payment method'}
+                        {investment
+                            ? 'From account'
+                            : showTransferDestination
+                              ? 'From account (optional)'
+                              : 'Payment method'}
                     </label>
                     <PaymentMethodSelect
                         id="fx-payment-method"
@@ -387,7 +399,7 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
                 )}
                 {showTransferDestination && !investment && (
                     <div className="form-field">
-                        <label htmlFor="fx-to-account">To account</label>
+                        <label htmlFor="fx-to-account">To account (optional)</label>
                         <PaymentMethodSelect
                             id="fx-to-account"
                             value={form.toInvestmentAccount}
