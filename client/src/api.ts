@@ -49,6 +49,8 @@ export interface ExpenseReimbursement {
     amount: number;
 }
 
+export type TripLeg = 'exchange' | 'fund' | 'card';
+
 export interface ExpenseTransaction {
     id: number;
     date: string;
@@ -62,6 +64,45 @@ export interface ExpenseTransaction {
     reimbursed?: number;
     netAmount?: number;
     reimbursements?: ExpenseReimbursement[];
+    tripId?: number | null;
+    tripLeg?: TripLeg | null;
+    fxAmount?: number | null;
+    fxCurrency?: string | null;
+    fxRate?: number | null;
+}
+
+export interface Trip {
+    id: number;
+    name: string;
+    startDate: string | null;
+    endDate: string | null;
+    tripCurrency: string;
+    notes: string | null;
+}
+
+export interface TripExpense {
+    id: number;
+    date: string;
+    amount: number;
+    category: string;
+    description: string;
+    paymentMethod: string | null;
+    tripLeg: TripLeg | null;
+    fxAmount: number | null;
+    fxCurrency: string | null;
+    fxRate: number | null;
+}
+
+export interface TripSummary {
+    trip: Trip;
+    exchangedMyr: number;
+    fundReceived: number;
+    fundSpent: number;
+    fundRemaining: number;
+    cardMyr: number;
+    tripTotalMyr: number;
+    latestExchangeRate: number | null;
+    expenses: TripExpense[];
 }
 
 export interface ExpenseTransactionsResponse {
@@ -403,10 +444,16 @@ export function fetchFixedExpenses() {
 }
 
 export function createExpenseTransaction(
-    fields: Pick<ExpenseTransaction, 'date' | 'amount' | 'category' | 'description'> & {
+    fields: Pick<ExpenseTransaction, 'date' | 'category' | 'description'> & {
+        amount?: number;
         paymentMethod?: string | null;
         toInvestmentAccount?: string | null;
         reimbursements?: { source: string; amount: number }[];
+        tripId?: number;
+        tripLeg?: TripLeg;
+        fxAmount?: number;
+        fxCurrency?: string;
+        fxRate?: number;
     }
 ) {
     return fetchJson<{ ok: true; id: number }>('/api/expenses/transactions', {
@@ -669,6 +716,26 @@ export function deleteWorkoutSession(sessionId: string) {
     });
 }
 
+export interface NutritionSettings {
+    dailyCalorieTarget: number;
+    dailyProteinTargetG: number;
+    dailyCarbsTargetG: number;
+    dailyFatTargetG: number;
+    bodyWeightKg: number | null;
+}
+
+export function fetchNutritionSettings() {
+    return fetchJson<NutritionSettings>('/api/nutrition/settings');
+}
+
+export function updateNutritionSettings(fields: Partial<NutritionSettings>) {
+    return fetchJson<{ ok: true } & NutritionSettings>('/api/nutrition/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+    });
+}
+
 export function fetchNutritionDaily(range: DateRange) {
     return fetchJson<NutritionDailyResponse>(`/api/nutrition/daily?${qs(range)}`);
 }
@@ -712,4 +779,47 @@ export type SyncScope = 'expenses' | 'health';
 
 export function fetchSyncStatus(month: string, scope: SyncScope) {
     return fetchJson<{ fingerprint: string }>(`/api/sync-status?month=${month}&scope=${scope}`);
+}
+
+export function fetchTrips() {
+    return fetchJson<{ entries: Trip[] }>('/api/trips');
+}
+
+export function createTrip(fields: {
+    name: string;
+    tripCurrency: string;
+    startDate?: string | null;
+    endDate?: string | null;
+    notes?: string | null;
+}) {
+    return fetchJson<{ ok: true; trip: Trip }>('/api/trips', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+    });
+}
+
+export function updateTrip(
+    id: number,
+    fields: Partial<{
+        name: string;
+        tripCurrency: string;
+        startDate: string | null;
+        endDate: string | null;
+        notes: string | null;
+    }>
+) {
+    return fetchJson<{ ok: true; trip: Trip }>(`/api/trips/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+    });
+}
+
+export function deleteTrip(id: number) {
+    return fetchJson<{ ok: true }>(`/api/trips/${id}`, { method: 'DELETE' });
+}
+
+export function fetchTripSummary(id: number) {
+    return fetchJson<TripSummary>(`/api/trips/${id}/summary`);
 }

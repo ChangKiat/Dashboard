@@ -11,7 +11,12 @@ import {
     getSpendingSummary,
     updateExpense,
     updateFixedExpenseById,
+    type TripLeg,
 } from '../../../AI Agent/src/services/expenseService';
+import {
+    getLatestExchangeRate,
+    getTripById,
+} from '../../../AI Agent/src/services/tripService';
 import {
     appendReimbursements,
     deleteInvestmentFundingTransfer,
@@ -102,6 +107,118 @@ function fundingDestination(
         return toInvestmentAccount;
     }
     return null;
+}
+
+const TRIP_LEGS = new Set(['exchange', 'fund', 'card']);
+
+function parseTripLeg(value: unknown): TripLeg | null | 'invalid' {
+    if (value == null || value === '') return null;
+    if (typeof value !== 'string' || !TRIP_LEGS.has(value)) return 'invalid';
+    return value as TripLeg;
+}
+
+function roundMoney(n: number): number {
+    return Math.round(n * 100) / 100;
+}
+
+/** Resolve MYR amount + FX fields for trip legs. Returns error string or payload. */
+async function resolveTripExpenseFields(body: Record<string, unknown>): Promise<
+    | { error: string }
+    | {
+          amount: number;
+          paymentMethod: string | null;
+          tripId: number;
+          tripLeg: TripLeg;
+          fxAmount: number;
+          fxCurrency: string;
+          fxRate: number;
+      }
+> {
+    const tripLeg = parseTripLeg(body.tripLeg);
+    if (tripLeg === 'invalid') return { error: 'Invalid trip leg' };
+    if (!tripLeg) return { error: 'tripLeg is required for trip expenses' };
+
+    const tripId =
+        typeof body.tripId === 'number' && Number.isInteger(body.tripId) && body.tripId > 0
+            ? body.tripId
+            : null;
+    if (!tripId) return { error: 'Invalid tripId' };
+
+    const trip = await getTripById(tripId);
+    if (!trip) return { error: 'Trip not found' };
+
+    if (!isPositiveNumber(body.fxAmount)) {
+        return { error: 'Foreign amount must be a positive number' };
+    }
+    const fxAmount = body.fxAmount;
+    const fxCurrency = isNonEmptyString(body.fxCurrency)
+        ? body.fxCurrency.trim().toUpperCase()
+        : trip.tripCurrency;
+
+    if (tripLeg === 'exchange') {
+        if (!isPositiveNumber(body.amount)) {
+            return { error: 'MYR amount must be a positive number' };
+        }
+        if (!isNonEmptyString(body.paymentMethod)) {
+            return { error: 'Exchange requires a payment method (bank/cash)' };
+        }
+        const amount = body.amount;
+        const fxRate =
+            isPositiveNumber(body.fxRate) ? body.fxRate : roundMoney(amount / fxAmount);
+        return {
+            amount,
+            paymentMethod: body.paymentMethod.trim(),
+            tripId,
+            tripLeg,
+            fxAmount,
+            fxCurrency,
+            fxRate,
+        };
+    }
+
+    if (tripLeg === 'fund') {
+        const rate =
+            isPositiveNumber(body.fxRate)
+                ? body.fxRate
+                : await getLatestExchangeRate(tripId);
+        if (rate == null || !(rate > 0)) {
+            return { error: 'No exchange rate on this trip yet — add an exchange first' };
+        }
+        return {
+            amount: roundMoney(fxAmount * rate),
+            paymentMethod: null,
+            tripId,
+            tripLeg,
+            fxAmount,
+            fxCurrency,
+            fxRate: rate,
+        };
+    }
+
+    // card
+    if (!isNonEmptyString(body.paymentMethod)) {
+        return { error: 'Card spend requires a credit payment method' };
+    }
+    let amount: number;
+    let fxRate: number;
+    if (isPositiveNumber(body.amount)) {
+        amount = body.amount;
+        fxRate = isPositiveNumber(body.fxRate) ? body.fxRate : roundMoney(amount / fxAmount);
+    } else if (isPositiveNumber(body.fxRate)) {
+        fxRate = body.fxRate;
+        amount = roundMoney(fxAmount * fxRate);
+    } else {
+        return { error: 'Card spend requires MYR amount or FX rate' };
+    }
+    return {
+        amount,
+        paymentMethod: body.paymentMethod.trim(),
+        tripId,
+        tripLeg,
+        fxAmount,
+        fxCurrency,
+        fxRate,
+    };
 }
 
 function parseReimbursements(
@@ -277,29 +394,64 @@ router.post('/transactions', async (req, res) => {
     try {
         const body = req.body ?? {};
         if (!isValidDate(body.date)) return res.status(400).json({ error: 'Invalid date' });
-        if (!isPositiveNumber(body.amount)) {
-            return res.status(400).json({ error: 'Amount must be a positive number' });
-        }
         if (!isNonEmptyString(body.category)) {
             return res.status(400).json({ error: 'Invalid category' });
         }
         if (!isNonEmptyString(body.description)) {
             return res.status(400).json({ error: 'Invalid description' });
         }
-        const currency =
-            body.currency != null && isNonEmptyString(body.currency)
-                ? body.currency.trim()
-                : 'MYR';
+
+        const tripLegHint = parseTripLeg(body.tripLeg);
+        if (tripLegHint === 'invalid') {
+            return res.status(400).json({ error: 'Invalid trip leg' });
+        }
+
+        let amount: number;
+        let paymentMethod: string | null;
+        let currency = 'MYR';
+        let tripFields:
+            | {
+                  tripId: number;
+                  tripLeg: TripLeg;
+                  fxAmount: number;
+                  fxCurrency: string;
+                  fxRate: number;
+              }
+            | undefined;
+
+        if (tripLegHint) {
+            const resolved = await resolveTripExpenseFields(body);
+            if ('error' in resolved) {
+                return res.status(400).json({ error: resolved.error });
+            }
+            amount = resolved.amount;
+            paymentMethod = resolved.paymentMethod;
+            tripFields = {
+                tripId: resolved.tripId,
+                tripLeg: resolved.tripLeg,
+                fxAmount: resolved.fxAmount,
+                fxCurrency: resolved.fxCurrency,
+                fxRate: resolved.fxRate,
+            };
+        } else {
+            if (!isPositiveNumber(body.amount)) {
+                return res.status(400).json({ error: 'Amount must be a positive number' });
+            }
+            amount = body.amount;
+            currency =
+                body.currency != null && isNonEmptyString(body.currency)
+                    ? body.currency.trim()
+                    : 'MYR';
+            paymentMethod =
+                body.paymentMethod != null && isNonEmptyString(body.paymentMethod)
+                    ? body.paymentMethod.trim()
+                    : null;
+        }
 
         const reimbursements = parseReimbursements(body.reimbursements);
         if (reimbursements === 'invalid') {
             return res.status(400).json({ error: 'Invalid reimbursements' });
         }
-
-        let paymentMethod =
-            body.paymentMethod != null && isNonEmptyString(body.paymentMethod)
-                ? body.paymentMethod.trim()
-                : null;
 
         const category = body.category.trim();
         let toInvestmentAccount =
@@ -307,41 +459,50 @@ router.post('/transactions', async (req, res) => {
                 ? body.toInvestmentAccount.trim()
                 : null;
 
-        if (isOtherCategory(category)) {
+        if (!tripLegHint && isOtherCategory(category)) {
             ({ paymentMethod, toInvestmentAccount } = normalizeOtherAccounts(
                 paymentMethod,
                 toInvestmentAccount
             ));
         }
 
-        const fundingError = validateFundingAccounts(category, paymentMethod, toInvestmentAccount);
-        if (fundingError) {
-            return res.status(400).json({ error: fundingError });
+        if (!tripLegHint) {
+            const fundingError = validateFundingAccounts(
+                category,
+                paymentMethod,
+                toInvestmentAccount
+            );
+            if (fundingError) {
+                return res.status(400).json({ error: fundingError });
+            }
         }
 
         const expenseId = await appendExpense(
             body.date,
-            body.amount,
+            amount,
             currency,
             category,
             body.description.trim(),
-            paymentMethod
+            paymentMethod,
+            tripFields
         );
 
         if (reimbursements?.length) {
             await appendReimbursements(expenseId, reimbursements, body.date);
         }
 
-        const destination = fundingDestination(category, paymentMethod, toInvestmentAccount);
-        if (paymentMethod && destination) {
-            await upsertInvestmentFundingTransfer({
-                expenseId,
-                date: body.date,
-                amount: body.amount,
-                description: body.description.trim(),
-                fromPaymentMethod: paymentMethod,
-                toInvestmentAccount: destination,
-            });
+        if (!tripLegHint) {
+            const destination = fundingDestination(category, paymentMethod, toInvestmentAccount);
+            if (paymentMethod && destination) {
+                await upsertInvestmentFundingTransfer({
+                    expenseId,
+                    date: body.date,
+                    amount,
+                    description: body.description.trim(),
+                    fromPaymentMethod: paymentMethod,
+                    toInvestmentAccount: destination,
+                });
+            }
         }
 
         res.json({ ok: true, id: expenseId });

@@ -13,6 +13,7 @@ import paymentAccountsRouter from './routes/paymentAccounts';
 import workoutsRouter from './routes/workouts';
 import nutritionRouter from './routes/nutrition';
 import syncRouter from './routes/sync';
+import tripsRouter from './routes/trips';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -36,6 +37,7 @@ app.use('/api/payment-accounts', paymentAccountsRouter);
 app.use('/api/workouts', workoutsRouter);
 app.use('/api/nutrition', nutritionRouter);
 app.use('/api/sync-status', syncRouter);
+app.use('/api/trips', tripsRouter);
 
 Promise.all([loadExpenseCategories(), loadPaymentAccounts()])
     .then(() => {

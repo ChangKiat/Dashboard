@@ -31,7 +31,9 @@ export default function VariableExpensesTable({ rows, transactions, formatAmount
 
     const selectedTransactions = useMemo(() => {
         if (!selectedCategory) return [];
-        return transactions.filter((t) => t.category === selectedCategory);
+        return transactions.filter(
+            (t) => t.category === selectedCategory && t.tripLeg !== 'fund'
+        );
     }, [transactions, selectedCategory]);
 
     const summary = useMemo(() => {

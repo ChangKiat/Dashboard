@@ -3,18 +3,108 @@ import {
     deleteMeal,
     getMealHistory,
     getNutritionSummary,
+    getOrCreateUserSettings,
     logMeal,
     updateMeal,
+    updateNutritionTargets,
 } from '../../../AI Agent/src/services/nutritionService';
 import { enumerateDates, parseDateRange } from '../dateUtils';
 import {
     isNonEmptyString,
+    isPositiveNumber,
     isValidDate,
     parseIdParam,
 } from '../validation';
 import { getTelegramUserId } from '../telegramUser';
 
 const router = Router();
+
+router.get('/settings', async (_req, res) => {
+    try {
+        const userId = getTelegramUserId();
+        const settings = await getOrCreateUserSettings(userId);
+        res.json({
+            dailyCalorieTarget: settings.dailyCalorieTarget,
+            dailyProteinTargetG: settings.dailyProteinTargetG,
+            dailyCarbsTargetG: settings.dailyCarbsTargetG,
+            dailyFatTargetG: settings.dailyFatTargetG,
+            bodyWeightKg: settings.bodyWeightKg,
+        });
+    } catch (err) {
+        console.error('GET /api/nutrition/settings', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+    }
+});
+
+router.patch('/settings', async (req, res) => {
+    try {
+        const userId = getTelegramUserId();
+        const body = req.body as {
+            dailyCalorieTarget?: number;
+            dailyProteinTargetG?: number;
+            dailyCarbsTargetG?: number;
+            dailyFatTargetG?: number;
+            bodyWeightKg?: number | null;
+        };
+
+        const targets: Parameters<typeof updateNutritionTargets>[1] = {};
+
+        if (body.dailyCalorieTarget !== undefined) {
+            if (!isPositiveNumber(body.dailyCalorieTarget)) {
+                res.status(400).json({ error: 'dailyCalorieTarget must be a positive number' });
+                return;
+            }
+            targets.dailyCalorieTarget = body.dailyCalorieTarget;
+        }
+        if (body.dailyProteinTargetG !== undefined) {
+            if (!isPositiveNumber(body.dailyProteinTargetG)) {
+                res.status(400).json({ error: 'dailyProteinTargetG must be a positive number' });
+                return;
+            }
+            targets.dailyProteinTargetG = body.dailyProteinTargetG;
+        }
+        if (body.dailyCarbsTargetG !== undefined) {
+            if (!isPositiveNumber(body.dailyCarbsTargetG)) {
+                res.status(400).json({ error: 'dailyCarbsTargetG must be a positive number' });
+                return;
+            }
+            targets.dailyCarbsTargetG = body.dailyCarbsTargetG;
+        }
+        if (body.dailyFatTargetG !== undefined) {
+            if (!isPositiveNumber(body.dailyFatTargetG)) {
+                res.status(400).json({ error: 'dailyFatTargetG must be a positive number' });
+                return;
+            }
+            targets.dailyFatTargetG = body.dailyFatTargetG;
+        }
+        if (body.bodyWeightKg !== undefined) {
+            if (body.bodyWeightKg !== null && !isPositiveNumber(body.bodyWeightKg)) {
+                res.status(400).json({ error: 'bodyWeightKg must be a positive number or null' });
+                return;
+            }
+            targets.bodyWeightKg = body.bodyWeightKg;
+        }
+
+        if (Object.keys(targets).length === 0) {
+            res.status(400).json({ error: 'No settings fields provided' });
+            return;
+        }
+
+        await updateNutritionTargets(userId, targets);
+        const settings = await getOrCreateUserSettings(userId);
+        res.json({
+            ok: true,
+            dailyCalorieTarget: settings.dailyCalorieTarget,
+            dailyProteinTargetG: settings.dailyProteinTargetG,
+            dailyCarbsTargetG: settings.dailyCarbsTargetG,
+            dailyFatTargetG: settings.dailyFatTargetG,
+            bodyWeightKg: settings.bodyWeightKg,
+        });
+    } catch (err) {
+        console.error('PATCH /api/nutrition/settings', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+    }
+});
 
 router.get('/daily', async (req, res) => {
     try {

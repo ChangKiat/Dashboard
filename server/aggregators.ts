@@ -17,6 +17,11 @@ export type ExpenseTransactionRow = {
     category: string;
     description: string;
     paymentMethod?: string | null;
+    tripId?: number | null;
+    tripLeg?: string | null;
+    fxAmount?: string | null;
+    fxCurrency?: string | null;
+    fxRate?: string | null;
 };
 
 export function formatExpenseTransactions(rows: ExpenseTransactionRow[]) {
@@ -62,6 +67,11 @@ export function enrichExpenseTransactions(
             paymentMethod: row.paymentMethod ?? null,
             toInvestmentAccount: fundingToByExpenseId?.get(row.id) ?? null,
             reimbursements,
+            tripId: row.tripId ?? null,
+            tripLeg: row.tripLeg ?? null,
+            fxAmount: row.fxAmount != null ? parseFloat(row.fxAmount) : null,
+            fxCurrency: row.fxCurrency ?? null,
+            fxRate: row.fxRate != null ? parseFloat(row.fxRate) : null,
         };
     });
 }
@@ -130,12 +140,13 @@ export function groupIncomesByDate(
 }
 
 export function groupExpensesByDateNet(
-    rows: { date: string; amount: string; category: string; id: number }[],
+    rows: { date: string; amount: string; category: string; id: number; tripLeg?: string | null }[],
     reimbursedByExpenseId: Map<number, number>
 ) {
     const byDate: Record<string, { total: number; byCategory: Record<string, number> }> = {};
 
     for (const row of rows) {
+        if (row.tripLeg === 'fund') continue;
         if (!byDate[row.date]) {
             byDate[row.date] = { total: 0, byCategory: {} };
         }

@@ -28,14 +28,13 @@ flowchart LR
 
 ## Tabs and features
 
-Global **month picker** drives Expenses and Income. Health uses date ranges / calendars as needed.
+Global **month picker** drives Expenses, Income, and Setup. Health uses date ranges / calendars as needed.
 
 ### Expenses
 
 - Summary cards (salary, amount can use, fixed total, budget, actual spend).
 - Variable category budgets with status (ok / near / over).
 - Spending calendar and day panel: expense + income CRUD for that day.
-- Fixed / recurring expenses with **category** and **payment method** filters.
 - Shared-bill **reimbursements** on create (linked `Transfer` income; reduces net spend).
 - **Investment** and **Other** expenses support **From → To** accounts and create a linked `Account transfer` income so balances move without double-debiting.
 
@@ -43,9 +42,7 @@ Global **month picker** drives Expenses and Income. Health uses date ranges / ca
 
 - Income calendar, daily series, and transaction CRUD.
 - Categories include Claim, Transfer, Salary, Account transfer, Cashback, Other.
-- **Payment accounts** panel: `account` (debit), `credit`, `investment`.
-- Credit cards: limit, statement day, rebate/cashback rules (including description mappings and catch-all), activity modal by statement period.
-- **Settle** on a credit card: pay from a debit account via `Account transfer` (reduces `amountOwed`). Activity labels those as **Settlement**.
+- Per-account **balances** (debit / credit available / investment); click an account for activity, cashback, and settle.
 
 ### Health
 
@@ -53,6 +50,12 @@ Global **month picker** drives Expenses and Income. Health uses date ranges / ca
 - Workout analytics: volume, top exercises, weight trend, personal records.
 - Nutrition: daily macros vs targets (`bodyWeightKg` and targets from `user_settings`).
 - Optional workout fields from the bot: `caloriesBurned`, `fatBurnG`.
+
+### Setup
+
+- Fixed / recurring expenses with **category** and **payment method** filters.
+- **Payment accounts** management: add / edit / delete `account` (debit), `credit`, `investment` (limits, statement day, rebate rules).
+- Meal goals: daily calorie / protein / carbs / fat targets and body weight (`user_settings`).
 
 ## Tech stack
 

@@ -185,7 +185,12 @@ export default function IncomeSection({ month }: Props) {
                     </div>
                 </div>
 
-                <PaymentAccountsPanel month={month} formatAmount={formatMYR} onChanged={handleChanged} />
+                <PaymentAccountsPanel
+                    mode="balances"
+                    month={month}
+                    formatAmount={formatMYR}
+                    onChanged={handleChanged}
+                />
             </div>
         </section>
     );

@@ -9,6 +9,7 @@ export type ExpenseRow = {
     category: string;
     description: string;
     paymentMethod?: string | null;
+    tripLeg?: string | null;
 };
 
 export type IncomeRow = {
@@ -102,6 +103,7 @@ export function computeAccountBalances(
 
     for (const expense of expenses) {
         if (fundedExpenseIds.has(expense.id)) continue;
+        if (expense.tripLeg === 'fund') continue;
         const account = getAccountByStoredName(expense.paymentMethod);
         if (!account) continue;
         if (!isOnOrAfterBaseline(expense.date, account)) continue;
@@ -192,6 +194,7 @@ export function buildAccountActivity(
 
     for (const expense of expenses) {
         if (fundedExpenseIds.has(expense.id)) continue;
+        if (expense.tripLeg === 'fund') continue;
         if (!matchesAccount(expense.paymentMethod, account.name)) continue;
         pushEntry({
             id: expense.id,

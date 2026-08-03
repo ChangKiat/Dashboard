@@ -65,6 +65,8 @@ Open [http://localhost:5173](http://localhost:5173)
 | `PATCH /api/workouts/:id`                  | Update a workout entry (including session fields) |
 | `DELETE /api/workouts/:id`                 | Delete a workout entry                              |
 | `GET /api/nutrition/daily?start=&end=`     | Daily macros vs targets                             |
+| `GET /api/nutrition/settings`              | Nutrition targets + body weight                     |
+| `PATCH /api/nutrition/settings`            | Update nutrition targets / body weight              |
 | `GET /api/nutrition/meals?start=&end=`     | Meal log for date range                             |
 | `POST /api/nutrition/meals`                | Create a meal entry                                 |
 | `PATCH /api/nutrition/meals/:id`           | Update a meal entry                                 |

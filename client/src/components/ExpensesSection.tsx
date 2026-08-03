@@ -4,13 +4,11 @@ import type {
     ExpenseDailyPoint,
     ExpenseOverviewResponse,
     ExpenseTransaction,
-    FixedExpenseConfig,
 } from '../api';
 import {
     fetchExpenseDaily,
     fetchExpenseOverview,
     fetchExpenseTransactions,
-    fetchFixedExpenses,
     fetchSyncStatus,
 } from '../api';
 import { useSmartRefresh } from '../hooks/useSmartRefresh';
@@ -20,8 +18,8 @@ import { getBudgetStatus } from '../utils/budgetStatus';
 
 import ExpenseCalendar from './ExpenseCalendar';
 import ExpenseDayDetailPanel from './ExpenseDayDetailPanel';
-import FixedExpensesTable from './FixedExpensesTable';
 import SummaryCard from './SummaryCard';
+import TripsPanel from './TripsPanel';
 import VariableExpensesTable from './VariableExpensesTable';
 
 interface Props {
@@ -39,21 +37,18 @@ export default function ExpensesSection({ month }: Props) {
     const [selectedDate, setSelectedDate] = useState<string>('');
     const [data, setData] = useState<ExpenseOverviewResponse | null>(null);
     const [transactions, setTransactions] = useState<ExpenseTransaction[]>([]);
-    const [fixedConfigs, setFixedConfigs] = useState<FixedExpenseConfig[]>([]);
     const [dailySeries, setDailySeries] = useState<ExpenseDailyPoint[]>([]);
     const fingerprintRef = useRef<string | null>(null);
 
     const loadData = useCallback(async (options?: { silent?: boolean }) => {
         const range = monthToDateRange(month);
-        const [overviewRes, transactionsRes, fixedRes, dailyRes] = await Promise.all([
+        const [overviewRes, transactionsRes, dailyRes] = await Promise.all([
             fetchExpenseOverview(month),
             fetchExpenseTransactions(month),
-            fetchFixedExpenses(),
             fetchExpenseDaily(range),
         ]);
         setData(overviewRes);
         setTransactions(transactionsRes.entries);
-        setFixedConfigs(fixedRes.entries);
         setDailySeries(dailyRes.series);
 
         if (!options?.silent) {
@@ -125,7 +120,7 @@ export default function ExpensesSection({ month }: Props) {
     );
 
     const dayTransactions = useMemo(
-        () => transactions.filter((t) => t.date === selectedDate),
+        () => transactions.filter((t) => t.date === selectedDate && t.tripLeg !== 'fund'),
         [transactions, selectedDate]
     );
 
@@ -160,6 +155,12 @@ export default function ExpensesSection({ month }: Props) {
 
                 <VariableExpensesTable rows={data.variable} transactions={transactions} formatAmount={formatMYR} />
 
+                <TripsPanel
+                    variableCategories={variableCategories}
+                    formatAmount={formatMYR}
+                    onChanged={handleChanged}
+                />
+
                 <div className="expenses-calendar">
                     <ExpenseCalendar
                         month={month}
@@ -182,13 +183,6 @@ export default function ExpensesSection({ month }: Props) {
                         />
                     </div>
                 )}
-
-                <FixedExpensesTable
-                    rows={fixedConfigs}
-                    variableCategories={variableCategories}
-                    formatAmount={formatMYR}
-                    onChanged={handleChanged}
-                />
             </div>
         </section>
     );

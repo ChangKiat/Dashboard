@@ -5,6 +5,7 @@ import HealthSection from './components/HealthSection';
 import IncomeSection from './components/IncomeSection';
 import MonthPicker from './components/MonthPicker';
 import SectionTabs from './components/SectionTabs';
+import SetupSection from './components/SetupSection';
 import { PaymentAccountsProvider } from './hooks/usePaymentAccounts';
 import { useMonth } from './hooks/useMonth';
 import { TAB_SUBTITLES, useSectionTab } from './hooks/useSectionTab';
@@ -50,6 +51,7 @@ export default function App() {
                     {activeTab === 'expenses' && <ExpensesSection month={month} />}
                     {activeTab === 'income' && <IncomeSection month={month} />}
                     {activeTab === 'health' && <HealthSection month={month} />}
+                    {activeTab === 'setup' && <SetupSection month={month} />}
                 </main>
             </div>
         </PaymentAccountsProvider>
