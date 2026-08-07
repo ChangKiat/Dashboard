@@ -16,6 +16,7 @@ import {
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
 import AccountActivityModal from './AccountActivityModal';
 import CreditAccountForm, { type CreditSettingsTab } from './CreditAccountForm';
+import PortfolioModal from './PortfolioModal';
 import RecordModal from './RecordModal';
 import RowActions from './RowActions';
 
@@ -72,6 +73,31 @@ function AccountBalanceStats({
                 >
                     Avail {formatAmount(account.availableCredit ?? 0)}
                 </span>
+            </div>
+        );
+    }
+    if (account.accountType === 'investment') {
+        const cash = account.balance ?? 0;
+        const nav = account.nav ?? cash + (account.holdingsMarketValue ?? 0);
+        const hasHoldings = (account.holdingsMarketValue ?? 0) > 0;
+        return (
+            <div className="payment-account-stats">
+                <span
+                    className={`payment-account-stat payment-account-balance ${
+                        cash < 0 ? 'negative' : 'positive'
+                    }`}
+                >
+                    Cash {formatAmount(cash)}
+                </span>
+                {hasHoldings && (
+                    <span
+                        className={`payment-account-stat payment-account-balance ${
+                            nav < 0 ? 'negative' : 'positive'
+                        }`}
+                    >
+                        NAV {formatAmount(nav)}
+                    </span>
+                )}
             </div>
         );
     }
@@ -172,6 +198,7 @@ export default function PaymentAccountsPanel({
     const { accounts, refresh } = usePaymentAccounts();
     const [modalMode, setModalMode] = useState<ModalMode>('closed');
     const [viewingAccount, setViewingAccount] = useState<PaymentAccount | null>(null);
+    const [portfolioAccount, setPortfolioAccount] = useState<PaymentAccount | null>(null);
     const [editingEntry, setEditingEntry] = useState<PaymentAccount | null>(null);
     const [form, setForm] = useState({
         name: '',
@@ -401,7 +428,7 @@ export default function PaymentAccountsPanel({
                     onAdd={openCreate}
                     onEdit={openEdit}
                     onDelete={handleDelete}
-                    onView={setViewingAccount}
+                    onView={(account) => setPortfolioAccount(account)}
                 />
             </div>
             {mode === 'manage' && (
@@ -484,12 +511,24 @@ export default function PaymentAccountsPanel({
                 </RecordModal>
             )}
             {mode === 'balances' && month && (
-                <AccountActivityModal
-                    account={viewingAccount}
-                    month={month}
-                    formatAmount={formatAmount}
-                    onClose={() => setViewingAccount(null)}
-                />
+                <>
+                    <PortfolioModal
+                        account={portfolioAccount}
+                        formatAmount={formatAmount}
+                        onClose={() => setPortfolioAccount(null)}
+                        onChanged={handleChanged}
+                        onOpenCashActivity={(acc) => {
+                            setPortfolioAccount(null);
+                            setViewingAccount(acc);
+                        }}
+                    />
+                    <AccountActivityModal
+                        account={viewingAccount}
+                        month={month}
+                        formatAmount={formatAmount}
+                        onClose={() => setViewingAccount(null)}
+                    />
+                </>
             )}
         </div>
     );

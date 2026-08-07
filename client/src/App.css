@@ -1631,6 +1631,58 @@ div.payment-account-card-main:hover {
   overflow: hidden;
 }
 
+.portfolio-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.portfolio-summary-chips {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.portfolio-holdings-table {
+  width: 100%;
+}
+
+.portfolio-instrument-name {
+  font-weight: 600;
+}
+
+.portfolio-instrument-meta {
+  font-size: 0.85em;
+  margin-top: 2px;
+}
+
+.portfolio-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  justify-content: flex-end;
+}
+
+.portfolio-events-heading {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.btn-link.danger {
+  color: #e57373;
+}
+
+.form-field-checkbox label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 400;
+}
+
+.record-modal.portfolio-form-modal {
+  z-index: 30;
+}
+
 .record-modal.workout-record-modal,
 .detail-modal.workout-session-modal {
   max-width: min(720px, 96vw);

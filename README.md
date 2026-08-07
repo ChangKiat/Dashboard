@@ -71,9 +71,21 @@ Open [http://localhost:5173](http://localhost:5173)
 | `POST /api/nutrition/meals`                | Create a meal entry                                 |
 | `PATCH /api/nutrition/meals/:id`           | Update a meal entry                                 |
 | `DELETE /api/nutrition/meals/:id`          | Delete a meal entry                                 |
+| `GET /api/investments/accounts/:id/portfolio` | Holdings, events, cost/NAV summary for an investment account |
+| `POST /api/investments/instruments`        | Create instrument (equity / fund / fd / other)      |
+| `PATCH /api/investments/instruments/:id`   | Update instrument metadata / price / FD fields      |
+| `DELETE /api/investments/instruments/:id`  | Soft-deactivate an instrument                       |
+| `POST /api/investments/events/buy`         | Record buy + open lot (optional cash sync expense)  |
+| `POST /api/investments/events/sell`        | Record sell FIFO (optional cash sync income)        |
+| `POST /api/investments/events/dividend`    | Record dividend (credits income)                    |
+| `POST /api/investments/events/interest`    | Record interest (optional cash sync)                |
+| `POST /api/investments/events/price-mark`  | Set last price for unrealized P&L                   |
+| `POST /api/investments/instruments/:id/accrue-fd` | Accrue FD interest from rate (or amount override) |
 
 
 Date params use `YYYY-MM-DD`. Defaults to the last 30 days (Asia/Kuala_Lumpur).
+
+Older databases need Agent migration scripts when new tables/columns are added (e.g. `migrate-workout-sessions.sql`, `migrate-investment-portfolio.sql`).
 
 ## Expenses tab layout
 

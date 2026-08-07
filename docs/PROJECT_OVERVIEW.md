@@ -43,6 +43,7 @@ Global **month picker** drives Expenses, Income, and Setup. Health uses date ran
 - Income calendar, daily series, and transaction CRUD.
 - Categories include Claim, Transfer, Salary, Account transfer, Cashback, Other.
 - Per-account **balances** (debit / credit available / investment); click an account for activity, cashback, and settle.
+- **Investment portfolio:** click an investment account to manage holdings (stocks, funds, FDs). Lots use FIFO cost basis; FD stores rate/maturity with manual or accrued interest. Optional cash sync on buy/sell/dividend/interest. NAV = cash balance + holdings market value (manual last price; no live market API). Telegram trade logging is not included yet.
 
 ### Health
 
@@ -89,7 +90,7 @@ Separate processes: `npm run dev:server` / `npm run dev:client`.
 | `DATABASE_POOLER_REGION` | Optional pooler fallback |
 | `PORT` | API port (default `3001`) |
 
-The sibling **AI Agent** repo must sit next to this project so server imports resolve. Older databases may need Agent migration scripts (e.g. workout sessions).
+The sibling **AI Agent** repo must sit next to this project so server imports resolve. Older databases may need Agent migration scripts (e.g. workout sessions, `migrate-investment-portfolio.sql`).
 
 ## Repo map
 
@@ -111,11 +112,11 @@ Dashboard/
     accountBalances.ts      # Debit balance + credit amountOwed
     aggregators.ts / rebate.ts / statementPeriod.ts
     routes/
-      expenses.ts | incomes.ts | paymentAccounts.ts
-      workouts.ts | nutrition.ts | sync.ts
+      expenses.ts | incomes.ts | paymentAccounts.ts | investments.ts
+      workouts.ts | nutrition.ts | sync.ts | trips.ts
 ```
 
-API routes are listed in [README.md](../README.md). Beyond that table, the server also exposes payment-account and sync-status endpoints used by the Income tab and live refresh.
+API routes are listed in [README.md](../README.md). Beyond that table, the server also exposes payment-account, investment portfolio, and sync-status endpoints used by the Income tab and live refresh.
 
 ## Related system: AI Agent
 

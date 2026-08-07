@@ -15,6 +15,7 @@ import {
     normalizeRebateConfig,
     updatePaymentAccount,
 } from '../../../AI Agent/src/services/paymentAccountService';
+import { sumHoldingsMarketValueByAccount } from '../../../AI Agent/src/services/investmentPortfolioService';
 import {
     buildAccountActivity,
     computeAccountBalances,
@@ -44,11 +45,21 @@ async function loadAllTransactions() {
 
 router.get('/', async (_req, res) => {
     try {
-        const [accounts, { expenseRows, incomeRows }] = await Promise.all([
+        const [accounts, { expenseRows, incomeRows }, holdingsByAccount] = await Promise.all([
             listActivePaymentAccounts(),
             loadAllTransactions(),
+            sumHoldingsMarketValueByAccount().catch(() => new Map<number, number>()),
         ]);
-        const entries = computeAccountBalances(accounts, expenseRows, incomeRows);
+        const entries = computeAccountBalances(accounts, expenseRows, incomeRows).map((entry) => {
+            if (entry.accountType !== 'investment') return entry;
+            const holdingsMarketValue = holdingsByAccount.get(entry.id) ?? 0;
+            const cash = entry.balance ?? 0;
+            return {
+                ...entry,
+                holdingsMarketValue,
+                nav: Math.round((cash + holdingsMarketValue) * 100) / 100,
+            };
+        });
         res.json({ entries });
     } catch (err) {
         console.error('GET /api/payment-accounts', err);

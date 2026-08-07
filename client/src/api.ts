@@ -230,6 +230,10 @@ export interface PaymentAccount {
     balance?: number;
     amountOwed?: number;
     availableCredit?: number;
+    /** Market value of holdings (investment accounts). */
+    holdingsMarketValue?: number;
+    /** Cash balance + holdings market value (investment accounts). */
+    nav?: number;
 }
 
 export interface PaymentAccountsResponse {
@@ -822,4 +826,205 @@ export function deleteTrip(id: number) {
 
 export function fetchTripSummary(id: number) {
     return fetchJson<TripSummary>(`/api/trips/${id}/summary`);
+}
+
+export type InstrumentKind = 'equity' | 'fund' | 'fd' | 'other';
+export type InvestmentEventType =
+    | 'buy'
+    | 'sell'
+    | 'dividend'
+    | 'interest'
+    | 'fee'
+    | 'price_mark';
+
+export interface InvestmentInstrument {
+    id: number;
+    paymentAccountId: number;
+    kind: InstrumentKind;
+    symbol: string | null;
+    name: string;
+    currency: string;
+    lastPrice: number | null;
+    lastPriceAt: string | null;
+    principal: number | null;
+    annualRatePct: number | null;
+    startDate: string | null;
+    maturityDate: string | null;
+    active: boolean;
+}
+
+export interface InvestmentEvent {
+    id: number;
+    instrumentId: number;
+    eventType: InvestmentEventType;
+    date: string;
+    quantity: number | null;
+    unitPrice: number | null;
+    amount: number | null;
+    realizedGain: number | null;
+    notes: string | null;
+    linkedIncomeId: number | null;
+    linkedExpenseId: number | null;
+}
+
+export interface HoldingPosition {
+    instrument: InvestmentInstrument;
+    quantity: number;
+    costBasis: number;
+    marketValue: number;
+    unrealizedGain: number;
+    lastPrice: number | null;
+}
+
+export interface PortfolioSummary {
+    paymentAccountId: number;
+    holdings: HoldingPosition[];
+    events: InvestmentEvent[];
+    totalCostBasis: number;
+    totalMarketValue: number;
+    totalUnrealizedGain: number;
+    totalRealizedGain: number;
+    cashBalance: number;
+    nav: number;
+}
+
+export function fetchPortfolio(accountId: number) {
+    return fetchJson<PortfolioSummary>(`/api/investments/accounts/${accountId}/portfolio`);
+}
+
+export function createInstrument(fields: {
+    paymentAccountId: number;
+    kind: InstrumentKind;
+    name: string;
+    symbol?: string | null;
+    currency?: string;
+    lastPrice?: number | null;
+    principal?: number | null;
+    annualRatePct?: number | null;
+    startDate?: string | null;
+    maturityDate?: string | null;
+}) {
+    return fetchJson<{ ok: true; id: number }>('/api/investments/instruments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+    });
+}
+
+export function updateInstrument(
+    id: number,
+    fields: Partial<{
+        name: string;
+        symbol: string | null;
+        lastPrice: number | null;
+        principal: number | null;
+        annualRatePct: number | null;
+        startDate: string | null;
+        maturityDate: string | null;
+        active: boolean;
+    }>
+) {
+    return fetchJson<{ ok: true }>(`/api/investments/instruments/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+    });
+}
+
+export function deleteInstrument(id: number) {
+    return fetchJson<{ ok: true }>(`/api/investments/instruments/${id}`, { method: 'DELETE' });
+}
+
+export function recordPortfolioBuy(fields: {
+    instrumentId: number;
+    date: string;
+    quantity: number;
+    unitPrice: number;
+    notes?: string | null;
+    fromPaymentMethod?: string | null;
+}) {
+    return fetchJson<{ ok: true; eventId: number; lotId: number }>('/api/investments/events/buy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+    });
+}
+
+export function recordPortfolioSell(fields: {
+    instrumentId: number;
+    date: string;
+    quantity: number;
+    unitPrice: number;
+    notes?: string | null;
+    toPaymentMethod?: string | null;
+}) {
+    return fetchJson<{ ok: true; eventId: number; realizedGain: number }>(
+        '/api/investments/events/sell',
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(fields),
+        }
+    );
+}
+
+export function recordPortfolioDividend(fields: {
+    instrumentId: number;
+    date: string;
+    amount: number;
+    notes?: string | null;
+    toPaymentMethod?: string | null;
+}) {
+    return fetchJson<{ ok: true; eventId: number }>('/api/investments/events/dividend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+    });
+}
+
+export function recordPortfolioInterest(fields: {
+    instrumentId: number;
+    date: string;
+    amount: number;
+    notes?: string | null;
+    toPaymentMethod?: string | null;
+    syncCash?: boolean;
+}) {
+    return fetchJson<{ ok: true; eventId: number }>('/api/investments/events/interest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+    });
+}
+
+export function recordPortfolioPriceMark(fields: {
+    instrumentId: number;
+    date: string;
+    unitPrice: number;
+    notes?: string | null;
+}) {
+    return fetchJson<{ ok: true; eventId: number }>('/api/investments/events/price-mark', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+    });
+}
+
+export function accrueFdInterest(
+    instrumentId: number,
+    fields: {
+        toDate: string;
+        amountOverride?: number;
+        toPaymentMethod?: string | null;
+        syncCash?: boolean;
+    }
+) {
+    return fetchJson<{ ok: true; eventId: number; amount: number }>(
+        `/api/investments/instruments/${instrumentId}/accrue-fd`,
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(fields),
+        }
+    );
 }

@@ -14,6 +14,7 @@ import workoutsRouter from './routes/workouts';
 import nutritionRouter from './routes/nutrition';
 import syncRouter from './routes/sync';
 import tripsRouter from './routes/trips';
+import investmentsRouter from './routes/investments';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -34,6 +35,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/expenses', expensesRouter);
 app.use('/api/incomes', incomesRouter);
 app.use('/api/payment-accounts', paymentAccountsRouter);
+app.use('/api/investments', investmentsRouter);
 app.use('/api/workouts', workoutsRouter);
 app.use('/api/nutrition', nutritionRouter);
 app.use('/api/sync-status', syncRouter);
