@@ -302,30 +302,28 @@ export default function TripsPanel({ variableCategories, formatAmount, onChanged
             )}
 
             <div className="trips-layout">
-                <aside className="trips-sidebar">
-                    <ul className="trips-list">
-                        {trips.length === 0 && <li className="trips-empty muted">No trips yet</li>}
-                        {trips.map((trip) => (
-                            <li key={trip.id}>
-                                <button
-                                    type="button"
-                                    className={
-                                        selectedId === trip.id
-                                            ? 'trips-list-item active'
-                                            : 'trips-list-item'
-                                    }
-                                    onClick={() => {
-                                        setSelectedId(trip.id);
-                                        resetForms();
-                                    }}
-                                >
-                                    <span className="trips-list-name">{trip.name}</span>
-                                    <span className="trips-currency-chip">{trip.tripCurrency}</span>
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
-                </aside>
+                <ul className="trips-list">
+                    {trips.length === 0 && <li className="trips-empty muted">No trips yet</li>}
+                    {trips.map((trip) => (
+                        <li key={trip.id}>
+                            <button
+                                type="button"
+                                className={
+                                    selectedId === trip.id
+                                        ? 'trips-list-item active'
+                                        : 'trips-list-item'
+                                }
+                                onClick={() => {
+                                    setSelectedId(trip.id);
+                                    resetForms();
+                                }}
+                            >
+                                <span className="trips-list-name">{trip.name}</span>
+                                <span className="muted">{trip.tripCurrency}</span>
+                            </button>
+                        </li>
+                    ))}
+                </ul>
 
                 {summary && (
                     <div className="trips-detail">
@@ -384,7 +382,7 @@ export default function TripsPanel({ variableCategories, formatAmount, onChanged
                                     {formatAmount(summary.exchangedMyr)}
                                 </span>
                             </div>
-                            <div className="trips-summary-item trips-summary-item--fund">
+                            <div className="trips-summary-item">
                                 <span className="trips-summary-label">Fund left</span>
                                 <span className="trips-summary-value">
                                     {formatFx(summary.fundRemaining, summary.trip.tripCurrency)}

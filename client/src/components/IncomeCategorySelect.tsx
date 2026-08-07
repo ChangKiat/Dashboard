@@ -22,6 +22,7 @@ export default function IncomeCategorySelect({ id, value, usedCategories = [], o
 
     return (
         <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
+            <option value="">—</option>
             {displayOptions.map((category) => (
                 <option key={category} value={category}>
                     {category}

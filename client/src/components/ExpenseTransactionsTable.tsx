@@ -118,6 +118,20 @@ export default function ExpenseTransactionsTable({
 
     const handleSave = async () => {
         const amount = parseFloat(form.amount);
+        // #region agent log
+        const checks = {
+            date: form.date,
+            dateOk: Boolean(form.date),
+            category: form.category,
+            categoryOk: Boolean(form.category.trim()),
+            description: form.description,
+            descriptionOk: Boolean(form.description.trim()),
+            amountRaw: form.amount,
+            amountParsed: amount,
+            amountOk: Number.isFinite(amount) && amount > 0,
+        };
+        fetch('http://127.0.0.1:7815/ingest/a1454051-d2e0-4259-b281-2b574a3eaee6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'dd3de4'},body:JSON.stringify({sessionId:'dd3de4',runId:'pre-fix',hypothesisId:'A-E',location:'ExpenseTransactionsTable.tsx:handleSave',message:'validation snapshot',data:checks,timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         if (
             !form.date ||
             !form.category.trim() ||
@@ -125,6 +139,9 @@ export default function ExpenseTransactionsTable({
             !Number.isFinite(amount) ||
             amount <= 0
         ) {
+            // #region agent log
+            fetch('http://127.0.0.1:7815/ingest/a1454051-d2e0-4259-b281-2b574a3eaee6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'dd3de4'},body:JSON.stringify({sessionId:'dd3de4',runId:'pre-fix',hypothesisId:'A-E',location:'ExpenseTransactionsTable.tsx:handleSave:fail',message:'validation failed',data:{dateOk:checks.dateOk,categoryOk:checks.categoryOk,descriptionOk:checks.descriptionOk,amountOk:checks.amountOk},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
             setModalError('Date, category, description, and a positive amount are required.');
             return;
         }
@@ -172,6 +189,9 @@ export default function ExpenseTransactionsTable({
 
         setSaving(true);
         setModalError(null);
+        // #region agent log
+        fetch('http://127.0.0.1:7815/ingest/a1454051-d2e0-4259-b281-2b574a3eaee6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'dd3de4'},body:JSON.stringify({sessionId:'dd3de4',runId:'post-fix',hypothesisId:'A',location:'ExpenseTransactionsTable.tsx:handleSave:pass',message:'validation passed, saving',data:{category:form.category,date:form.date,amount},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         try {
             const payload = {
                 date: form.date,
