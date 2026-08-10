@@ -423,12 +423,34 @@ function qs(range: DateRange): string {
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-    const res = await fetch(url, init);
+    const res = await fetch(url, {
+        ...init,
+        credentials: 'include',
+        headers: {
+            ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+            ...init?.headers,
+        },
+    });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `Request failed: ${res.status}`);
     }
     return res.json();
+}
+
+export function getAuthMe() {
+    return fetchJson<{ authenticated: boolean }>('/api/auth/me');
+}
+
+export function verifyAuth(code: string) {
+    return fetchJson<{ ok: true }>('/api/auth/verify', {
+        method: 'POST',
+        body: JSON.stringify({ code }),
+    });
+}
+
+export function logoutAuth() {
+    return fetchJson<{ ok: true }>('/api/auth/logout', { method: 'POST' });
 }
 
 export function fetchExpenseDaily(range: DateRange) {

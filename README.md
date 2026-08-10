@@ -17,6 +17,27 @@ For a fuller product/architecture summary, see [docs/PROJECT_OVERVIEW.md](docs/P
 3. Fill in `.env`:
   - `DATABASE_URL` — copy from your AI Agent `.env`
   - `TELEGRAM_USER_ID` — your Telegram user ID (`ctx.from.id` from the bot)
+  - `AUTH_TOTP_SECRET` — base32 secret for your authenticator app
+  - `AUTH_SESSION_SECRET` — long random string (cookie signing)
+
+## Authenticator login (TOTP)
+
+The dashboard is locked behind a 6-digit authenticator code (no password). Sessions last 14 days.
+
+1. Generate secrets:
+
+```bash
+node -e "console.log(new (require('otpauth').Secret)().base32)"
+openssl rand -hex 32
+```
+
+2. Put them in `.env` / Render as `AUTH_TOTP_SECRET` and `AUTH_SESSION_SECRET`.
+
+3. One-time QR setup: set `AUTH_TOTP_SETUP=1`, restart, open `GET /api/auth/setup`, scan `qrDataUrl` (or add `otpauthUrl` manually) in Google Authenticator / Authy.
+
+4. Unset `AUTH_TOTP_SETUP` and restart so `/api/auth/setup` returns 404.
+
+Auth endpoints: `GET /api/auth/me`, `POST /api/auth/verify`, `POST /api/auth/logout`, `GET /api/auth/setup` (setup only).
 
 ## Run (development)
 

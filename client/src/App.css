@@ -2901,3 +2901,82 @@ div.payment-account-card-main:hover {
   }
 }
 
+.login-gate {
+  min-height: 70vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-card {
+  width: min(100%, 380px);
+  padding: 28px 24px;
+  border: 1px solid #2a2f3a;
+  border-radius: 12px;
+  background: #1a1f2b;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.login-card h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #f3f4f6;
+}
+
+.login-label {
+  font-size: 0.85rem;
+  color: #9aa0a6;
+}
+
+.login-input {
+  font-size: 1.5rem;
+  letter-spacing: 0.35em;
+  text-align: center;
+  padding: 12px;
+  border: 1px solid #2a2f3a;
+  border-radius: 8px;
+  background: #12161f;
+  color: #f3f4f6;
+}
+
+.login-input:focus {
+  outline: none;
+  border-color: #2563eb;
+}
+
+.login-error {
+  margin: 0;
+}
+
+.login-submit,
+.logout-btn {
+  padding: 10px 16px;
+  border: 1px solid #2563eb;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.login-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.logout-btn {
+  background: transparent;
+  border-color: #2a2f3a;
+  color: #9aa0a6;
+  align-self: flex-end;
+}
+
+.logout-btn:hover {
+  border-color: #3b4252;
+  color: #e8eaed;
+}
+

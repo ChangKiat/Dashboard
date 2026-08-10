@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { fetchHealth } from './api';
+import { fetchHealth, getAuthMe, logoutAuth } from './api';
 import ExpensesSection from './components/ExpensesSection';
 import HealthSection from './components/HealthSection';
 import IncomeSection from './components/IncomeSection';
+import LoginGate from './components/LoginGate';
 import MonthPicker from './components/MonthPicker';
 import SectionTabs from './components/SectionTabs';
 import SetupSection from './components/SetupSection';
@@ -14,17 +15,48 @@ import './App.css';
 export default function App() {
     const { month, setMonth } = useMonth();
     const { activeTab, setActiveTab } = useSectionTab();
+    const [authChecked, setAuthChecked] = useState(false);
+    const [authenticated, setAuthenticated] = useState(false);
     const [health, setHealth] = useState<{ ok: boolean; database: string; telegramUser: string } | null>(null);
 
     useEffect(() => {
+        getAuthMe()
+            .then((me) => setAuthenticated(me.authenticated))
+            .catch(() => setAuthenticated(false))
+            .finally(() => setAuthChecked(true));
+    }, []);
+
+    useEffect(() => {
+        if (!authenticated) return;
         fetchHealth()
             .then(setHealth)
             .catch(() => setHealth({ ok: false, database: 'unreachable', telegramUser: 'unreachable' }));
-    }, []);
+    }, [authenticated]);
+
+    if (!authChecked) {
+        return (
+            <div className="app login-gate">
+                <p className="subtitle">Checking session…</p>
+            </div>
+        );
+    }
+
+    if (!authenticated) {
+        return <LoginGate onAuthenticated={() => setAuthenticated(true)} />;
+    }
 
     const configWarning =
         health &&
         (!health.ok || health.telegramUser.includes('missing'));
+
+    async function onLogout() {
+        try {
+            await logoutAuth();
+        } finally {
+            setAuthenticated(false);
+            setHealth(null);
+        }
+    }
 
     return (
         <PaymentAccountsProvider>
@@ -37,6 +69,9 @@ export default function App() {
                     <div className="header-controls">
                         <MonthPicker month={month} onChange={setMonth} />
                         <SectionTabs active={activeTab} onChange={setActiveTab} />
+                        <button type="button" className="logout-btn" onClick={onLogout}>
+                            Lock
+                        </button>
                     </div>
                 </header>
 
