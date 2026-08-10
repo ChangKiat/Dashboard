@@ -6,7 +6,7 @@ import {
     getTripSummary,
     listTrips,
     updateTrip,
-} from '../../../AI Agent/src/services/tripService';
+} from '../../agent/services/tripService';
 import { isNonEmptyString, isValidDate, parseIdParam } from '../validation';
 
 const router = Router();

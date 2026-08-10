@@ -1,5 +1,5 @@
 import { and, count, eq, gte, lte, max } from 'drizzle-orm';
-import { requireDb } from '../../AI Agent/src/db/client';
+import { requireDb } from '../agent/db/client';
 import {
     expenses,
     fixedExpenses,
@@ -7,7 +7,7 @@ import {
     meals,
     userSettings,
     workouts,
-} from '../../AI Agent/src/db/schema';
+} from '../agent/db/schema';
 import { parseMonth } from './dateUtils';
 import { getTelegramUserId } from './telegramUser';
 

@@ -1,6 +1,6 @@
-import { resolvePaymentMethod } from '../../AI Agent/src/config/paymentMethods';
-import type { PaymentAccount } from '../../AI Agent/src/services/paymentAccountService';
-import { isDebitBalanceType } from '../../AI Agent/src/services/paymentAccountService';
+import { resolvePaymentMethod } from '../agent/config/paymentMethods';
+import type { PaymentAccount } from '../agent/services/paymentAccountService';
+import { isDebitBalanceType } from '../agent/services/paymentAccountService';
 
 export type ExpenseRow = {
     id: number;

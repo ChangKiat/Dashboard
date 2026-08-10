@@ -6,8 +6,8 @@ config({ path: resolve(__dirname, '../.env') });
 
 import cors from 'cors';
 import express from 'express';
-import { loadExpenseCategories } from '../../AI Agent/src/config/expenseCategories';
-import { loadPaymentAccounts } from '../../AI Agent/src/config/paymentMethods';
+import { loadExpenseCategories } from '../agent/config/expenseCategories';
+import { loadPaymentAccounts } from '../agent/config/paymentMethods';
 import expensesRouter from './routes/expenses';
 import incomesRouter from './routes/incomes';
 import paymentAccountsRouter from './routes/paymentAccounts';

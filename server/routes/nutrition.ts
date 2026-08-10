@@ -7,7 +7,7 @@ import {
     logMeal,
     updateMeal,
     updateNutritionTargets,
-} from '../../../AI Agent/src/services/nutritionService';
+} from '../../agent/services/nutritionService';
 import { enumerateDates, parseDateRange } from '../dateUtils';
 import {
     isNonEmptyString,

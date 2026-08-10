@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { desc } from 'drizzle-orm';
-import { requireDb } from '../../../AI Agent/src/db/client';
-import { expenses, incomes } from '../../../AI Agent/src/db/schema';
+import { requireDb } from '../../agent/db/client';
+import { expenses, incomes } from '../../agent/db/schema';
 import {
     accrueFdInterest,
     createInstrument,
@@ -15,8 +15,8 @@ import {
     recordPriceMark,
     recordSell,
     updateInstrument,
-} from '../../../AI Agent/src/services/investmentPortfolioService';
-import { getPaymentAccountById } from '../../../AI Agent/src/services/paymentAccountService';
+} from '../../agent/services/investmentPortfolioService';
+import { getPaymentAccountById } from '../../agent/services/paymentAccountService';
 import { computeAccountBalances } from '../accountBalances';
 import { isNonEmptyString, isPositiveNumber, isValidDate, parseIdParam } from '../validation';
 

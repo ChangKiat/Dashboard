@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { and, desc, eq, gte, lte } from 'drizzle-orm';
-import { requireDb } from '../../../AI Agent/src/db/client';
-import { expenses } from '../../../AI Agent/src/db/schema';
+import { requireDb } from '../../agent/db/client';
+import { expenses } from '../../agent/db/schema';
 import {
     addFixedExpense,
     appendExpense,
@@ -12,26 +12,26 @@ import {
     updateExpense,
     updateFixedExpenseById,
     type TripLeg,
-} from '../../../AI Agent/src/services/expenseService';
+} from '../../agent/services/expenseService';
 import {
     getLatestExchangeRate,
     getTripById,
-} from '../../../AI Agent/src/services/tripService';
+} from '../../agent/services/tripService';
 import {
     appendReimbursements,
     deleteInvestmentFundingTransfer,
     getIncomesByExpenseIds,
     getReimbursementsByExpenseIds,
     upsertInvestmentFundingTransfer,
-} from '../../../AI Agent/src/services/incomeService';
+} from '../../agent/services/incomeService';
 import { enumerateDates, parseDateRange, parseMonth } from '../dateUtils';
 import {
     enrichExpenseTransactions,
     groupExpensesByDateNet,
     groupFixedExpensesByCategory,
 } from '../aggregators';
-import { loadExpenseCategories } from '../../../AI Agent/src/config/expenseCategories';
-import { getSalaryAfterTax } from '../../../AI Agent/src/services/financeSettings';
+import { loadExpenseCategories } from '../../agent/config/expenseCategories';
+import { getSalaryAfterTax } from '../../agent/services/financeSettings';
 import { getTelegramUserId } from '../telegramUser';
 import {
     isDayOfMonth,

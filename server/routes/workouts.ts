@@ -8,7 +8,7 @@ import {
     logWorkout,
     normalizeWeightsKg,
     updateWorkout,
-} from '../../../AI Agent/src/services/gymService';
+} from '../../agent/services/gymService';
 import { enumerateDates, parseDateRange } from '../dateUtils';
 import {
     computePersonalRecords,

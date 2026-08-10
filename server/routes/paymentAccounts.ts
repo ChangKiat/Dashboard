@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { desc } from 'drizzle-orm';
-import { loadPaymentAccounts } from '../../../AI Agent/src/config/paymentMethods';
-import { requireDb } from '../../../AI Agent/src/db/client';
-import { expenses, incomes } from '../../../AI Agent/src/db/schema';
+import { loadPaymentAccounts } from '../../agent/config/paymentMethods';
+import { requireDb } from '../../agent/db/client';
+import { expenses, incomes } from '../../agent/db/schema';
 import {
     createPaymentAccount,
     deactivatePaymentAccount,
@@ -14,8 +14,8 @@ import {
     normalizePaymentAccountName,
     normalizeRebateConfig,
     updatePaymentAccount,
-} from '../../../AI Agent/src/services/paymentAccountService';
-import { sumHoldingsMarketValueByAccount } from '../../../AI Agent/src/services/investmentPortfolioService';
+} from '../../agent/services/paymentAccountService';
+import { sumHoldingsMarketValueByAccount } from '../../agent/services/investmentPortfolioService';
 import {
     buildAccountActivity,
     computeAccountBalances,
@@ -148,7 +148,7 @@ router.post('/', async (req, res) => {
             initialBalance?: number;
             creditLimit?: number | null;
             statementDay?: number | null;
-            rebateConfig?: import('../../../AI Agent/src/services/paymentAccountService').RebateConfig | null;
+            rebateConfig?: import('../../agent/services/paymentAccountService').RebateConfig | null;
         } = {};
         if (body.initialBalance != null) {
             if (!isNonNegativeNumber(body.initialBalance)) {
@@ -200,7 +200,7 @@ router.patch('/:id', async (req, res) => {
             initialBalance?: number;
             creditLimit?: number | null;
             statementDay?: number | null;
-            rebateConfig?: import('../../../AI Agent/src/services/paymentAccountService').RebateConfig | null;
+            rebateConfig?: import('../../agent/services/paymentAccountService').RebateConfig | null;
             active?: boolean;
         } = {};
 

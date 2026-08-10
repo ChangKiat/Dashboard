@@ -1,20 +1,20 @@
-import { resolvePaymentMethod } from '../../AI Agent/src/config/paymentMethods';
+import { resolvePaymentMethod } from '../agent/config/paymentMethods';
 import type {
     PaymentAccount,
     RebateConfig,
     RebateCategoryDef,
     SimpleRebateConfig,
     TieredRebateConfig,
-} from '../../AI Agent/src/services/paymentAccountService';
+} from '../agent/services/paymentAccountService';
 import {
     getPaymentAccountById,
     isSimpleRebateConfig,
     isTieredRebateConfig,
     listActivePaymentAccounts,
-} from '../../AI Agent/src/services/paymentAccountService';
-import { upsertRebateIncomes } from '../../AI Agent/src/services/incomeService';
-import { requireDb } from '../../AI Agent/src/db/client';
-import { expenses, incomes } from '../../AI Agent/src/db/schema';
+} from '../agent/services/paymentAccountService';
+import { upsertRebateIncomes } from '../agent/services/incomeService';
+import { requireDb } from '../agent/db/client';
+import { expenses, incomes } from '../agent/db/schema';
 import type { ExpenseRow, IncomeRow } from './accountBalances';
 import { accountPeriodToDateRange, isDateInRange } from './statementPeriod';
 import { parseMonth } from './dateUtils';

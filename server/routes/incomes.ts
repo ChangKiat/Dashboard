@@ -6,7 +6,7 @@ import {
     listIncomes,
     updateIncome,
     validateIncomePaymentAccounts,
-} from '../../../AI Agent/src/services/incomeService';
+} from '../../agent/services/incomeService';
 import { enumerateDates, parseDateRange, parseMonth } from '../dateUtils';
 import { formatIncomeTransactions, groupIncomesByDate } from '../aggregators';
 import {

@@ -1,4 +1,4 @@
-import type { PaymentAccount } from '../../AI Agent/src/services/paymentAccountService';
+import type { PaymentAccount } from '../agent/services/paymentAccountService';
 
 export type DateRange = { start: string; end: string };
 
