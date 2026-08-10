@@ -15,7 +15,7 @@ const DAY_PAGE_SIZE = 5;
 
 type ModalMode = 'closed' | 'create' | 'edit';
 
-type ReimbursementRow = { source: string; amount: string };
+type ReimbursementRow = { source: string; amount: string; paymentMethod: string };
 
 interface Props {
     entries: ExpenseTransaction[];
@@ -26,7 +26,7 @@ interface Props {
 }
 
 function emptyReimbursement(): ReimbursementRow {
-    return { source: '', amount: '' };
+    return { source: '', amount: '', paymentMethod: '' };
 }
 
 export default function ExpenseTransactionsTable({
@@ -104,14 +104,19 @@ export default function ExpenseTransactionsTable({
         setModalError(null);
     };
 
-    const parseReimbursements = (): { source: string; amount: number }[] | 'invalid' => {
-        const items: { source: string; amount: number }[] = [];
+    const parseReimbursements = ():
+        | { source: string; amount: number; paymentMethod: string }[]
+        | 'invalid' => {
+        const items: { source: string; amount: number; paymentMethod: string }[] = [];
         for (const row of reimbursements) {
             const source = row.source.trim();
             const amount = parseFloat(row.amount);
-            if (!source && !row.amount.trim()) continue;
-            if (!source || !Number.isFinite(amount) || amount <= 0) return 'invalid';
-            items.push({ source, amount });
+            const paymentMethod = row.paymentMethod.trim();
+            if (!source && !row.amount.trim() && !paymentMethod) continue;
+            if (!source || !Number.isFinite(amount) || amount <= 0 || !paymentMethod) {
+                return 'invalid';
+            }
+            items.push({ source, amount, paymentMethod });
         }
         return items;
     };
@@ -177,11 +182,13 @@ export default function ExpenseTransactionsTable({
 
         const hasFundingTransfer = Boolean(paymentMethod && toInvestmentAccount);
 
-        let reimbursementPayload: { source: string; amount: number }[] | undefined;
+        let reimbursementPayload: { source: string; amount: number; paymentMethod: string }[] | undefined;
         if (modalMode === 'create' && showReimbursements && !showTransferDestination) {
             const parsed = parseReimbursements();
             if (parsed === 'invalid') {
-                setModalError('Each reimbursement needs a person name and positive amount.');
+                setModalError(
+                    'Each reimbursement needs a person name, positive amount, and received-into account.'
+                );
                 return;
             }
             reimbursementPayload = parsed.length > 0 ? parsed : undefined;
@@ -388,6 +395,18 @@ export default function ExpenseTransactionsTable({
                                                 )
                                             )
                                         }
+                                    />
+                                    <PaymentMethodSelect
+                                        id={`reimb-into-${index}`}
+                                        value={row.paymentMethod}
+                                        onChange={(paymentMethod) =>
+                                            setReimbursements((rows) =>
+                                                rows.map((r, i) =>
+                                                    i === index ? { ...r, paymentMethod } : r
+                                                )
+                                            )
+                                        }
+                                        emptyLabel="Received into"
                                     />
                                     {reimbursements.length > 1 && (
                                         <button

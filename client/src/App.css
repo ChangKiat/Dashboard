@@ -1853,7 +1853,8 @@ div.payment-account-card-main:hover {
   align-items: center;
 }
 
-.reimbursement-row input {
+.reimbursement-row input,
+.reimbursement-row select {
   flex: 1;
   min-width: 0;
 }

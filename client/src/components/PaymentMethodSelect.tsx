@@ -9,9 +9,16 @@ interface Props {
     value: string;
     onChange: (value: string) => void;
     excludeTypes?: PaymentAccountType[];
+    emptyLabel?: string;
 }
 
-export default function PaymentMethodSelect({ id, value, onChange, excludeTypes }: Props) {
+export default function PaymentMethodSelect({
+    id,
+    value,
+    onChange,
+    excludeTypes,
+    emptyLabel = '—',
+}: Props) {
     const { accounts } = usePaymentAccounts();
     const options = useMemo(
         () => buildPaymentMethodOptions(accounts, value, { excludeTypes }),
@@ -20,7 +27,7 @@ export default function PaymentMethodSelect({ id, value, onChange, excludeTypes 
 
     return (
         <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
-            <option value="">—</option>
+            <option value="">{emptyLabel}</option>
             {options.map((method) => (
                 <option key={method} value={method}>
                     {method}

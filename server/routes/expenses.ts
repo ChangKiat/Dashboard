@@ -223,16 +223,27 @@ async function resolveTripExpenseFields(body: Record<string, unknown>): Promise<
 
 function parseReimbursements(
     value: unknown
-): { source: string; amount: number }[] | undefined | 'invalid' {
+): { source: string; amount: number; paymentMethod?: string | null }[] | undefined | 'invalid' {
     if (value == null) return undefined;
     if (!Array.isArray(value)) return 'invalid';
-    const items: { source: string; amount: number }[] = [];
+    const items: { source: string; amount: number; paymentMethod?: string | null }[] = [];
     for (const item of value) {
         if (typeof item !== 'object' || item == null) return 'invalid';
         const source = (item as { source?: unknown }).source;
         const amount = (item as { amount?: unknown }).amount;
+        const paymentMethod = (item as { paymentMethod?: unknown }).paymentMethod;
         if (!isNonEmptyString(source) || !isPositiveNumber(amount)) return 'invalid';
-        items.push({ source: source.trim(), amount });
+        if (paymentMethod != null && paymentMethod !== '' && !isNonEmptyString(paymentMethod)) {
+            return 'invalid';
+        }
+        items.push({
+            source: source.trim(),
+            amount,
+            paymentMethod:
+                paymentMethod != null && isNonEmptyString(paymentMethod)
+                    ? paymentMethod.trim()
+                    : null,
+        });
     }
     return items;
 }

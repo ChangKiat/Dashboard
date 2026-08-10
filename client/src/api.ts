@@ -452,7 +452,7 @@ export function createExpenseTransaction(
         amount?: number;
         paymentMethod?: string | null;
         toInvestmentAccount?: string | null;
-        reimbursements?: { source: string; amount: number }[];
+        reimbursements?: { source: string; amount: number; paymentMethod?: string | null }[];
         tripId?: number;
         tripLeg?: TripLeg;
         fxAmount?: number;
