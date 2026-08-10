@@ -6,10 +6,13 @@
     "dev:server": "tsx watch server/index.ts",
     "dev:client": "vite --config client/vite.config.ts",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "build": "vite build --config client/vite.config.ts",
     "build:client": "vite build --config client/vite.config.ts",
+    "start": "tsx server/index.ts",
     "start:server": "tsx server/index.ts"
   },
   "dependencies": {
+    "@vitejs/plugin-react": "^5.0.0",
     "cors": "^2.8.5",
     "dotenv": "^17.3.1",
     "drizzle-orm": "^0.45.2",
@@ -17,7 +20,9 @@
     "postgres": "^3.4.9",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "recharts": "^2.15.4"
+    "recharts": "^2.15.4",
+    "tsx": "^4.22.3",
+    "vite": "^6.2.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
@@ -25,10 +30,7 @@
     "@types/node": "^22.14.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.0.0",
     "concurrently": "^9.2.1",
-    "tsx": "^4.22.3",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "typescript": "~5.8.2"
   }
 }

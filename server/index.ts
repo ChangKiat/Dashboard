@@ -1,5 +1,6 @@
 import { config } from 'dotenv';
-import { resolve } from 'path';
+import { existsSync } from 'fs';
+import { join, resolve } from 'path';
 
 config({ path: resolve(__dirname, '../.env') });
 
@@ -40,6 +41,14 @@ app.use('/api/workouts', workoutsRouter);
 app.use('/api/nutrition', nutritionRouter);
 app.use('/api/sync-status', syncRouter);
 app.use('/api/trips', tripsRouter);
+
+const clientDist = resolve(__dirname, '../dist-client');
+if (existsSync(clientDist)) {
+    app.use(express.static(clientDist));
+    app.get(/^(?!\/api).*/, (_req, res) => {
+        res.sendFile(join(clientDist, 'index.html'));
+    });
+}
 
 Promise.all([loadExpenseCategories(), loadPaymentAccounts()])
     .then(() => {
