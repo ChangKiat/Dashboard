@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import type { FixedExpenseConfig } from '../api';
-import { fetchExpenseOverview, fetchFixedExpenses } from '../api';
+import type { FixedExpenseConfig, InterestScheduleConfig } from '../api';
+import { fetchExpenseOverview, fetchFixedExpenses, fetchInterestSchedules } from '../api';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
 
 import FixedExpensesTable from './FixedExpensesTable';
+import InterestSchedulesTable from './InterestSchedulesTable';
 import MealsSetupPanel from './MealsSetupPanel';
 import PaymentAccountsPanel from './PaymentAccountsPanel';
 
@@ -21,14 +22,17 @@ export default function SetupSection({ month }: Props) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [fixedConfigs, setFixedConfigs] = useState<FixedExpenseConfig[]>([]);
+    const [interestSchedules, setInterestSchedules] = useState<InterestScheduleConfig[]>([]);
     const [variableCategories, setVariableCategories] = useState<string[]>([]);
 
     const loadData = useCallback(async () => {
-        const [fixedRes, overviewRes] = await Promise.all([
+        const [fixedRes, interestRes, overviewRes] = await Promise.all([
             fetchFixedExpenses(),
+            fetchInterestSchedules(),
             fetchExpenseOverview(month),
         ]);
         setFixedConfigs(fixedRes.entries);
+        setInterestSchedules(interestRes.entries);
         setVariableCategories(overviewRes.variable.map((v) => v.category));
     }, [month]);
 
@@ -66,6 +70,11 @@ export default function SetupSection({ month }: Props) {
                 <FixedExpensesTable
                     rows={fixedConfigs}
                     variableCategories={variableCategories}
+                    formatAmount={formatMYR}
+                    onChanged={handleChanged}
+                />
+                <InterestSchedulesTable
+                    rows={interestSchedules}
                     formatAmount={formatMYR}
                     onChanged={handleChanged}
                 />

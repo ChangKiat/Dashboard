@@ -28,6 +28,7 @@ import nutritionRouter from './routes/nutrition';
 import syncRouter from './routes/sync';
 import tripsRouter from './routes/trips';
 import investmentsRouter from './routes/investments';
+import interestSchedulesRouter from './routes/interestSchedules';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -93,6 +94,7 @@ app.use('/api/expenses', requireAuth, expensesRouter);
 app.use('/api/incomes', requireAuth, incomesRouter);
 app.use('/api/payment-accounts', requireAuth, paymentAccountsRouter);
 app.use('/api/investments', requireAuth, investmentsRouter);
+app.use('/api/interest-schedules', requireAuth, interestSchedulesRouter);
 app.use('/api/workouts', requireAuth, workoutsRouter);
 app.use('/api/nutrition', requireAuth, nutritionRouter);
 app.use('/api/sync-status', requireAuth, syncRouter);

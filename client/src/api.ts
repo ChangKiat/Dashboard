@@ -160,6 +160,23 @@ export interface FixedExpensesResponse {
     entries: FixedExpenseConfig[];
 }
 
+export type InterestFrequency = 'daily' | 'monthly';
+
+export interface InterestScheduleConfig {
+    id: number;
+    paymentMethod: string;
+    frequency: InterestFrequency;
+    dayOfMonth: number | null;
+    annualRatePct: number | null;
+    fixedAmount: number | null;
+    currency: string;
+    description: string;
+}
+
+export interface InterestSchedulesResponse {
+    entries: InterestScheduleConfig[];
+}
+
 export type PaymentAccountType = 'account' | 'credit' | 'investment';
 
 export const REBATE_CATEGORIES = ['Petrol', 'Groceries', 'Dining', 'Grab'] as const;
@@ -551,6 +568,53 @@ export function updateFixedExpense(
 
 export function deleteFixedExpense(id: number) {
     return fetchJson<{ ok: true }>(`/api/expenses/fixed/${id}`, { method: 'DELETE' });
+}
+
+export function fetchInterestSchedules() {
+    return fetchJson<InterestSchedulesResponse>('/api/interest-schedules');
+}
+
+export function createInterestSchedule(
+    fields: Pick<
+        InterestScheduleConfig,
+        'paymentMethod' | 'frequency' | 'description' | 'currency'
+    > & {
+        dayOfMonth?: number | null;
+        annualRatePct?: number | null;
+        fixedAmount?: number | null;
+    }
+) {
+    return fetchJson<{ ok: true }>('/api/interest-schedules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+    });
+}
+
+export function updateInterestSchedule(
+    id: number,
+    fields: Partial<
+        Pick<
+            InterestScheduleConfig,
+            | 'paymentMethod'
+            | 'frequency'
+            | 'dayOfMonth'
+            | 'annualRatePct'
+            | 'fixedAmount'
+            | 'currency'
+            | 'description'
+        >
+    >
+) {
+    return fetchJson<{ ok: true }>(`/api/interest-schedules/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+    });
+}
+
+export function deleteInterestSchedule(id: number) {
+    return fetchJson<{ ok: true }>(`/api/interest-schedules/${id}`, { method: 'DELETE' });
 }
 
 export function fetchPaymentAccounts() {

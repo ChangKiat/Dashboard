@@ -4,6 +4,7 @@ import {
     expenses,
     fixedExpenses,
     incomes,
+    interestSchedules,
     meals,
     userSettings,
     workouts,
@@ -25,7 +26,7 @@ export async function getExpensesSyncFingerprint(month: string): Promise<string>
     const db = requireDb();
     const userId = getTelegramUserId();
 
-    const [expRow, incRow, fixRow, settings] = await Promise.all([
+    const [expRow, incRow, fixRow, intRow, settings] = await Promise.all([
         db
             .select({ count: count(), maxId: max(expenses.id) })
             .from(expenses)
@@ -39,6 +40,10 @@ export async function getExpensesSyncFingerprint(month: string): Promise<string>
             .from(fixedExpenses)
             .where(eq(fixedExpenses.active, true)),
         db
+            .select({ count: count(), maxId: max(interestSchedules.id) })
+            .from(interestSchedules)
+            .where(eq(interestSchedules.active, true)),
+        db
             .select({ salaryAfterTax: userSettings.salaryAfterTax })
             .from(userSettings)
             .where(eq(userSettings.telegramUserId, userId))
@@ -48,8 +53,9 @@ export async function getExpensesSyncFingerprint(month: string): Promise<string>
     const expStats = stat(expRow[0]?.count ?? 0, expRow[0]?.maxId ?? 0);
     const incStats = stat(incRow[0]?.count ?? 0, incRow[0]?.maxId ?? 0);
     const fixStats = stat(fixRow[0]?.count ?? 0, fixRow[0]?.maxId ?? 0);
+    const intStats = stat(intRow[0]?.count ?? 0, intRow[0]?.maxId ?? 0);
     const salary = settings[0]?.salaryAfterTax ?? '0';
-    return `exp:${expStats}|inc:${incStats}|fix:${fixStats}|sal:${salary}`;
+    return `exp:${expStats}|inc:${incStats}|fix:${fixStats}|int:${intStats}|sal:${salary}`;
 }
 
 export async function getHealthSyncFingerprint(month: string): Promise<string> {
