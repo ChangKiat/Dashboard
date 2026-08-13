@@ -170,9 +170,9 @@ export default function InterestSchedulesTable({ rows, formatAmount, onChanged }
     };
 
     return (
-        <div className="expenses-table-card expenses-interest-schedules">
+        <div className="card expenses-interest-schedules">
             <div className="section-header-row">
-                <h3>Interest Schedules</h3>
+                <h3>Interest schedules</h3>
                 <div className="fixed-expense-filters">
                     <select
                         aria-label="Filter by account"

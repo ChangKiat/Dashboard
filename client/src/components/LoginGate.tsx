@@ -46,7 +46,7 @@ export default function LoginGate({ onAuthenticated }: LoginGateProps) {
                     autoFocus
                 />
                 {error && <div className="banner warning login-error">{error}</div>}
-                <button type="submit" className="login-submit" disabled={submitting || code.length !== 6}>
+                <button type="submit" className="btn-primary" disabled={submitting || code.length !== 6}>
                     {submitting ? 'Checking…' : 'Unlock'}
                 </button>
             </form>

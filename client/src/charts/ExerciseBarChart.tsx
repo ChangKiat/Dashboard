@@ -24,18 +24,18 @@ export default function ExerciseBarChart({ data }: Props) {
                 layout="vertical"
                 margin={{ top: 8, right: 16, left: 8, bottom: 0 }}
             >
-                <CartesianGrid strokeDasharray="3 3" stroke="#2a2f3a" horizontal={false} />
-                <XAxis type="number" tick={{ fill: '#9aa0a6', fontSize: 11 }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
+                <XAxis type="number" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
                 <YAxis
                     type="category"
                     dataKey="exercise"
-                    tick={{ fill: '#9aa0a6', fontSize: 11 }}
+                    tick={{ fill: 'var(--text-muted)', fontSize: 11 }}
                     width={100}
                 />
                 <Tooltip
                     contentStyle={{
-                        background: '#1a1f2b',
-                        border: '1px solid #2a2f3a',
+                        background: 'var(--surface-2)',
+                        border: '1px solid var(--border)',
                         borderRadius: 8,
                     }}
                 />

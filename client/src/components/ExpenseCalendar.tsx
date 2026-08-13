@@ -39,12 +39,6 @@ export default function ExpenseCalendar({
         <div className="activity-calendar">
             <div className="activity-calendar-header">
                 <h3>Spending calendar</h3>
-                <div className="activity-calendar-legend">
-                    <span className="legend-item">
-                        <span className="legend-dot expense" aria-hidden="true" />
-                        Spending
-                    </span>
-                </div>
             </div>
             <div className="activity-calendar-weekdays">
                 {WEEKDAYS.map((day) => (

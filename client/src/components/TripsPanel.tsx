@@ -243,14 +243,14 @@ export default function TripsPanel({ variableCategories, formatAmount, onChanged
 
     if (loading) {
         return (
-            <div className="trips-panel expenses-table-card">
+            <div className="trips-panel card">
                 <p className="muted">Loading trips…</p>
             </div>
         );
     }
 
     return (
-        <div className="trips-panel expenses-table-card">
+        <div className="trips-panel card">
             <div className="section-header-row">
                 <h3>Trips</h3>
                 <button

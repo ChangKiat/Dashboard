@@ -36,26 +36,6 @@ export default function VariableExpensesTable({ rows, transactions, formatAmount
         );
     }, [transactions, selectedCategory]);
 
-    const summary = useMemo(() => {
-        let totalBudget = 0;
-        let totalSpending = 0;
-        let alertCount = 0;
-
-        for (const row of rows) {
-            totalBudget += row.monthlyBudget;
-            totalSpending += row.spending;
-            const status = getBudgetStatus(row.spending, row.monthlyBudget);
-            if (status !== 'ok') alertCount++;
-        }
-
-        return {
-            totalBudget,
-            totalSpending,
-            totalRemaining: Math.max(0, totalBudget - totalSpending),
-            alertCount,
-        };
-    }, [rows]);
-
     const alertCategories = useMemo(() => {
         return rows
             .map((row) => {
@@ -67,28 +47,8 @@ export default function VariableExpensesTable({ rows, transactions, formatAmount
     }, [rows]);
 
     return (
-        <div className="expenses-table-card expenses-variable-table">
-            <h3>Variable Expenses</h3>
-            <div className="variable-expense-summary">
-                <div className="variable-expense-summary-item">
-                    <span className="variable-expense-summary-label">Total budget</span>
-                    <span className="variable-expense-summary-value">{formatAmount(summary.totalBudget)}</span>
-                </div>
-                <div className="variable-expense-summary-item">
-                    <span className="variable-expense-summary-label">Total spent</span>
-                    <span className="variable-expense-summary-value">{formatAmount(summary.totalSpending)}</span>
-                </div>
-                <div className="variable-expense-summary-item">
-                    <span className="variable-expense-summary-label">Remaining</span>
-                    <span className="variable-expense-summary-value">{formatAmount(summary.totalRemaining)}</span>
-                </div>
-                {summary.alertCount > 0 && (
-                    <div className="variable-expense-summary-item variable-expense-summary-item--alert">
-                        <span className="variable-expense-summary-label">Alerts</span>
-                        <span className="variable-expense-summary-value">{summary.alertCount} categories</span>
-                    </div>
-                )}
-            </div>
+        <div className="card expenses-variable-table">
+            <h3>Variable expenses</h3>
             {alertCategories.length > 0 && (
                 <div className="budget-alert-banner">
                     {alertCategories.join(' · ')}

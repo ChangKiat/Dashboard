@@ -9,7 +9,7 @@ import SectionTabs from './components/SectionTabs';
 import SetupSection from './components/SetupSection';
 import { PaymentAccountsProvider } from './hooks/usePaymentAccounts';
 import { useMonth } from './hooks/useMonth';
-import { TAB_SUBTITLES, useSectionTab } from './hooks/useSectionTab';
+import { useSectionTab } from './hooks/useSectionTab';
 import './App.css';
 
 export default function App() {
@@ -62,13 +62,12 @@ export default function App() {
         <PaymentAccountsProvider>
             <div className="app">
                 <header className="header">
-                    <div>
+                    <div className="header-left">
                         <h1>Personal Dashboard</h1>
-                        <p className="subtitle">{TAB_SUBTITLES[activeTab]}</p>
+                        <SectionTabs active={activeTab} onChange={setActiveTab} />
                     </div>
                     <div className="header-controls">
                         <MonthPicker month={month} onChange={setMonth} />
-                        <SectionTabs active={activeTab} onChange={setActiveTab} />
                         <button type="button" className="logout-btn" onClick={onLogout}>
                             Lock
                         </button>

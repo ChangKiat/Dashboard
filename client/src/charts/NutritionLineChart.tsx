@@ -29,17 +29,17 @@ export default function NutritionLineChart({ series }: Props) {
     return (
         <ResponsiveContainer width="100%" height={320}>
             <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#2a2f3a" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis
                     dataKey="shortDate"
-                    tick={{ fill: '#9aa0a6', fontSize: 11 }}
+                    tick={{ fill: 'var(--text-muted)', fontSize: 11 }}
                     interval="preserveStartEnd"
                 />
-                <YAxis tick={{ fill: '#9aa0a6', fontSize: 11 }} width={48} />
+                <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 11 }} width={48} />
                 <Tooltip
                     contentStyle={{
-                        background: '#1a1f2b',
-                        border: '1px solid #2a2f3a',
+                        background: 'var(--surface-2)',
+                        border: '1px solid var(--border)',
                         borderRadius: 8,
                     }}
                     labelFormatter={(_, payload) =>

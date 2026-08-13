@@ -157,7 +157,6 @@ export default function HealthSection({ month }: Props) {
 
     return (
         <section className="panel health-section">
-            <h2>Health</h2>
             <div className="health-layout">
                 <div className="health-summary-row summary-row">
                     <SummaryCard

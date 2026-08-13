@@ -135,16 +135,15 @@ export default function ExpensesSection({ month }: Props) {
 
     return (
         <section className="panel">
-            <h2>Expenses</h2>
             <div className="expenses-layout">
                 <div className="expenses-hero-row">
                     <SummaryCard
-                        label="Salary After Tax"
+                        label="Salary after tax"
                         value={formatMYR(data.salaryAfterTax)}
                         variant="highlight"
                     />
                     <SummaryCard label="Amount can use" value={formatMYR(data.totals.amountCanUse)} />
-                    <SummaryCard label="Fix Expenses Total" value={formatMYR(data.totals.fixExpensesTotal)} />
+                    <SummaryCard label="Fixed expenses" value={formatMYR(data.totals.fixExpensesTotal)} />
                     <SummaryCard label="Budget" value={formatMYR(data.totals.budget)} />
                     <SummaryCard
                         label="Actual spend"
@@ -155,34 +154,36 @@ export default function ExpensesSection({ month }: Props) {
 
                 <VariableExpensesTable rows={data.variable} transactions={transactions} formatAmount={formatMYR} />
 
+                <div className="expenses-calendar-row">
+                    <div className="expenses-calendar">
+                        <ExpenseCalendar
+                            month={month}
+                            dailySeries={dailySeries}
+                            selectedDate={selectedDate}
+                            onSelectDate={setSelectedDate}
+                            formatAmount={formatMYR}
+                        />
+                    </div>
+
+                    {selectedDate && (
+                        <div className="expenses-day-panel">
+                            <ExpenseDayDetailPanel
+                                selectedDate={selectedDate}
+                                transactions={dayTransactions}
+                                daySummary={daySummary}
+                                variableCategories={variableCategories}
+                                formatAmount={formatMYR}
+                                onChanged={handleChanged}
+                            />
+                        </div>
+                    )}
+                </div>
+
                 <TripsPanel
                     variableCategories={variableCategories}
                     formatAmount={formatMYR}
                     onChanged={handleChanged}
                 />
-
-                <div className="expenses-calendar">
-                    <ExpenseCalendar
-                        month={month}
-                        dailySeries={dailySeries}
-                        selectedDate={selectedDate}
-                        onSelectDate={setSelectedDate}
-                        formatAmount={formatMYR}
-                    />
-                </div>
-
-                {selectedDate && (
-                    <div className="expenses-day-panel">
-                        <ExpenseDayDetailPanel
-                            selectedDate={selectedDate}
-                            transactions={dayTransactions}
-                            daySummary={daySummary}
-                            variableCategories={variableCategories}
-                            formatAmount={formatMYR}
-                            onChanged={handleChanged}
-                        />
-                    </div>
-                )}
             </div>
         </section>
     );

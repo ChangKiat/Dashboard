@@ -39,12 +39,6 @@ export default function IncomeCalendar({
         <div className="activity-calendar income-calendar">
             <div className="activity-calendar-header">
                 <h3>Income calendar</h3>
-                <div className="activity-calendar-legend">
-                    <span className="legend-item">
-                        <span className="legend-dot income" aria-hidden="true" />
-                        Income
-                    </span>
-                </div>
             </div>
             <div className="activity-calendar-weekdays">
                 {WEEKDAYS.map((day) => (

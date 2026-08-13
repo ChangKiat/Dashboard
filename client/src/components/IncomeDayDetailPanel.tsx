@@ -24,9 +24,6 @@ export default function IncomeDayDetailPanel({
     formatAmount,
 }: Props) {
     const dayTotal = daySummary?.total ?? 0;
-    const categories = Object.entries(daySummary?.byCategory ?? {})
-        .filter(([, amount]) => amount > 0)
-        .sort((a, b) => b[1] - a[1]);
 
     return (
         <div className="income-day-header">
@@ -36,16 +33,6 @@ export default function IncomeDayDetailPanel({
                 <p className="income-day-meta muted">
                     {transactionCount} transaction{transactionCount === 1 ? '' : 's'}
                 </p>
-            )}
-            {categories.length > 0 && (
-                <ul className="income-day-categories">
-                    {categories.map(([category, amount]) => (
-                        <li key={category} className="income-day-category-chip">
-                            <span className="income-day-category-name">{category}</span>
-                            <span className="income-day-category-amount">{formatAmount(amount)}</span>
-                        </li>
-                    ))}
-                </ul>
             )}
         </div>
     );

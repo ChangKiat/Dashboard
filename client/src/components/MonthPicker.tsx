@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { formatMonthLabel, shiftMonth } from '../hooks/useMonth';
+import { shiftMonth } from '../hooks/useMonth';
 
 interface Props {
     month: string;
@@ -12,23 +12,18 @@ export default function MonthPicker({ month, onChange }: Props) {
 
     return (
         <div className="month-picker">
-            <div className="month-picker-controls">
-                <button type="button" className="preset" onClick={goPrev} aria-label="Previous month">
-                    ←
-                </button>
-                <label className="month-input-label">
-                    Month
-                    <input
-                        type="month"
-                        value={month}
-                        onChange={(e) => onChange(e.target.value)}
-                    />
-                </label>
-                <button type="button" className="preset" onClick={goNext} aria-label="Next month">
-                    →
-                </button>
-            </div>
-            <span className="range-label">{formatMonthLabel(month)}</span>
+            <button type="button" className="month-nav" onClick={goPrev} aria-label="Previous month">
+                ←
+            </button>
+            <input
+                type="month"
+                value={month}
+                aria-label="Month"
+                onChange={(e) => onChange(e.target.value)}
+            />
+            <button type="button" className="month-nav" onClick={goNext} aria-label="Next month">
+                →
+            </button>
         </div>
     );
 }

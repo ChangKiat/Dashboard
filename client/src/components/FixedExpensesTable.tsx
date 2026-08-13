@@ -227,9 +227,9 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
     };
 
     return (
-        <div className="expenses-table-card expenses-fixed-expenses">
+        <div className="card expenses-fixed-expenses">
             <div className="section-header-row">
-                <h3>Fixed Expenses</h3>
+                <h3>Fixed expenses</h3>
                 <div className="fixed-expense-filters">
                     <select
                         aria-label="Filter by category"

@@ -423,7 +423,6 @@ export default function ExpenseTransactionsTable({
         <>
             {defaultDate != null && (
                 <div className="section-header-row">
-                    <h4>Expenses</h4>
                     <button type="button" className="btn-add" onClick={openCreate}>
                         + Add
                     </button>

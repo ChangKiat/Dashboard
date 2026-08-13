@@ -47,13 +47,13 @@ export default function CategoryPieChart({
                 </Pie>
                 <Tooltip
                     contentStyle={{
-                        background: '#1a1f2b',
-                        border: '1px solid #2a2f3a',
+                        background: 'var(--surface-2)',
+                        border: '1px solid var(--border)',
                         borderRadius: 8,
                     }}
                     formatter={(value: number) => valueFormatter(value)}
                 />
-                <Legend wrapperStyle={{ fontSize: 12, color: '#9aa0a6' }} />
+                <Legend wrapperStyle={{ fontSize: 12, color: 'var(--text-muted)' }} />
             </PieChart>
         </ResponsiveContainer>
     );

@@ -393,7 +393,7 @@ export default function PaymentAccountsPanel({
     const panelTitle = mode === 'balances' ? 'Account balances' : 'Payment accounts';
 
     return (
-        <div className="income-section-card payment-accounts-panel">
+        <div className="card payment-accounts-panel">
             <h3>{panelTitle}</h3>
             {actionError && <p className="error">{actionError}</p>}
             <div className="payment-accounts-split">

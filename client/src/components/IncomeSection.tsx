@@ -122,7 +122,6 @@ export default function IncomeSection({ month }: Props) {
 
     return (
         <section className="panel">
-            <h2>Income</h2>
             <div className="income-layout">
                 <div className="income-hero-row">
                     <SummaryCard
@@ -160,7 +159,7 @@ export default function IncomeSection({ month }: Props) {
                     </div>
 
                     <div className="income-main-right">
-                        <div className="income-section-card income-transactions-card">
+                        <div className="card income-transactions-card">
                             {selectedDate ? (
                                 <>
                                     <IncomeDayDetailPanel

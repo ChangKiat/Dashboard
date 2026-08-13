@@ -28,13 +28,6 @@ export const TAB_LABELS: Record<TabId, string> = {
     setup: 'Setup',
 };
 
-export const TAB_SUBTITLES: Record<TabId, string> = {
-    expenses: 'Monthly budget overview',
-    income: 'Income calendar & transactions',
-    health: 'Workouts & meals',
-    setup: 'Fixed expenses, accounts & meal goals',
-};
-
 export function useSectionTab() {
     const [activeTab, setActiveTabState] = useState<TabId>(readStoredTab);
 

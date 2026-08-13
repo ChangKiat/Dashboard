@@ -33,23 +33,23 @@ export default function WorkoutVolumeChart({ data }: Props) {
     return (
         <ResponsiveContainer width="100%" height={280}>
             <BarChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#2a2f3a" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis
                     dataKey="shortDate"
-                    tick={{ fill: '#9aa0a6', fontSize: 11 }}
+                    tick={{ fill: 'var(--text-muted)', fontSize: 11 }}
                     interval="preserveStartEnd"
                 />
-                <YAxis tick={{ fill: '#9aa0a6', fontSize: 11 }} width={48} />
+                <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 11 }} width={48} />
                 <Tooltip
                     contentStyle={{
-                        background: '#1a1f2b',
-                        border: '1px solid #2a2f3a',
+                        background: 'var(--surface-2)',
+                        border: '1px solid var(--border)',
                         borderRadius: 8,
                     }}
-                    labelStyle={{ color: '#e8eaed' }}
+                    labelStyle={{ color: 'var(--text)' }}
                     labelFormatter={(_, payload) => payload?.[0]?.payload?.date ?? ''}
                 />
-                <Legend wrapperStyle={{ fontSize: 12, color: '#9aa0a6' }} />
+                <Legend wrapperStyle={{ fontSize: 12, color: 'var(--text-muted)' }} />
                 <Bar dataKey="sessions" fill="#a78bfa" radius={[4, 4, 0, 0]} name="Sessions" />
                 <Bar dataKey="sets" fill="#60a5fa" radius={[4, 4, 0, 0]} name="Sets" />
             </BarChart>

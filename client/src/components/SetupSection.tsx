@@ -64,7 +64,6 @@ export default function SetupSection({ month }: Props) {
 
     return (
         <section className="panel">
-            <h2>Setup</h2>
             <div className="setup-layout">
                 <MealsSetupPanel />
                 <FixedExpensesTable

@@ -8,7 +8,7 @@ interface Props {
 export default function NutritionAnalytics({ series }: Props) {
     return (
         <div className="health-nutrition-parts">
-            <div className="chart-card health-macros-chart">
+            <div className="card health-macros-chart">
                 <h3>Daily macros</h3>
                 <NutritionLineChart series={series} />
             </div>

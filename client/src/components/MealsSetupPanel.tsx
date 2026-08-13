@@ -87,7 +87,7 @@ export default function MealsSetupPanel() {
 
     if (loading) {
         return (
-            <div className="income-section-card meals-setup-panel">
+            <div className="card meals-setup-panel">
                 <h3>Meal goals</h3>
                 <p className="muted">Loading…</p>
             </div>
@@ -95,7 +95,7 @@ export default function MealsSetupPanel() {
     }
 
     return (
-        <div className="income-section-card meals-setup-panel">
+        <div className="card meals-setup-panel">
             <div className="section-header-row">
                 <h3>Meal goals</h3>
                 <button type="button" className="btn-primary" onClick={handleSave} disabled={saving}>
