@@ -302,148 +302,152 @@ export default function LoansPanel({ rows, formatAmount, onChanged }: Props) {
                 error={modalError}
                 onClose={closeModal}
                 onSave={handleSave}
+                className="loan-form-modal"
+                closeOnBackdrop={false}
             >
-                <div className="form-field">
-                    <label htmlFor="loan-description">Name</label>
-                    <input
-                        id="loan-description"
-                        type="text"
-                        placeholder="e.g. PTPTN, Car loan"
-                        value={form.description}
-                        onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                    />
-                </div>
-                <div className="form-field">
-                    <label htmlFor="loan-payment-method">Paid from</label>
-                    <PaymentMethodSelect
-                        id="loan-payment-method"
-                        value={form.paymentMethod}
-                        onChange={(paymentMethod) => setForm((f) => ({ ...f, paymentMethod }))}
-                        excludeTypes={['investment']}
-                    />
-                </div>
-                <div className="form-field">
-                    <label htmlFor="loan-method">Interest method</label>
-                    <select
-                        id="loan-method"
-                        value={form.loanMethod}
-                        onChange={(e) =>
-                            setForm((f) => ({ ...f, loanMethod: e.target.value as LoanMethod }))
-                        }
-                    >
-                        <option value="reducing">Reducing balance</option>
-                        <option value="flat">Flat rate</option>
-                        <option value="included">Interest included</option>
-                    </select>
-                </div>
-                {!isIncluded && (
-                <div className="form-field">
-                    <label htmlFor="loan-original">Original principal</label>
-                    <input
-                        id="loan-original"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={form.originalPrincipal}
-                        onChange={(e) => {
-                            const originalPrincipalValue = e.target.value;
-                            setForm((f) => ({
-                                ...f,
-                                originalPrincipal: originalPrincipalValue,
-                                remainingPrincipal:
-                                    f.remainingPrincipal === '' ||
-                                    f.remainingPrincipal === f.originalPrincipal
-                                        ? originalPrincipalValue
-                                        : f.remainingPrincipal,
-                            }));
-                        }}
-                    />
-                </div>
-                )}
-                <div className="form-field">
-                    <label htmlFor="loan-remaining">Remaining principal</label>
-                    <input
-                        id="loan-remaining"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={form.remainingPrincipal}
-                        onChange={(e) =>
-                            setForm((f) => ({ ...f, remainingPrincipal: e.target.value }))
-                        }
-                    />
-                </div>
-                {!isIncluded && (
-                <>
-                <div className="form-field">
-                    <label htmlFor="loan-rate">Annual rate %</label>
-                    <input
-                        id="loan-rate"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={form.annualRatePct}
-                        onChange={(e) => setForm((f) => ({ ...f, annualRatePct: e.target.value }))}
-                    />
-                </div>
-                <div className="form-field">
-                    <label htmlFor="loan-tenure">Tenure (months)</label>
-                    <input
-                        id="loan-tenure"
-                        type="number"
-                        min="1"
-                        step="1"
-                        value={form.tenureMonths}
-                        onChange={(e) => setForm((f) => ({ ...f, tenureMonths: e.target.value }))}
-                    />
-                </div>
-                </>
-                )}
-                <div className="form-field">
-                    <label htmlFor="loan-amount">Monthly installment</label>
-                    <input
-                        id="loan-amount"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={form.amount}
-                        onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
-                    />
-                    {suggestedAmount != null && form.amount === '' && (
-                        <span className="muted form-hint">
-                            Suggested installment {formatAmount(suggestedAmount)}
-                        </span>
+                <div className="loan-form-grid">
+                    <div className="form-field span-full">
+                        <label htmlFor="loan-description">Name</label>
+                        <input
+                            id="loan-description"
+                            type="text"
+                            placeholder="e.g. PTPTN, Car loan"
+                            value={form.description}
+                            onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                        />
+                    </div>
+                    <div className="form-field">
+                        <label htmlFor="loan-payment-method">Paid from</label>
+                        <PaymentMethodSelect
+                            id="loan-payment-method"
+                            value={form.paymentMethod}
+                            onChange={(paymentMethod) => setForm((f) => ({ ...f, paymentMethod }))}
+                            excludeTypes={['investment']}
+                        />
+                    </div>
+                    <div className="form-field">
+                        <label htmlFor="loan-method">Interest method</label>
+                        <select
+                            id="loan-method"
+                            value={form.loanMethod}
+                            onChange={(e) =>
+                                setForm((f) => ({ ...f, loanMethod: e.target.value as LoanMethod }))
+                            }
+                        >
+                            <option value="reducing">Reducing balance</option>
+                            <option value="flat">Flat rate</option>
+                            <option value="included">Interest included</option>
+                        </select>
+                    </div>
+                    {!isIncluded && (
+                    <div className="form-field">
+                        <label htmlFor="loan-original">Original principal</label>
+                        <input
+                            id="loan-original"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={form.originalPrincipal}
+                            onChange={(e) => {
+                                const originalPrincipalValue = e.target.value;
+                                setForm((f) => ({
+                                    ...f,
+                                    originalPrincipal: originalPrincipalValue,
+                                    remainingPrincipal:
+                                        f.remainingPrincipal === '' ||
+                                        f.remainingPrincipal === f.originalPrincipal
+                                            ? originalPrincipalValue
+                                            : f.remainingPrincipal,
+                                }));
+                            }}
+                        />
+                    </div>
+                    )}
+                    <div className="form-field">
+                        <label htmlFor="loan-remaining">Remaining principal</label>
+                        <input
+                            id="loan-remaining"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={form.remainingPrincipal}
+                            onChange={(e) =>
+                                setForm((f) => ({ ...f, remainingPrincipal: e.target.value }))
+                            }
+                        />
+                    </div>
+                    {!isIncluded && (
+                    <>
+                    <div className="form-field">
+                        <label htmlFor="loan-rate">Annual rate %</label>
+                        <input
+                            id="loan-rate"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={form.annualRatePct}
+                            onChange={(e) => setForm((f) => ({ ...f, annualRatePct: e.target.value }))}
+                        />
+                    </div>
+                    <div className="form-field">
+                        <label htmlFor="loan-tenure">Tenure (months)</label>
+                        <input
+                            id="loan-tenure"
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={form.tenureMonths}
+                            onChange={(e) => setForm((f) => ({ ...f, tenureMonths: e.target.value }))}
+                        />
+                    </div>
+                    </>
+                    )}
+                    <div className="form-field">
+                        <label htmlFor="loan-amount">Monthly installment</label>
+                        <input
+                            id="loan-amount"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={form.amount}
+                            onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+                        />
+                        {suggestedAmount != null && form.amount === '' && (
+                            <span className="muted form-hint">
+                                Suggested installment {formatAmount(suggestedAmount)}
+                            </span>
+                        )}
+                    </div>
+                    <div className="form-field">
+                        <label htmlFor="loan-day">Day of month</label>
+                        <input
+                            id="loan-day"
+                            type="number"
+                            min="1"
+                            max="31"
+                            value={form.dayOfMonth}
+                            onChange={(e) => setForm((f) => ({ ...f, dayOfMonth: e.target.value }))}
+                        />
+                    </div>
+                    {!isIncluded && (
+                    <div className="form-field span-full">
+                        <label htmlFor="loan-start">Start date (optional)</label>
+                        <input
+                            id="loan-start"
+                            type="date"
+                            value={form.loanStartDate}
+                            onChange={(e) => setForm((f) => ({ ...f, loanStartDate: e.target.value }))}
+                        />
+                    </div>
+                    )}
+                    {loanPreview && (
+                        <p className="muted form-hint span-full">
+                            This payment: interest {formatAmount(loanPreview.interest)} · principal{' '}
+                            {formatAmount(loanPreview.principal)} · left{' '}
+                            {formatAmount(loanPreview.remainingAfter)}
+                        </p>
                     )}
                 </div>
-                <div className="form-field">
-                    <label htmlFor="loan-day">Day of month</label>
-                    <input
-                        id="loan-day"
-                        type="number"
-                        min="1"
-                        max="31"
-                        value={form.dayOfMonth}
-                        onChange={(e) => setForm((f) => ({ ...f, dayOfMonth: e.target.value }))}
-                    />
-                </div>
-                {!isIncluded && (
-                <div className="form-field">
-                    <label htmlFor="loan-start">Start date (optional)</label>
-                    <input
-                        id="loan-start"
-                        type="date"
-                        value={form.loanStartDate}
-                        onChange={(e) => setForm((f) => ({ ...f, loanStartDate: e.target.value }))}
-                    />
-                </div>
-                )}
-                {loanPreview && (
-                    <p className="muted form-hint">
-                        This payment: interest {formatAmount(loanPreview.interest)} · principal{' '}
-                        {formatAmount(loanPreview.principal)} · left{' '}
-                        {formatAmount(loanPreview.remainingAfter)}
-                    </p>
-                )}
             </RecordModal>
         </div>
     );

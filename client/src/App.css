@@ -1550,9 +1550,20 @@ div.payment-account-card-main:hover {
   z-index: 30;
 }
 
+.record-modal.loan-form-modal,
 .record-modal.workout-record-modal,
 .detail-modal.workout-session-modal {
   max-width: min(720px, 96vw);
+}
+
+.loan-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.loan-form-grid .span-full {
+  grid-column: 1 / -1;
 }
 
 .workout-form-grid {
@@ -1852,7 +1863,8 @@ div.payment-account-card-main:hover {
     grid-template-columns: 1fr;
   }
 
-  .workout-form-grid {
+  .workout-form-grid,
+  .loan-form-grid {
     grid-template-columns: 1fr;
   }
 }
