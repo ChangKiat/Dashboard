@@ -46,13 +46,17 @@ function nextSplit(row: FixedExpenseConfig) {
     });
 }
 
+export type LoansPanelMode = 'manage' | 'view';
+
 interface Props {
     rows: FixedExpenseConfig[];
     formatAmount: (amount: number) => string;
-    onChanged: () => void;
+    mode?: LoansPanelMode;
+    onChanged?: () => void;
 }
 
-export default function LoansPanel({ rows, formatAmount, onChanged }: Props) {
+export default function LoansPanel({ rows, formatAmount, mode = 'manage', onChanged }: Props) {
+    const isView = mode === 'view';
     const [modalMode, setModalMode] = useState<ModalMode>('closed');
     const [editingEntry, setEditingEntry] = useState<FixedExpenseConfig | null>(null);
     const [form, setForm] = useState(EMPTY_FORM);
@@ -209,7 +213,7 @@ export default function LoansPanel({ rows, formatAmount, onChanged }: Props) {
                 await updateFixedExpense(editingEntry.id, payload);
             }
             closeModal();
-            onChanged();
+            onChanged?.();
         } catch (err) {
             setModalError(err instanceof Error ? err.message : 'Failed to save');
         } finally {
@@ -221,7 +225,7 @@ export default function LoansPanel({ rows, formatAmount, onChanged }: Props) {
         setActionError(null);
         try {
             await deleteFixedExpense(row.id);
-            onChanged();
+            onChanged?.();
         } catch (err) {
             setActionError(err instanceof Error ? err.message : 'Failed to delete');
         }
@@ -229,12 +233,16 @@ export default function LoansPanel({ rows, formatAmount, onChanged }: Props) {
 
     return (
         <div className="card payment-accounts-panel">
-            <div className="section-header-row">
-                <h3>Loan interest</h3>
-                <button type="button" className="btn-add" onClick={openCreate}>
-                    + Add
-                </button>
-            </div>
+            {isView ? (
+                <h3>Loans</h3>
+            ) : (
+                <div className="section-header-row">
+                    <h3>Loan interest</h3>
+                    <button type="button" className="btn-add" onClick={openCreate}>
+                        + Add
+                    </button>
+                </div>
+            )}
             {actionError && <p className="error">{actionError}</p>}
             {sortedRows.length === 0 ? (
                 <p className="muted">No loans yet.</p>
@@ -285,16 +293,19 @@ export default function LoansPanel({ rows, formatAmount, onChanged }: Props) {
                                         )}
                                     </div>
                                 </div>
-                                <RowActions
-                                    onEdit={() => openEdit(row)}
-                                    onDelete={() => handleDelete(row)}
-                                    deleteLabel={`"${row.description}"`}
-                                />
+                                {!isView && (
+                                    <RowActions
+                                        onEdit={() => openEdit(row)}
+                                        onDelete={() => handleDelete(row)}
+                                        deleteLabel={`"${row.description}"`}
+                                    />
+                                )}
                             </li>
                         );
                     })}
                 </ul>
             )}
+            {!isView && (
             <RecordModal
                 title={modalMode === 'create' ? 'Add loan' : 'Edit loan'}
                 open={modalMode !== 'closed'}
@@ -449,6 +460,7 @@ export default function LoansPanel({ rows, formatAmount, onChanged }: Props) {
                     )}
                 </div>
             </RecordModal>
+            )}
         </div>
     );
 }

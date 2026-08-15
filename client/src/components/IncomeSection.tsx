@@ -3,22 +3,26 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
     ExpenseOverviewResponse,
     ExpenseTransaction,
+    FixedExpenseConfig,
     IncomeDailyPoint,
     IncomeTransaction,
 } from '../api';
 import {
     fetchExpenseOverview,
     fetchExpenseTransactions,
+    fetchFixedExpenses,
     fetchIncomeDaily,
     fetchIncomeTransactions,
 } from '../api';
 import { monthToDateRange, pickDefaultIncomeDate } from '../utils/dateRange';
+import { isLoanFixedExpense } from '../utils/expenseCategories';
 import { sumIncomeDailyTotals } from '../utils/incomeAggregates';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
 
 import IncomeCalendar from './IncomeCalendar';
 import IncomeDayDetailPanel from './IncomeDayDetailPanel';
 import IncomeTransactionsTable from './IncomeTransactionsTable';
+import LoansPanel from './LoansPanel';
 import PaymentAccountsPanel from './PaymentAccountsPanel';
 import SummaryCard from './SummaryCard';
 
@@ -39,19 +43,22 @@ export default function IncomeSection({ month }: Props) {
     const [incomes, setIncomes] = useState<IncomeTransaction[]>([]);
     const [recentExpenses, setRecentExpenses] = useState<ExpenseTransaction[]>([]);
     const [dailySeries, setDailySeries] = useState<IncomeDailyPoint[]>([]);
+    const [loanRows, setLoanRows] = useState<FixedExpenseConfig[]>([]);
 
     const loadData = useCallback(async (options?: { silent?: boolean }) => {
         const range = monthToDateRange(month);
-        const [overviewRes, incomesRes, expensesRes, dailyRes] = await Promise.all([
+        const [overviewRes, incomesRes, expensesRes, dailyRes, fixedRes] = await Promise.all([
             fetchExpenseOverview(month),
             fetchIncomeTransactions(month),
             fetchExpenseTransactions(month),
             fetchIncomeDaily(range),
+            fetchFixedExpenses(),
         ]);
         setOverview(overviewRes);
         setIncomes(incomesRes.entries);
         setRecentExpenses(expensesRes.entries);
         setDailySeries(dailyRes.series);
+        setLoanRows(fixedRes.entries.filter(isLoanFixedExpense));
 
         if (!options?.silent) {
             setSelectedDate((prev) => {
@@ -103,6 +110,11 @@ export default function IncomeSection({ month }: Props) {
         return { cashOnHand, creditUsed, availableCredit };
     }, [accounts]);
 
+    const loansRemaining = useMemo(
+        () => loanRows.reduce((sum, row) => sum + (row.remainingPrincipal ?? 0), 0),
+        [loanRows]
+    );
+
     const dayIncomes = useMemo(
         () =>
             incomes
@@ -136,6 +148,10 @@ export default function IncomeSection({ month }: Props) {
                     <SummaryCard
                         label="Credit used"
                         value={formatMYR(paymentTotals.creditUsed)}
+                    />
+                    <SummaryCard
+                        label="Loans remaining"
+                        value={formatMYR(loansRemaining)}
                     />
                     <SummaryCard
                         label="Available credit"
@@ -189,6 +205,11 @@ export default function IncomeSection({ month }: Props) {
                     month={month}
                     formatAmount={formatMYR}
                     onChanged={handleChanged}
+                />
+                <LoansPanel
+                    mode="view"
+                    rows={loanRows}
+                    formatAmount={formatMYR}
                 />
             </div>
         </section>

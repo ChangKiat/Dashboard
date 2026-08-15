@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { FixedExpenseConfig, InterestScheduleConfig } from '../api';
 import { fetchExpenseOverview, fetchFixedExpenses, fetchInterestSchedules } from '../api';
+import { isLoanFixedExpense } from '../utils/expenseCategories';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
 
 import FixedExpensesTable from './FixedExpensesTable';
@@ -61,17 +62,11 @@ export default function SetupSection({ month }: Props) {
     }, [loadData, refreshAccounts]);
 
     const billRows = useMemo(
-        () =>
-            fixedConfigs.filter(
-                (row) => !row.loanMethod && row.category.trim().toLowerCase() !== 'loan'
-            ),
+        () => fixedConfigs.filter((row) => !isLoanFixedExpense(row)),
         [fixedConfigs]
     );
     const loanRows = useMemo(
-        () =>
-            fixedConfigs.filter(
-                (row) => Boolean(row.loanMethod) || row.category.trim().toLowerCase() === 'loan'
-            ),
+        () => fixedConfigs.filter(isLoanFixedExpense),
         [fixedConfigs]
     );
 

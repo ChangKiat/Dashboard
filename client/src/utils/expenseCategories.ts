@@ -13,6 +13,13 @@ export function isLoanCategory(category: string): boolean {
     return category.trim().toLowerCase() === 'loan';
 }
 
+export function isLoanFixedExpense(row: {
+    loanMethod?: string | null;
+    category: string;
+}): boolean {
+    return Boolean(row.loanMethod) || isLoanCategory(row.category);
+}
+
 export function isOtherCategory(category: string): boolean {
     return category.trim().toLowerCase() === 'other';
 }

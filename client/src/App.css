@@ -180,6 +180,10 @@
   border-bottom: none;
 }
 
+.income-hero-row {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
 .expenses-hero-row .summary-card--highlight .summary-value {
   font-size: 1.35rem;
 }
