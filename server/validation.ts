@@ -32,6 +32,10 @@ export function isPositiveNumber(value: unknown): value is number {
     return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }
 
+export function isNonNegativeNumber(value: unknown): value is number {
+    return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
 export function isDayOfMonth(value: unknown): value is number {
     return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 31;
 }

@@ -9,6 +9,10 @@ export function isInvestmentCategory(category: string): boolean {
     return category.trim().toLowerCase() === 'investment';
 }
 
+export function isLoanCategory(category: string): boolean {
+    return category.trim().toLowerCase() === 'loan';
+}
+
 export function isOtherCategory(category: string): boolean {
     return category.trim().toLowerCase() === 'other';
 }

@@ -36,16 +36,99 @@ import { getTelegramUserId } from '../telegramUser';
 import {
     isDayOfMonth,
     isNonEmptyString,
+    isNonNegativeNumber,
     isPositiveNumber,
     isValidDate,
     parseIdParam,
 } from '../validation';
+import {
+    parseLoanMethod,
+    type FixedExpenseLoanFields,
+} from '../../agent/services/loanService';
 
 const router = Router();
 
 /** Investment always requires from→to; Other may optionally create a linked transfer. */
 function isInvestmentCategory(category: string): boolean {
     return category.trim().toLowerCase() === 'investment';
+}
+
+function isLoanCategory(category: string): boolean {
+    return category.trim().toLowerCase() === 'loan';
+}
+
+function parseLoanFields(
+    body: Record<string, unknown>
+): { loan?: FixedExpenseLoanFields | null; error?: string } {
+    const hasLoanKeys =
+        body.loanMethod !== undefined ||
+        body.originalPrincipal !== undefined ||
+        body.remainingPrincipal !== undefined ||
+        body.annualRatePct !== undefined ||
+        body.tenureMonths !== undefined ||
+        body.loanStartDate !== undefined;
+    if (!hasLoanKeys) return {};
+
+    if (body.loanMethod === null || body.loanMethod === '') {
+        return { loan: null };
+    }
+
+    const method = parseLoanMethod(typeof body.loanMethod === 'string' ? body.loanMethod : null);
+    if (!method) {
+        return { error: 'Loan method must be reducing, flat, or included' };
+    }
+
+    let loanStartDate: string | null = null;
+    if (body.loanStartDate != null && body.loanStartDate !== '') {
+        if (!isValidDate(body.loanStartDate)) {
+            return { error: 'Invalid loan start date' };
+        }
+        loanStartDate = body.loanStartDate;
+    }
+
+    if (method === 'included') {
+        if (!isNonNegativeNumber(body.remainingPrincipal)) {
+            return { error: 'Remaining principal must be 0 or more' };
+        }
+        const remaining = body.remainingPrincipal;
+        const original = isPositiveNumber(body.originalPrincipal)
+            ? body.originalPrincipal
+            : remaining;
+        return {
+            loan: {
+                loanMethod: method,
+                originalPrincipal: original,
+                remainingPrincipal: remaining,
+                annualRatePct: null,
+                tenureMonths: null,
+                loanStartDate: null,
+            },
+        };
+    }
+
+    if (!isPositiveNumber(body.originalPrincipal)) {
+        return { error: 'Original principal must be a positive number' };
+    }
+    if (!isNonNegativeNumber(body.remainingPrincipal)) {
+        return { error: 'Remaining principal must be 0 or more' };
+    }
+    if (!isNonNegativeNumber(body.annualRatePct)) {
+        return { error: 'Annual rate must be 0 or more' };
+    }
+    if (!isPositiveNumber(body.tenureMonths) || !Number.isInteger(body.tenureMonths)) {
+        return { error: 'Tenure must be a positive integer' };
+    }
+
+    return {
+        loan: {
+            loanMethod: method,
+            originalPrincipal: body.originalPrincipal,
+            remainingPrincipal: body.remainingPrincipal,
+            annualRatePct: body.annualRatePct,
+            tenureMonths: body.tenureMonths,
+            loanStartDate,
+        },
+    };
 }
 
 function isOtherCategory(category: string): boolean {
@@ -579,6 +662,14 @@ router.post('/fixed', async (req, res) => {
             return res.status(400).json({ error: fundingError });
         }
 
+        const loanParsed = parseLoanFields(body);
+        if (loanParsed.error) {
+            return res.status(400).json({ error: loanParsed.error });
+        }
+        if (loanParsed.loan && !isLoanCategory(category)) {
+            return res.status(400).json({ error: 'Loan fields are only valid for the Loan category' });
+        }
+
         await addFixedExpense(
             body.dayOfMonth,
             body.amount,
@@ -588,7 +679,8 @@ router.post('/fixed', async (req, res) => {
             body.frequencyMonths,
             startMonth,
             paymentMethod,
-            fundingDestination(category, paymentMethod, toInvestmentAccount)
+            fundingDestination(category, paymentMethod, toInvestmentAccount),
+            isLoanCategory(category) ? loanParsed.loan ?? null : null
         );
         res.json({ ok: true });
     } catch (err) {
@@ -768,6 +860,7 @@ router.patch('/fixed/:id', async (req, res) => {
             frequencyMonths?: number;
             paymentMethod?: string | null;
             toInvestmentAccount?: string | null;
+            loan?: FixedExpenseLoanFields | null;
         } = {};
 
         if (body.description != null) {
@@ -864,6 +957,17 @@ router.patch('/fixed/:id', async (req, res) => {
             );
         } else if (fields.category != null) {
             fields.toInvestmentAccount = null;
+        }
+
+        const loanParsed = parseLoanFields(body);
+        if (loanParsed.error) {
+            return res.status(400).json({ error: loanParsed.error });
+        }
+        if (loanParsed.loan && !isLoanCategory(nextCategory)) {
+            return res.status(400).json({ error: 'Loan fields are only valid for the Loan category' });
+        }
+        if (loanParsed.loan !== undefined) {
+            fields.loan = isLoanCategory(nextCategory) ? loanParsed.loan : null;
         }
 
         if (Object.keys(fields).length === 0) {

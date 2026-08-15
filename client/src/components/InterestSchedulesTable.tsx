@@ -172,7 +172,7 @@ export default function InterestSchedulesTable({ rows, formatAmount, onChanged }
     return (
         <div className="card expenses-interest-schedules">
             <div className="section-header-row">
-                <h3>Interest schedules</h3>
+                <h3>Income interest</h3>
                 <div className="fixed-expense-filters">
                     <select
                         aria-label="Filter by account"
@@ -207,7 +207,7 @@ export default function InterestSchedulesTable({ rows, formatAmount, onChanged }
                         {rows.length === 0 ? (
                             <tr>
                                 <td colSpan={5} className="muted">
-                                    No interest schedules configured
+                                    No income interest configured
                                 </td>
                             </tr>
                         ) : sortedRows.length === 0 ? (
@@ -243,7 +243,7 @@ export default function InterestSchedulesTable({ rows, formatAmount, onChanged }
                 onPageChange={setPage}
             />
             <RecordModal
-                title={modalMode === 'create' ? 'Add interest schedule' : 'Edit interest schedule'}
+                title={modalMode === 'create' ? 'Add income interest' : 'Edit income interest'}
                 open={modalMode !== 'closed'}
                 saving={saving}
                 error={modalError}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { FixedExpenseConfig, InterestScheduleConfig } from '../api';
 import { fetchExpenseOverview, fetchFixedExpenses, fetchInterestSchedules } from '../api';
@@ -6,6 +6,7 @@ import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
 
 import FixedExpensesTable from './FixedExpensesTable';
 import InterestSchedulesTable from './InterestSchedulesTable';
+import LoansPanel from './LoansPanel';
 import MealsSetupPanel from './MealsSetupPanel';
 import PaymentAccountsPanel from './PaymentAccountsPanel';
 
@@ -59,6 +60,21 @@ export default function SetupSection({ month }: Props) {
         void refreshAccounts();
     }, [loadData, refreshAccounts]);
 
+    const billRows = useMemo(
+        () =>
+            fixedConfigs.filter(
+                (row) => !row.loanMethod && row.category.trim().toLowerCase() !== 'loan'
+            ),
+        [fixedConfigs]
+    );
+    const loanRows = useMemo(
+        () =>
+            fixedConfigs.filter(
+                (row) => Boolean(row.loanMethod) || row.category.trim().toLowerCase() === 'loan'
+            ),
+        [fixedConfigs]
+    );
+
     if (loading) return <section className="panel"><p className="muted">Loading setup…</p></section>;
     if (error) return <section className="panel"><p className="error">{error}</p></section>;
 
@@ -66,14 +82,19 @@ export default function SetupSection({ month }: Props) {
         <section className="panel">
             <div className="setup-layout">
                 <MealsSetupPanel />
-                <FixedExpensesTable
-                    rows={fixedConfigs}
-                    variableCategories={variableCategories}
+                <InterestSchedulesTable
+                    rows={interestSchedules}
                     formatAmount={formatMYR}
                     onChanged={handleChanged}
                 />
-                <InterestSchedulesTable
-                    rows={interestSchedules}
+                <LoansPanel
+                    rows={loanRows}
+                    formatAmount={formatMYR}
+                    onChanged={handleChanged}
+                />
+                <FixedExpensesTable
+                    rows={billRows}
+                    variableCategories={variableCategories}
                     formatAmount={formatMYR}
                     onChanged={handleChanged}
                 />

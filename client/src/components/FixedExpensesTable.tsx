@@ -13,6 +13,16 @@ import TablePagination from './TablePagination';
 
 type ModalMode = 'closed' | 'create' | 'edit';
 
+const EMPTY_FORM = {
+    description: '',
+    category: '',
+    paymentMethod: '',
+    toInvestmentAccount: '',
+    amount: '',
+    dayOfMonth: '1',
+    frequencyMonths: '1',
+};
+
 function formatFrequencyMonths(months: number): string {
     if (months === 1) return 'Monthly';
     if (months === 2) return 'Every 2 months';
@@ -42,15 +52,7 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
     const [paymentFilter, setPaymentFilter] = useState('');
     const [modalMode, setModalMode] = useState<ModalMode>('closed');
     const [editingEntry, setEditingEntry] = useState<FixedExpenseConfig | null>(null);
-    const [form, setForm] = useState({
-        description: '',
-        category: '',
-        paymentMethod: '',
-        toInvestmentAccount: '',
-        amount: '',
-        dayOfMonth: '',
-        frequencyMonths: '',
-    });
+    const [form, setForm] = useState(EMPTY_FORM);
     const [saving, setSaving] = useState(false);
     const [modalError, setModalError] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
@@ -104,15 +106,7 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
     const openCreate = () => {
         setModalMode('create');
         setEditingEntry(null);
-        setForm({
-            description: '',
-            category: '',
-            paymentMethod: '',
-            toInvestmentAccount: '',
-            amount: '',
-            dayOfMonth: '1',
-            frequencyMonths: '1',
-        });
+        setForm(EMPTY_FORM);
         setModalError(null);
     };
 

@@ -143,6 +143,8 @@ export interface IncomeDailyResponse {
     series: IncomeDailyPoint[];
 }
 
+export type LoanMethod = 'reducing' | 'flat' | 'included';
+
 export interface FixedExpenseConfig {
     id: number;
     description: string;
@@ -154,6 +156,12 @@ export interface FixedExpenseConfig {
     currency: string;
     paymentMethod?: string | null;
     toInvestmentAccount?: string | null;
+    loanMethod?: LoanMethod | null;
+    originalPrincipal?: number | null;
+    remainingPrincipal?: number | null;
+    annualRatePct?: number | null;
+    tenureMonths?: number | null;
+    loanStartDate?: string | null;
 }
 
 export interface FixedExpensesResponse {
@@ -535,6 +543,12 @@ export function createFixedExpense(
     > & {
         paymentMethod?: string | null;
         toInvestmentAccount?: string | null;
+        loanMethod?: LoanMethod | null;
+        originalPrincipal?: number | null;
+        remainingPrincipal?: number | null;
+        annualRatePct?: number | null;
+        tenureMonths?: number | null;
+        loanStartDate?: string | null;
     }
 ) {
     return fetchJson<{ ok: true }>('/api/expenses/fixed', {
@@ -556,6 +570,12 @@ export function updateFixedExpense(
             | 'frequencyMonths'
             | 'paymentMethod'
             | 'toInvestmentAccount'
+            | 'loanMethod'
+            | 'originalPrincipal'
+            | 'remainingPrincipal'
+            | 'annualRatePct'
+            | 'tenureMonths'
+            | 'loanStartDate'
         >
     >
 ) {
