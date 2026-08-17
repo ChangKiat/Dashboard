@@ -26,9 +26,15 @@ function isNonNegativeNumber(value: unknown): value is number {
     return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
 
+function parseOptionalFee(value: unknown): number | undefined | 'invalid' {
+    if (value == null || value === '') return undefined;
+    if (!isNonNegativeNumber(value)) return 'invalid';
+    return value;
+}
+
 async function loadCashBalance(accountId: number): Promise<number> {
     const account = await getPaymentAccountById(accountId);
-    if (!account) throw new Error('Investment account not found');
+    if (!account) throw new Error('Account not found');
     const db = requireDb();
     const [expenseRows, incomeRows] = await Promise.all([
         db.select().from(expenses).orderBy(desc(expenses.date), desc(expenses.id)),
@@ -47,12 +53,25 @@ router.get('/accounts/:accountId/portfolio', async (req, res) => {
             getPortfolioSummary(accountId),
             loadCashBalance(accountId),
         ]);
-        const nav = Math.round((cashBalance + summary.totalMarketValue) * 100) / 100;
+        const account = await getPaymentAccountById(accountId);
+        const fdLocked =
+            Math.round(
+                summary.holdings
+                    .filter((h) => h.instrument.kind === 'fd')
+                    .reduce((sum, h) => sum + (h.instrument.principal ?? 0), 0) * 100
+            ) / 100;
+        const available = Math.round((cashBalance - fdLocked) * 100) / 100;
+        const nav =
+            account?.accountType === 'account'
+                ? cashBalance
+                : Math.round((cashBalance + summary.totalMarketValue) * 100) / 100;
 
         res.json({
             ...summary,
             cashBalance,
             nav,
+            fdLocked,
+            available,
         });
     } catch (err) {
         console.error('GET /api/investments/accounts/:accountId/portfolio', err);
@@ -80,6 +99,16 @@ router.post('/instruments', async (req, res) => {
             return res.status(400).json({ error: 'name is required' });
         }
 
+        let tenureMonths: number | null = null;
+        if (body.tenureMonths != null) {
+            if (!Number.isInteger(body.tenureMonths) || body.tenureMonths <= 0) {
+                return res.status(400).json({ error: 'tenureMonths must be a positive integer' });
+            }
+            tenureMonths = body.tenureMonths;
+        }
+
+        const cashBalance = body.kind === 'fd' ? await loadCashBalance(paymentAccountId) : undefined;
+
         const id = await createInstrument({
             paymentAccountId,
             kind: body.kind,
@@ -91,12 +120,23 @@ router.post('/instruments', async (req, res) => {
             annualRatePct: body.annualRatePct != null ? body.annualRatePct : null,
             startDate: body.startDate ?? null,
             maturityDate: body.maturityDate ?? null,
+            tenureMonths,
+            cashBalance,
         });
         res.status(201).json({ ok: true, id });
     } catch (err) {
         console.error('POST /api/investments/instruments', err);
         const message = err instanceof Error ? err.message : 'Server error';
-        const status = message.includes('required') || message.includes('Invalid') ? 400 : 500;
+        const status =
+            message.includes('required') ||
+            message.includes('Invalid') ||
+            message.includes('exceeds') ||
+            message.includes('only available') ||
+            message.includes('not found')
+                ? message.includes('not found')
+                    ? 404
+                    : 400
+                : 500;
         res.status(status).json({ error: message });
     }
 });
@@ -157,6 +197,10 @@ router.post('/events/buy', async (req, res) => {
         if (!isNonNegativeNumber(body.unitPrice)) {
             return res.status(400).json({ error: 'unitPrice must be a non-negative number' });
         }
+        const fee = parseOptionalFee(body.fee);
+        if (fee === 'invalid') {
+            return res.status(400).json({ error: 'fee must be a non-negative number' });
+        }
 
         const result = await recordBuy({
             instrumentId,
@@ -164,6 +208,7 @@ router.post('/events/buy', async (req, res) => {
             quantity: body.quantity,
             unitPrice: body.unitPrice,
             notes: body.notes ?? null,
+            fee,
             fromPaymentMethod: body.fromPaymentMethod ?? null,
         });
         res.status(201).json({ ok: true, ...result });
@@ -193,6 +238,10 @@ router.post('/events/sell', async (req, res) => {
         if (!isNonNegativeNumber(body.unitPrice)) {
             return res.status(400).json({ error: 'unitPrice must be a non-negative number' });
         }
+        const fee = parseOptionalFee(body.fee);
+        if (fee === 'invalid') {
+            return res.status(400).json({ error: 'fee must be a non-negative number' });
+        }
 
         const result = await recordSell({
             instrumentId,
@@ -200,6 +249,7 @@ router.post('/events/sell', async (req, res) => {
             quantity: body.quantity,
             unitPrice: body.unitPrice,
             notes: body.notes ?? null,
+            fee,
             toPaymentMethod: body.toPaymentMethod ?? null,
         });
         res.status(201).json({ ok: true, ...result });
@@ -210,7 +260,8 @@ router.post('/events/sell', async (req, res) => {
             message.includes('Insufficient') ||
             message.includes('not found') ||
             message.includes('FD') ||
-            message.includes('must')
+            message.includes('must') ||
+            message.includes('cannot exceed')
                 ? 400
                 : 500;
         res.status(status).json({ error: message });

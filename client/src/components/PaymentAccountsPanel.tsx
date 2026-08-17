@@ -102,13 +102,27 @@ function AccountBalanceStats({
         );
     }
     return (
-        <span
-            className={`payment-account-balance ${
-                (account.balance ?? 0) < 0 ? 'negative' : 'positive'
-            }`}
-        >
-            {formatAmount(account.balance ?? 0)}
-        </span>
+        <div className="payment-account-stats">
+            <span
+                className={`payment-account-stat payment-account-balance ${
+                    (account.balance ?? 0) < 0 ? 'negative' : 'positive'
+                }`}
+            >
+                {formatAmount(account.balance ?? 0)}
+            </span>
+            {(account.fdLocked ?? 0) > 0 && (
+                <>
+                    <span
+                        className={`payment-account-stat payment-account-balance ${
+                            (account.available ?? 0) < 0 ? 'negative' : 'positive'
+                        }`}
+                    >
+                        Avail {formatAmount(account.available ?? 0)}
+                    </span>
+                    <span className="payment-account-stat">FD {formatAmount(account.fdLocked ?? 0)}</span>
+                </>
+            )}
+        </div>
     );
 }
 
@@ -527,6 +541,7 @@ export default function PaymentAccountsPanel({
                         month={month}
                         formatAmount={formatAmount}
                         onClose={() => setViewingAccount(null)}
+                        onChanged={handleChanged}
                     />
                 </>
             )}

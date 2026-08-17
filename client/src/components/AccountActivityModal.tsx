@@ -1,13 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import type { AccountActivityEntry, PaymentAccount } from '../api';
-import { fetchAccountActivity } from '../api';
+import type { AccountActivityEntry, HoldingPosition, PaymentAccount } from '../api';
+import {
+    accrueFdInterest,
+    createInstrument,
+    deleteInstrument,
+    fetchAccountActivity,
+    fetchPortfolio,
+} from '../api';
 import { usePagination } from '../hooks/usePagination';
 import {
     accountPeriodToDateRange,
     formatPeriodLabel,
     isDateInRange,
 } from '../utils/statementPeriod';
+import ConfirmDialog from './ConfirmDialog';
 import RebateSummary from './RebateSummary';
 import TablePagination from './TablePagination';
 
@@ -16,9 +23,28 @@ interface Props {
     month: string;
     formatAmount: (amount: number) => string;
     onClose: () => void;
+    onChanged?: () => void;
 }
 
-type ActivityTab = 'activity' | 'cashback';
+type ActivityTab = 'activity' | 'cashback' | 'fd';
+
+function today(): string {
+    const t = new Date();
+    const y = t.getFullYear();
+    const m = String(t.getMonth() + 1).padStart(2, '0');
+    const d = String(t.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+function tenureLabel(start: string | null, maturity: string | null): string {
+    if (!maturity) return start ? `From ${start}` : '';
+    if (!start) return `Matures ${maturity}`;
+    const [sy, sm] = start.split('-').map(Number);
+    const [ey, em] = maturity.split('-').map(Number);
+    const months = (ey - sy) * 12 + (em - sm);
+    if (!Number.isFinite(months) || months <= 0) return `Matures ${maturity}`;
+    return `${months} mo · matures ${maturity}`;
+}
 
 function formatTypeLabel(type: AccountActivityEntry['type']): string {
     switch (type) {
@@ -41,13 +67,47 @@ function entryMatchesQuery(entry: AccountActivityEntry, query: string): boolean 
     return false;
 }
 
-export default function AccountActivityModal({ account, month, formatAmount, onClose }: Props) {
+const emptyFdForm = () => ({
+    name: '',
+    principal: '',
+    annualRatePct: '',
+    tenureMonths: '',
+    startDate: today(),
+});
+
+export default function AccountActivityModal({
+    account,
+    month,
+    formatAmount,
+    onClose,
+    onChanged,
+}: Props) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [accountData, setAccountData] = useState<PaymentAccount | null>(null);
     const [entries, setEntries] = useState<AccountActivityEntry[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [activeTab, setActiveTab] = useState<ActivityTab>('activity');
+    const [fdHoldings, setFdHoldings] = useState<HoldingPosition[]>([]);
+    const [fdForm, setFdForm] = useState(emptyFdForm);
+    const [fdSaving, setFdSaving] = useState(false);
+    const [fdError, setFdError] = useState<string | null>(null);
+    const [closingFd, setClosingFd] = useState<HoldingPosition | null>(null);
+
+    const fdEnabled = account?.accountType === 'account';
+
+    const reload = useCallback(async () => {
+        if (!account) return;
+        const [activity, portfolio] = await Promise.all([
+            fetchAccountActivity(account.id),
+            fdEnabled ? fetchPortfolio(account.id).catch(() => null) : Promise.resolve(null),
+        ]);
+        setAccountData(activity.account);
+        setEntries(activity.entries);
+        setFdHoldings(
+            portfolio?.holdings.filter((h) => h.instrument.kind === 'fd') ?? []
+        );
+    }, [account, fdEnabled]);
 
     useEffect(() => {
         if (!account) return;
@@ -56,12 +116,10 @@ export default function AccountActivityModal({ account, month, formatAmount, onC
         setError(null);
         setSearchQuery('');
         setActiveTab('activity');
-        fetchAccountActivity(account.id)
-            .then((res) => {
-                if (cancelled) return;
-                setAccountData(res.account);
-                setEntries(res.entries);
-            })
+        setFdForm(emptyFdForm());
+        setFdError(null);
+        setClosingFd(null);
+        reload()
             .catch((err) => {
                 if (cancelled) return;
                 setError(err instanceof Error ? err.message : 'Failed to load activity');
@@ -72,11 +130,12 @@ export default function AccountActivityModal({ account, month, formatAmount, onC
         return () => {
             cancelled = true;
         };
-    }, [account]);
+    }, [account, reload]);
 
     const periodAccount = accountData ?? account;
     const rebateEnabled =
         accountData?.accountType === 'credit' && accountData.rebateConfig?.enabled === true;
+    const showTabs = rebateEnabled || fdEnabled;
 
     const periodRange = useMemo(() => {
         if (!periodAccount || !month) return null;
@@ -117,9 +176,79 @@ export default function AccountActivityModal({ account, month, formatAmount, onC
         setPage(1);
     }, [month, searchQuery, setPage]);
 
+    const handleAllocateFd = async () => {
+        if (!account) return;
+        const principal = parseFloat(fdForm.principal);
+        const rate = parseFloat(fdForm.annualRatePct);
+        const tenureMonths = parseInt(fdForm.tenureMonths, 10);
+        if (!Number.isFinite(principal) || principal <= 0) {
+            setFdError('Amount must be positive.');
+            return;
+        }
+        if (!Number.isFinite(rate) || rate < 0) {
+            setFdError('Annual rate is required.');
+            return;
+        }
+        if (!Number.isInteger(tenureMonths) || tenureMonths <= 0) {
+            setFdError('Tenure months must be a positive integer.');
+            return;
+        }
+        if (!fdForm.startDate) {
+            setFdError('Start date is required.');
+            return;
+        }
+        setFdSaving(true);
+        setFdError(null);
+        try {
+            await createInstrument({
+                paymentAccountId: account.id,
+                kind: 'fd',
+                name: fdForm.name.trim() || `${account.name} FD`,
+                principal,
+                annualRatePct: rate,
+                startDate: fdForm.startDate,
+                tenureMonths,
+            });
+            setFdForm(emptyFdForm());
+            await reload();
+            onChanged?.();
+        } catch (err) {
+            setFdError(err instanceof Error ? err.message : 'Failed to allocate FD');
+        } finally {
+            setFdSaving(false);
+        }
+    };
+
+    const handleAccrueFd = async (holding: HoldingPosition) => {
+        setFdError(null);
+        try {
+            await accrueFdInterest(holding.instrument.id, { toDate: today() });
+            await reload();
+            onChanged?.();
+        } catch (err) {
+            setFdError(err instanceof Error ? err.message : 'Failed to accrue interest');
+        }
+    };
+
+    const handleCloseFd = async () => {
+        if (!closingFd) return;
+        setFdError(null);
+        try {
+            await deleteInstrument(closingFd.instrument.id);
+            setClosingFd(null);
+            await reload();
+            onChanged?.();
+        } catch (err) {
+            setFdError(err instanceof Error ? err.message : 'Failed to close FD');
+            setClosingFd(null);
+        }
+    };
+
     if (!account) return null;
 
-    const showActivityContent = !rebateEnabled || activeTab === 'activity';
+    const showActivityContent = (!showTabs || activeTab === 'activity');
+    const fdLocked = accountData?.fdLocked ?? 0;
+    const available = accountData?.available ?? (accountData?.balance ?? 0) - fdLocked;
 
     return (
         <div className="record-modal-backdrop" onClick={onClose}>
@@ -127,7 +256,7 @@ export default function AccountActivityModal({ account, month, formatAmount, onC
                 <div className="account-activity-header">
                     <div className="account-activity-header-top">
                         <h4>{account.name}</h4>
-                        {rebateEnabled && (
+                        {showTabs && (
                             <div className="account-activity-tabs">
                                 <button
                                     type="button"
@@ -136,13 +265,24 @@ export default function AccountActivityModal({ account, month, formatAmount, onC
                                 >
                                     Activity
                                 </button>
-                                <button
-                                    type="button"
-                                    className={`section-tab${activeTab === 'cashback' ? ' active' : ''}`}
-                                    onClick={() => setActiveTab('cashback')}
-                                >
-                                    Cashback
-                                </button>
+                                {fdEnabled && (
+                                    <button
+                                        type="button"
+                                        className={`section-tab${activeTab === 'fd' ? ' active' : ''}`}
+                                        onClick={() => setActiveTab('fd')}
+                                    >
+                                        FD
+                                    </button>
+                                )}
+                                {rebateEnabled && (
+                                    <button
+                                        type="button"
+                                        className={`section-tab${activeTab === 'cashback' ? ' active' : ''}`}
+                                        onClick={() => setActiveTab('cashback')}
+                                    >
+                                        Cashback
+                                    </button>
+                                )}
                             </div>
                         )}
                     </div>
@@ -165,19 +305,37 @@ export default function AccountActivityModal({ account, month, formatAmount, onC
                                     </span>
                                 </>
                             ) : (
-                                <span
-                                    className={
-                                        (accountData.balance ?? 0) < 0
-                                            ? 'account-balance-negative'
-                                            : 'account-balance-positive'
-                                    }
-                                >
-                                    Balance {formatAmount(accountData.balance ?? 0)}
-                                </span>
+                                <>
+                                    <span
+                                        className={
+                                            (accountData.balance ?? 0) < 0
+                                                ? 'account-balance-negative'
+                                                : 'account-balance-positive'
+                                        }
+                                    >
+                                        Balance {formatAmount(accountData.balance ?? 0)}
+                                    </span>
+                                    {fdLocked > 0 && (
+                                        <>
+                                            <span className="account-activity-sep">·</span>
+                                            <span
+                                                className={
+                                                    available < 0
+                                                        ? 'account-balance-negative'
+                                                        : 'account-balance-positive'
+                                                }
+                                            >
+                                                Avail {formatAmount(available)}
+                                            </span>
+                                            <span className="account-activity-sep">·</span>
+                                            <span>FD {formatAmount(fdLocked)}</span>
+                                        </>
+                                    )}
+                                </>
                             )}
                         </div>
                     )}
-                    {periodAccount && month && (
+                    {periodAccount && month && showActivityContent && (
                         <p className="account-activity-period-range">
                             {formatPeriodLabel(periodAccount, month)}
                         </p>
@@ -224,6 +382,143 @@ export default function AccountActivityModal({ account, month, formatAmount, onC
                             month={month}
                             formatAmount={formatAmount}
                         />
+                    )}
+                    {!loading && !error && fdEnabled && activeTab === 'fd' && (
+                        <div className="account-fd-panel">
+                            <p className="muted account-fd-avail">
+                                Available to lock {formatAmount(available)}
+                            </p>
+                            <div className="account-fd-form">
+                                <div className="form-field">
+                                    <label htmlFor="fd-amount">Amount (RM)</label>
+                                    <input
+                                        id="fd-amount"
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={fdForm.principal}
+                                        onChange={(e) =>
+                                            setFdForm((f) => ({ ...f, principal: e.target.value }))
+                                        }
+                                    />
+                                </div>
+                                <div className="form-field">
+                                    <label htmlFor="fd-rate">Annual rate (%)</label>
+                                    <input
+                                        id="fd-rate"
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={fdForm.annualRatePct}
+                                        onChange={(e) =>
+                                            setFdForm((f) => ({ ...f, annualRatePct: e.target.value }))
+                                        }
+                                    />
+                                </div>
+                                <div className="form-field">
+                                    <label htmlFor="fd-months">Months</label>
+                                    <input
+                                        id="fd-months"
+                                        type="number"
+                                        min="1"
+                                        step="1"
+                                        value={fdForm.tenureMonths}
+                                        onChange={(e) =>
+                                            setFdForm((f) => ({ ...f, tenureMonths: e.target.value }))
+                                        }
+                                    />
+                                </div>
+                                <div className="form-field">
+                                    <label htmlFor="fd-start">Start date</label>
+                                    <input
+                                        id="fd-start"
+                                        type="date"
+                                        value={fdForm.startDate}
+                                        onChange={(e) =>
+                                            setFdForm((f) => ({ ...f, startDate: e.target.value }))
+                                        }
+                                    />
+                                </div>
+                                <div className="form-field">
+                                    <label htmlFor="fd-name">Name (optional)</label>
+                                    <input
+                                        id="fd-name"
+                                        type="text"
+                                        placeholder={`${account.name} FD`}
+                                        value={fdForm.name}
+                                        onChange={(e) =>
+                                            setFdForm((f) => ({ ...f, name: e.target.value }))
+                                        }
+                                    />
+                                </div>
+                            </div>
+                            {fdError && <p className="error">{fdError}</p>}
+                            <button
+                                type="button"
+                                className="btn-primary"
+                                disabled={fdSaving}
+                                onClick={() => void handleAllocateFd()}
+                            >
+                                {fdSaving ? 'Allocating…' : 'Allocate FD'}
+                            </button>
+                            {fdHoldings.length === 0 ? (
+                                <p className="muted">No FDs on this account yet.</p>
+                            ) : (
+                                <table className="data-table account-fd-table">
+                                    <thead>
+                                        <tr>
+                                            <th>FD</th>
+                                            <th className="num">Principal</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {fdHoldings.map((holding) => {
+                                            const inst = holding.instrument;
+                                            return (
+                                                <tr key={inst.id}>
+                                                    <td>
+                                                        <div className="portfolio-instrument-name">
+                                                            {inst.name}
+                                                        </div>
+                                                        <div className="muted portfolio-instrument-meta">
+                                                            {inst.annualRatePct != null
+                                                                ? `${inst.annualRatePct}% p.a.`
+                                                                : ''}
+                                                            {inst.annualRatePct != null ? ' · ' : ''}
+                                                            {tenureLabel(inst.startDate, inst.maturityDate)}
+                                                        </div>
+                                                    </td>
+                                                    <td className="num">
+                                                        {formatAmount(inst.principal ?? 0)}
+                                                    </td>
+                                                    <td>
+                                                        <div className="portfolio-row-actions">
+                                                            <button
+                                                                type="button"
+                                                                className="btn-link"
+                                                                onClick={() =>
+                                                                    void handleAccrueFd(holding)
+                                                                }
+                                                            >
+                                                                Accrue
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                className="btn-link"
+                                                                onClick={() => setClosingFd(holding)}
+                                                            >
+                                                                Close
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
                     )}
                     {showActivityContent && !loading && !error && entries.length === 0 && (
                         <p className="muted">No transactions linked to this account yet.</p>
@@ -317,6 +612,20 @@ export default function AccountActivityModal({ account, month, formatAmount, onC
                         Close
                     </button>
                 </div>
+            </div>
+            <div onClick={(e) => e.stopPropagation()}>
+                <ConfirmDialog
+                    open={closingFd != null}
+                    title="Close FD"
+                    message={
+                        closingFd
+                            ? `Unlock ${formatAmount(closingFd.instrument.principal ?? 0)} from "${closingFd.instrument.name}"?`
+                            : ''
+                    }
+                    confirmLabel="Close FD"
+                    onConfirm={() => void handleCloseFd()}
+                    onCancel={() => setClosingFd(null)}
+                />
             </div>
         </div>
     );

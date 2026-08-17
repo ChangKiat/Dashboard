@@ -15,7 +15,7 @@ import {
     normalizeRebateConfig,
     updatePaymentAccount,
 } from '../../agent/services/paymentAccountService';
-import { sumHoldingsMarketValueByAccount } from '../../agent/services/investmentPortfolioService';
+import { sumFdLockedByAccount, sumHoldingsMarketValueByAccount } from '../../agent/services/investmentPortfolioService';
 import {
     buildAccountActivity,
     computeAccountBalances,
@@ -23,6 +23,21 @@ import {
 import { parseMonth } from '../dateUtils';
 import { computeAccountRebate, computeAndSyncRebate } from '../rebate';
 import { isNonEmptyString, parseIdParam } from '../validation';
+
+function applyFdOverlay<T extends { id: number; accountType: string; balance?: number }>(
+    entry: T,
+    fdLockedByAccount: Map<number, number>
+): T {
+    if (entry.accountType !== 'account') return entry;
+    const fdLocked = fdLockedByAccount.get(entry.id) ?? 0;
+    if (fdLocked <= 0) return entry;
+    const cash = entry.balance ?? 0;
+    return {
+        ...entry,
+        fdLocked,
+        available: Math.round((cash - fdLocked) * 100) / 100,
+    };
+}
 
 const router = Router();
 
@@ -45,20 +60,24 @@ async function loadAllTransactions() {
 
 router.get('/', async (_req, res) => {
     try {
-        const [accounts, { expenseRows, incomeRows }, holdingsByAccount] = await Promise.all([
-            listActivePaymentAccounts(),
-            loadAllTransactions(),
-            sumHoldingsMarketValueByAccount().catch(() => new Map<number, number>()),
-        ]);
+        const [accounts, { expenseRows, incomeRows }, holdingsByAccount, fdLockedByAccount] =
+            await Promise.all([
+                listActivePaymentAccounts(),
+                loadAllTransactions(),
+                sumHoldingsMarketValueByAccount().catch(() => new Map<number, number>()),
+                sumFdLockedByAccount().catch(() => new Map<number, number>()),
+            ]);
         const entries = computeAccountBalances(accounts, expenseRows, incomeRows).map((entry) => {
-            if (entry.accountType !== 'investment') return entry;
-            const holdingsMarketValue = holdingsByAccount.get(entry.id) ?? 0;
-            const cash = entry.balance ?? 0;
-            return {
-                ...entry,
-                holdingsMarketValue,
-                nav: Math.round((cash + holdingsMarketValue) * 100) / 100,
-            };
+            if (entry.accountType === 'investment') {
+                const holdingsMarketValue = holdingsByAccount.get(entry.id) ?? 0;
+                const cash = entry.balance ?? 0;
+                return {
+                    ...entry,
+                    holdingsMarketValue,
+                    nav: Math.round((cash + holdingsMarketValue) * 100) / 100,
+                };
+            }
+            return applyFdOverlay(entry, fdLockedByAccount);
         });
         res.json({ entries });
     } catch (err) {
@@ -122,9 +141,12 @@ router.get('/:id/activity', async (req, res) => {
         const { expenseRows, incomeRows } = await loadAllTransactions();
         const [withBalance] = computeAccountBalances([account], expenseRows, incomeRows);
         const entries = buildAccountActivity(account, expenseRows, incomeRows);
+        const fdLockedByAccount = await sumFdLockedByAccount().catch(
+            () => new Map<number, number>()
+        );
 
         res.json({
-            account: withBalance,
+            account: applyFdOverlay(withBalance, fdLockedByAccount),
             entries,
         });
     } catch (err) {

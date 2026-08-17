@@ -259,6 +259,10 @@ export interface PaymentAccount {
     holdingsMarketValue?: number;
     /** Cash balance + holdings market value (investment accounts). */
     nav?: number;
+    /** Locked FD principal on debit accounts. */
+    fdLocked?: number;
+    /** Ledger balance minus locked FD principal. */
+    available?: number;
 }
 
 export interface PaymentAccountsResponse {
@@ -992,6 +996,8 @@ export interface PortfolioSummary {
     totalRealizedGain: number;
     cashBalance: number;
     nav: number;
+    fdLocked?: number;
+    available?: number;
 }
 
 export function fetchPortfolio(accountId: number) {
@@ -1009,6 +1015,7 @@ export function createInstrument(fields: {
     annualRatePct?: number | null;
     startDate?: string | null;
     maturityDate?: string | null;
+    tenureMonths?: number | null;
 }) {
     return fetchJson<{ ok: true; id: number }>('/api/investments/instruments', {
         method: 'POST',
@@ -1047,6 +1054,7 @@ export function recordPortfolioBuy(fields: {
     quantity: number;
     unitPrice: number;
     notes?: string | null;
+    fee?: number | null;
     fromPaymentMethod?: string | null;
 }) {
     return fetchJson<{ ok: true; eventId: number; lotId: number }>('/api/investments/events/buy', {
@@ -1062,6 +1070,7 @@ export function recordPortfolioSell(fields: {
     quantity: number;
     unitPrice: number;
     notes?: string | null;
+    fee?: number | null;
     toPaymentMethod?: string | null;
 }) {
     return fetchJson<{ ok: true; eventId: number; realizedGain: number }>(

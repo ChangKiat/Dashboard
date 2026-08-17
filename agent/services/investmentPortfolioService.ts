@@ -107,6 +107,18 @@ function roundQty(n: number): number {
     return Math.round(n * 1e8) / 1e8;
 }
 
+function roundUnitCost(n: number): number {
+    return Math.round(n * 1e6) / 1e6;
+}
+
+function parseFee(fee: number | null | undefined): number {
+    if (fee == null) return 0;
+    if (!Number.isFinite(fee) || fee < 0) {
+        throw new Error('Fee must be a non-negative number');
+    }
+    return roundMoney(fee);
+}
+
 function todayDateString(): string {
     return new Date().toISOString().slice(0, 10);
 }
@@ -171,13 +183,70 @@ export function isValidInstrumentKind(value: unknown): value is InstrumentKind {
     return typeof value === 'string' && INSTRUMENT_KINDS.has(value as InstrumentKind);
 }
 
-async function requireInvestmentAccount(accountId: number) {
+function addCalendarMonths(dateStr: string, months: number): string {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const lastOfTarget = new Date(year, month - 1 + months + 1, 0);
+    const clampedDay = Math.min(day, lastOfTarget.getDate());
+    const result = new Date(year, month - 1 + months, clampedDay);
+    const y = result.getFullYear();
+    const m = String(result.getMonth() + 1).padStart(2, '0');
+    const d = String(result.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+async function requireActiveAccount(accountId: number) {
     const account = await getPaymentAccountById(accountId);
-    if (!account || !account.active) throw new Error('Investment account not found');
+    if (!account || !account.active) throw new Error('Account not found');
+    return account;
+}
+
+async function requireInvestmentAccount(accountId: number) {
+    const account = await requireActiveAccount(accountId);
     if (account.accountType !== 'investment') {
         throw new Error('Portfolio is only available on investment accounts');
     }
     return account;
+}
+
+async function requirePortfolioHostAccount(accountId: number) {
+    const account = await requireActiveAccount(accountId);
+    if (account.accountType !== 'account' && account.accountType !== 'investment') {
+        throw new Error('Portfolio is only available on bank or investment accounts');
+    }
+    return account;
+}
+
+async function requireInstrumentAccount(accountId: number, kind: InstrumentKind) {
+    if (kind === 'fd') return requirePortfolioHostAccount(accountId);
+    return requireInvestmentAccount(accountId);
+}
+
+export async function sumFdLockedForAccount(accountId: number): Promise<number> {
+    const instruments = await listInstrumentsForAccount(accountId);
+    let locked = 0;
+    for (const instrument of instruments) {
+        if (instrument.kind !== 'fd') continue;
+        locked += instrument.principal ?? 0;
+    }
+    return roundMoney(locked);
+}
+
+export async function sumFdLockedByAccount(): Promise<Map<number, number>> {
+    const db = requireDb();
+    const rows = await db
+        .select()
+        .from(investmentInstruments)
+        .where(and(eq(investmentInstruments.active, true), eq(investmentInstruments.kind, 'fd')));
+    const result = new Map<number, number>();
+    for (const row of rows) {
+        const principal = roundMoney(parseNum(row.principal));
+        if (principal <= 0) continue;
+        result.set(
+            row.paymentAccountId,
+            roundMoney((result.get(row.paymentAccountId) ?? 0) + principal)
+        );
+    }
+    return result;
 }
 
 export async function getInstrumentById(id: number): Promise<InvestmentInstrument | null> {
@@ -227,12 +296,15 @@ export async function createInstrument(fields: {
     annualRatePct?: number | null;
     startDate?: string | null;
     maturityDate?: string | null;
+    tenureMonths?: number | null;
+    cashBalance?: number;
 }): Promise<number> {
-    await requireInvestmentAccount(fields.paymentAccountId);
+    const account = await requireInstrumentAccount(fields.paymentAccountId, fields.kind);
     const name = fields.name.trim();
     if (!name) throw new Error('Instrument name is required');
     if (!isValidInstrumentKind(fields.kind)) throw new Error('Invalid instrument kind');
 
+    let maturityDate = fields.maturityDate ?? null;
     if (fields.kind === 'fd') {
         if (fields.principal == null || !Number.isFinite(fields.principal) || fields.principal < 0) {
             throw new Error('FD principal is required');
@@ -245,6 +317,28 @@ export async function createInstrument(fields: {
             throw new Error('FD annual rate is required');
         }
         if (!fields.startDate) throw new Error('FD start date is required');
+        if (
+            fields.tenureMonths != null &&
+            (!Number.isInteger(fields.tenureMonths) || fields.tenureMonths <= 0)
+        ) {
+            throw new Error('FD tenure months must be a positive integer');
+        }
+        if (fields.tenureMonths != null) {
+            maturityDate = addCalendarMonths(fields.startDate, fields.tenureMonths);
+        } else if (!maturityDate) {
+            throw new Error('FD tenure months is required');
+        }
+
+        if (account.accountType === 'account') {
+            if (fields.cashBalance == null || !Number.isFinite(fields.cashBalance)) {
+                throw new Error('Cash balance is required to allocate FD');
+            }
+            const locked = await sumFdLockedForAccount(account.id);
+            const available = roundMoney(fields.cashBalance - locked);
+            if (roundMoney(fields.principal) > available + 0.005) {
+                throw new Error(`FD principal exceeds available cash (${available.toFixed(2)})`);
+            }
+        }
     }
 
     const db = requireDb();
@@ -269,7 +363,7 @@ export async function createInstrument(fields: {
                     ? String(fields.annualRatePct)
                     : null,
             startDate: fields.kind === 'fd' ? fields.startDate ?? null : null,
-            maturityDate: fields.kind === 'fd' ? fields.maturityDate ?? null : null,
+            maturityDate: fields.kind === 'fd' ? maturityDate : null,
         })
         .returning({ id: investmentInstruments.id });
     return row.id;
@@ -429,7 +523,7 @@ export async function sumHoldingsMarketValueByAccount(): Promise<Map<number, num
 }
 
 export async function getPortfolioSummary(paymentAccountId: number): Promise<PortfolioSummary> {
-    await requireInvestmentAccount(paymentAccountId);
+    await requirePortfolioHostAccount(paymentAccountId);
     const instruments = await listInstrumentsForAccount(paymentAccountId);
     const db = requireDb();
 
@@ -517,6 +611,8 @@ export async function recordBuy(fields: {
     quantity: number;
     unitPrice: number;
     notes?: string | null;
+    /** Brokerage / clearing / stamp; added to cash out and lot cost. */
+    fee?: number | null;
     /** When set, creates an expense on this payment method for total cost. */
     fromPaymentMethod?: string | null;
 }): Promise<{ eventId: number; lotId: number }> {
@@ -531,7 +627,10 @@ export async function recordBuy(fields: {
 
     const quantity = roundQty(fields.quantity);
     const unitPrice = fields.unitPrice;
-    const amount = roundMoney(quantity * unitPrice);
+    const gross = roundMoney(quantity * unitPrice);
+    const fee = parseFee(fields.fee);
+    const amount = roundMoney(gross + fee);
+    const unitCost = roundUnitCost(amount / quantity);
     const db = requireDb();
 
     let linkedExpenseId: number | null = null;
@@ -567,7 +666,7 @@ export async function recordBuy(fields: {
             openedAt: fields.date,
             quantity: String(quantity),
             remainingQty: String(quantity),
-            unitCost: String(unitPrice),
+            unitCost: String(unitCost),
             buyEventId: eventRow.id,
         })
         .returning({ id: investmentLots.id });
@@ -589,6 +688,8 @@ export async function recordSell(fields: {
     quantity: number;
     unitPrice: number;
     notes?: string | null;
+    /** Brokerage / clearing / stamp; subtracted from proceeds. */
+    fee?: number | null;
     /** When set, creates income credited to this payment method for proceeds. */
     toPaymentMethod?: string | null;
 }): Promise<{ eventId: number; realizedGain: number }> {
@@ -625,7 +726,12 @@ export async function recordSell(fields: {
         remaining = roundQty(remaining - take);
     }
 
-    const proceeds = roundMoney(sellQty * unitPrice);
+    const gross = roundMoney(sellQty * unitPrice);
+    const fee = parseFee(fields.fee);
+    if (fee > gross) {
+        throw new Error('Sell fee cannot exceed proceeds');
+    }
+    const proceeds = roundMoney(gross - fee);
     const realizedGain = roundMoney(proceeds - costBasisSold);
 
     let linkedIncomeId: number | null = null;
@@ -723,7 +829,7 @@ export async function recordInterest(fields: {
     }
     const amount = roundMoney(fields.amount);
     const syncCash = fields.syncCash !== false;
-    const account = await requireInvestmentAccount(instrument.paymentAccountId);
+    const account = await requirePortfolioHostAccount(instrument.paymentAccountId);
     const creditTo = fields.toPaymentMethod?.trim() || account.name;
 
     let linkedIncomeId: number | null = null;

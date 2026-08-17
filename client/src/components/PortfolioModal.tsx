@@ -18,6 +18,15 @@ import {
     recordPortfolioSell,
 } from '../api';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
+import {
+    estimateRakutenTradeFee,
+    formatFeeAmount,
+    isRakutenSecurityType,
+    monthToDateBuyGross,
+    roundMoney,
+    tradeFeeFromEvent,
+    type RakutenSecurityType,
+} from '../utils/rakutenTradeFees';
 import RecordModal from './RecordModal';
 
 interface Props {
@@ -55,6 +64,14 @@ function kindLabel(kind: InstrumentKind): string {
     }
 }
 
+function parseFeeInput(value: string): number | null {
+    const trimmed = value.trim();
+    if (!trimmed) return 0;
+    const n = parseFloat(trimmed);
+    if (!Number.isFinite(n) || n < 0) return null;
+    return n;
+}
+
 export default function PortfolioModal({
     account,
     formatAmount,
@@ -70,16 +87,13 @@ export default function PortfolioModal({
     const [selected, setSelected] = useState<HoldingPosition | null>(null);
     const [saving, setSaving] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
+    const [feeDirty, setFeeDirty] = useState(false);
 
     const [instrumentForm, setInstrumentForm] = useState({
         kind: 'equity' as InstrumentKind,
         name: '',
         symbol: '',
         lastPrice: '',
-        principal: '',
-        annualRatePct: '',
-        startDate: today(),
-        maturityDate: '',
     });
 
     const [tradeForm, setTradeForm] = useState({
@@ -88,6 +102,8 @@ export default function PortfolioModal({
         unitPrice: '',
         amount: '',
         notes: '',
+        fee: '',
+        securityType: 'ordinary' as RakutenSecurityType,
         fromPaymentMethod: '',
         toPaymentMethod: '',
         syncCash: true,
@@ -100,6 +116,48 @@ export default function PortfolioModal({
                 .sort((a, b) => a.name.localeCompare(b.name, 'en-MY', { sensitivity: 'base' })),
         [accounts]
     );
+
+    const tradePreview = useMemo(() => {
+        if (formMode !== 'buy' && formMode !== 'sell') return null;
+        const quantity = parseFloat(tradeForm.quantity);
+        const unitPrice = parseFloat(tradeForm.unitPrice);
+        if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitPrice) || unitPrice < 0) {
+            return null;
+        }
+        const gross = roundMoney(quantity * unitPrice);
+        const estimate = estimateRakutenTradeFee({
+            side: formMode,
+            gross,
+            monthToDateBuyGross: monthToDateBuyGross(summary?.events ?? [], tradeForm.date),
+            securityType: tradeForm.securityType,
+            tradeDate: tradeForm.date,
+        });
+        const parsedFee = parseFeeInput(feeDirty ? tradeForm.fee : formatFeeAmount(estimate.total));
+        if (parsedFee == null) return { gross, estimate, fee: null as number | null, cashDelta: null, cashLeft: null };
+        const fee = parsedFee;
+        const cashDelta = formMode === 'buy' ? roundMoney(gross + fee) : roundMoney(gross - fee);
+        const syncName = formMode === 'buy' ? tradeForm.fromPaymentMethod : tradeForm.toPaymentMethod;
+        const affectsThisCash = Boolean(account && syncName && syncName === account.name);
+        const cashLeft =
+            affectsThisCash && summary
+                ? roundMoney(
+                      summary.cashBalance + (formMode === 'buy' ? -cashDelta : cashDelta)
+                  )
+                : null;
+        return { gross, estimate, fee, cashDelta, cashLeft };
+    }, [
+        account,
+        feeDirty,
+        formMode,
+        summary,
+        tradeForm.date,
+        tradeForm.fee,
+        tradeForm.fromPaymentMethod,
+        tradeForm.quantity,
+        tradeForm.securityType,
+        tradeForm.toPaymentMethod,
+        tradeForm.unitPrice,
+    ]);
 
     const reload = async () => {
         if (!account) return;
@@ -150,10 +208,6 @@ export default function PortfolioModal({
             name: '',
             symbol: '',
             lastPrice: '',
-            principal: '',
-            annualRatePct: '',
-            startDate: today(),
-            maturityDate: '',
         });
         setFormError(null);
         setFormMode('add-instrument');
@@ -167,10 +221,13 @@ export default function PortfolioModal({
             unitPrice: holding.lastPrice != null ? String(holding.lastPrice) : '',
             amount: '',
             notes: '',
+            fee: '',
+            securityType: 'ordinary',
             fromPaymentMethod: account.name,
             toPaymentMethod: account.name,
             syncCash: true,
         });
+        setFeeDirty(false);
         setFormError(null);
         setFormMode(mode);
     };
@@ -203,24 +260,7 @@ export default function PortfolioModal({
                     name: instrumentForm.name.trim(),
                     symbol: instrumentForm.symbol.trim() || null,
                 };
-                if (instrumentForm.kind === 'fd') {
-                    const principal = parsePositive(instrumentForm.principal);
-                    const rate = parseFloat(instrumentForm.annualRatePct);
-                    if (principal == null) {
-                        setFormError('FD principal must be positive.');
-                        setSaving(false);
-                        return;
-                    }
-                    if (!Number.isFinite(rate) || rate < 0) {
-                        setFormError('FD annual rate is required.');
-                        setSaving(false);
-                        return;
-                    }
-                    payload.principal = principal;
-                    payload.annualRatePct = rate;
-                    payload.startDate = instrumentForm.startDate;
-                    payload.maturityDate = instrumentForm.maturityDate || null;
-                } else if (instrumentForm.lastPrice.trim()) {
+                if (instrumentForm.lastPrice.trim()) {
                     const price = parseFloat(instrumentForm.lastPrice);
                     if (!Number.isFinite(price) || price < 0) {
                         setFormError('Invalid last price.');
@@ -240,11 +280,24 @@ export default function PortfolioModal({
                         setSaving(false);
                         return;
                     }
+                    const fee = parseFeeInput(
+                        feeDirty
+                            ? tradeForm.fee
+                            : tradePreview
+                              ? formatFeeAmount(tradePreview.estimate.total)
+                              : '0'
+                    );
+                    if (fee == null) {
+                        setFormError('Service charges must be zero or more.');
+                        setSaving(false);
+                        return;
+                    }
                     await recordPortfolioBuy({
                         instrumentId: id,
                         date: tradeForm.date,
                         quantity,
                         unitPrice,
+                        fee,
                         notes: tradeForm.notes.trim() || null,
                         fromPaymentMethod: tradeForm.fromPaymentMethod || null,
                     });
@@ -256,11 +309,29 @@ export default function PortfolioModal({
                         setSaving(false);
                         return;
                     }
+                    const fee = parseFeeInput(
+                        feeDirty
+                            ? tradeForm.fee
+                            : tradePreview
+                              ? formatFeeAmount(tradePreview.estimate.total)
+                              : '0'
+                    );
+                    if (fee == null) {
+                        setFormError('Service charges must be zero or more.');
+                        setSaving(false);
+                        return;
+                    }
+                    if (fee > roundMoney(quantity * unitPrice)) {
+                        setFormError('Service charges cannot exceed sale proceeds.');
+                        setSaving(false);
+                        return;
+                    }
                     await recordPortfolioSell({
                         instrumentId: id,
                         date: tradeForm.date,
                         quantity,
                         unitPrice,
+                        fee,
                         notes: tradeForm.notes.trim() || null,
                         toPaymentMethod: tradeForm.toPaymentMethod || null,
                     });
@@ -433,7 +504,7 @@ export default function PortfolioModal({
                         {loading && <p className="muted">Loading portfolio…</p>}
                         {error && <p className="error">{error}</p>}
                         {!loading && !error && summary && summary.holdings.length === 0 && (
-                            <p className="muted">No instruments yet. Add a stock, fund, or FD.</p>
+                            <p className="muted">No instruments yet. Add a stock or fund.</p>
                         )}
                         {!loading && !error && summary && summary.holdings.length > 0 && (
                             <table className="data-table portfolio-holdings-table">
@@ -596,6 +667,10 @@ export default function PortfolioModal({
                                             if (event.unitPrice != null) {
                                                 detailParts.push(`@ ${event.unitPrice}`);
                                             }
+                                            const fee = tradeFeeFromEvent(event);
+                                            if (fee != null) {
+                                                detailParts.push(`fee ${formatAmount(fee)}`);
+                                            }
                                             if (event.realizedGain != null) {
                                                 detailParts.push(
                                                     `realized ${formatAmount(event.realizedGain)}`
@@ -653,7 +728,6 @@ export default function PortfolioModal({
                             >
                                 <option value="equity">Stock</option>
                                 <option value="fund">Fund / unit trust</option>
-                                <option value="fd">Fixed deposit</option>
                                 <option value="other">Other</option>
                             </select>
                         </div>
@@ -666,113 +740,50 @@ export default function PortfolioModal({
                                 onChange={(e) =>
                                     setInstrumentForm((f) => ({ ...f, name: e.target.value }))
                                 }
-                                placeholder="e.g. Maybank, ASB, CIMB FD"
+                                placeholder="e.g. Maybank, ASB"
                             />
                         </div>
-                        {instrumentForm.kind !== 'fd' && (
-                            <>
-                                <div className="form-field">
-                                    <label htmlFor="pf-symbol">Symbol (optional)</label>
-                                    <input
-                                        id="pf-symbol"
-                                        type="text"
-                                        value={instrumentForm.symbol}
-                                        onChange={(e) =>
-                                            setInstrumentForm((f) => ({
-                                                ...f,
-                                                symbol: e.target.value,
-                                            }))
-                                        }
-                                        placeholder="e.g. 1155"
-                                    />
-                                </div>
-                                <div className="form-field">
-                                    <label htmlFor="pf-last">Last price (optional)</label>
-                                    <input
-                                        id="pf-last"
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                                        value={instrumentForm.lastPrice}
-                                        onChange={(e) =>
-                                            setInstrumentForm((f) => ({
-                                                ...f,
-                                                lastPrice: e.target.value,
-                                            }))
-                                        }
-                                    />
-                                </div>
-                            </>
-                        )}
-                        {instrumentForm.kind === 'fd' && (
-                            <>
-                                <div className="form-field">
-                                    <label htmlFor="pf-principal">Principal (RM)</label>
-                                    <input
-                                        id="pf-principal"
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                                        value={instrumentForm.principal}
-                                        onChange={(e) =>
-                                            setInstrumentForm((f) => ({
-                                                ...f,
-                                                principal: e.target.value,
-                                            }))
-                                        }
-                                    />
-                                </div>
-                                <div className="form-field">
-                                    <label htmlFor="pf-rate">Annual rate (%)</label>
-                                    <input
-                                        id="pf-rate"
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                                        value={instrumentForm.annualRatePct}
-                                        onChange={(e) =>
-                                            setInstrumentForm((f) => ({
-                                                ...f,
-                                                annualRatePct: e.target.value,
-                                            }))
-                                        }
-                                    />
-                                </div>
-                                <div className="form-field">
-                                    <label htmlFor="pf-start">Start date</label>
-                                    <input
-                                        id="pf-start"
-                                        type="date"
-                                        value={instrumentForm.startDate}
-                                        onChange={(e) =>
-                                            setInstrumentForm((f) => ({
-                                                ...f,
-                                                startDate: e.target.value,
-                                            }))
-                                        }
-                                    />
-                                </div>
-                                <div className="form-field">
-                                    <label htmlFor="pf-maturity">Maturity (optional)</label>
-                                    <input
-                                        id="pf-maturity"
-                                        type="date"
-                                        value={instrumentForm.maturityDate}
-                                        onChange={(e) =>
-                                            setInstrumentForm((f) => ({
-                                                ...f,
-                                                maturityDate: e.target.value,
-                                            }))
-                                        }
-                                    />
-                                </div>
-                            </>
-                        )}
+                        <div className="form-field">
+                            <label htmlFor="pf-symbol">Symbol (optional)</label>
+                            <input
+                                id="pf-symbol"
+                                type="text"
+                                value={instrumentForm.symbol}
+                                onChange={(e) =>
+                                    setInstrumentForm((f) => ({
+                                        ...f,
+                                        symbol: e.target.value,
+                                    }))
+                                }
+                                placeholder="e.g. 1155"
+                            />
+                        </div>
+                        <div className="form-field">
+                            <label htmlFor="pf-last">Last price (optional)</label>
+                            <input
+                                id="pf-last"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={instrumentForm.lastPrice}
+                                onChange={(e) =>
+                                    setInstrumentForm((f) => ({
+                                        ...f,
+                                        lastPrice: e.target.value,
+                                    }))
+                                }
+                            />
+                        </div>
                     </>
                 )}
 
                 {(formMode === 'buy' || formMode === 'sell') && (
                     <>
+                        {summary && (
+                            <p className="portfolio-trade-cash">
+                                Cash in {account.name} {formatAmount(summary.cashBalance)}
+                            </p>
+                        )}
                         <div className="form-field">
                             <label htmlFor="pf-date">Date</label>
                             <input
@@ -803,16 +814,114 @@ export default function PortfolioModal({
                                 id="pf-price"
                                 type="number"
                                 min="0"
-                                step="0.01"
+                                step="any"
                                 value={tradeForm.unitPrice}
                                 onChange={(e) =>
                                     setTradeForm((f) => ({ ...f, unitPrice: e.target.value }))
                                 }
                             />
                         </div>
+                        <div className="form-field">
+                            <label htmlFor="pf-security">Security type</label>
+                            <select
+                                id="pf-security"
+                                value={tradeForm.securityType}
+                                onChange={(e) => {
+                                    const value = e.target.value;
+                                    if (!isRakutenSecurityType(value)) return;
+                                    setTradeForm((f) => ({ ...f, securityType: value }));
+                                }}
+                            >
+                                <option value="ordinary">Ordinary share</option>
+                                <option value="reit_warrant">REIT / Warrant</option>
+                                <option value="etf">ETF</option>
+                            </select>
+                        </div>
+                        <div className="form-field">
+                            <div className="form-field-label-row">
+                                <label htmlFor="pf-fee">Service charges</label>
+                                {feeDirty && (
+                                    <button
+                                        type="button"
+                                        className="btn-link"
+                                        onClick={() => {
+                                            setFeeDirty(false);
+                                            setTradeForm((f) => ({ ...f, fee: '' }));
+                                        }}
+                                    >
+                                        Reset to estimate
+                                    </button>
+                                )}
+                            </div>
+                            <input
+                                id="pf-fee"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={
+                                    feeDirty
+                                        ? tradeForm.fee
+                                        : tradePreview
+                                          ? formatFeeAmount(tradePreview.estimate.total)
+                                          : ''
+                                }
+                                onChange={(e) => {
+                                    setFeeDirty(true);
+                                    setTradeForm((f) => ({ ...f, fee: e.target.value }));
+                                }}
+                            />
+                            <span className="portfolio-trade-hint">
+                                Rakuten estimate — edit if the contract differs
+                            </span>
+                        </div>
+                        {tradePreview && tradePreview.fee != null && (
+                            <div className="portfolio-trade-breakdown">
+                                <div className="portfolio-trade-breakdown-row">
+                                    <span>{formMode === 'buy' ? 'Shares' : 'Gross'}</span>
+                                    <span>{formatAmount(tradePreview.gross)}</span>
+                                </div>
+                                <div className="portfolio-trade-breakdown-row">
+                                    <span>Service charges</span>
+                                    <span>{formatAmount(tradePreview.fee)}</span>
+                                </div>
+                                <div className="portfolio-trade-breakdown-row total">
+                                    <span>
+                                        {formMode === 'buy' ? 'Total deducted' : 'Net proceeds'}
+                                    </span>
+                                    <span>{formatAmount(tradePreview.cashDelta ?? 0)}</span>
+                                </div>
+                                {tradePreview.cashLeft != null && (
+                                    <div
+                                        className={
+                                            tradePreview.cashLeft < 0
+                                                ? 'portfolio-trade-breakdown-row account-balance-negative'
+                                                : 'portfolio-trade-breakdown-row'
+                                        }
+                                    >
+                                        <span>Cash left</span>
+                                        <span>{formatAmount(tradePreview.cashLeft)}</span>
+                                    </div>
+                                )}
+                                {formMode === 'buy' &&
+                                    tradePreview.cashLeft != null &&
+                                    tradePreview.cashLeft < 0 && (
+                                        <p className="portfolio-trade-hint account-balance-negative">
+                                            This buy uses more cash than {account.name} currently
+                                            has.
+                                        </p>
+                                    )}
+                                {formMode === 'sell' &&
+                                    tradePreview.cashDelta != null &&
+                                    tradePreview.cashDelta < 0 && (
+                                        <p className="portfolio-trade-hint account-balance-negative">
+                                            Service charges exceed the sale proceeds.
+                                        </p>
+                                    )}
+                            </div>
+                        )}
                         {formMode === 'buy' && (
                             <div className="form-field">
-                                <label htmlFor="pf-from">Pay from (optional cash sync)</label>
+                                <label htmlFor="pf-from">Deduct cash from</label>
                                 <select
                                     id="pf-from"
                                     value={tradeForm.fromPaymentMethod}
@@ -823,7 +932,7 @@ export default function PortfolioModal({
                                         }))
                                     }
                                 >
-                                    <option value="">No cash sync</option>
+                                    <option value="">Do not deduct cash</option>
                                     {paymentMethodOptions.map((a) => (
                                         <option key={a.id} value={a.name}>
                                             {a.name}
@@ -834,7 +943,7 @@ export default function PortfolioModal({
                         )}
                         {formMode === 'sell' && (
                             <div className="form-field">
-                                <label htmlFor="pf-to">Proceeds to (optional cash sync)</label>
+                                <label htmlFor="pf-to">Credit proceeds to</label>
                                 <select
                                     id="pf-to"
                                     value={tradeForm.toPaymentMethod}
@@ -845,7 +954,7 @@ export default function PortfolioModal({
                                         }))
                                     }
                                 >
-                                    <option value="">No cash sync</option>
+                                    <option value="">Do not credit cash</option>
                                     {paymentMethodOptions.map((a) => (
                                         <option key={a.id} value={a.name}>
                                             {a.name}
