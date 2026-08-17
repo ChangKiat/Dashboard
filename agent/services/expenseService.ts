@@ -301,7 +301,8 @@ export async function addFixedExpense(
     startMonth: number,
     paymentMethod?: string | null,
     toInvestmentAccount?: string | null,
-    loan?: FixedExpenseLoanFields | null
+    loan?: FixedExpenseLoanFields | null,
+    instrumentId?: number | null
 ) {
     const db = requireDb();
     const resolvedCategory = resolveCategory(category);
@@ -309,6 +310,7 @@ export async function addFixedExpense(
         const c = resolvedCategory.toLowerCase();
         return c === 'investment' || c === 'other';
     })();
+    const keepInstrument = resolvedCategory.toLowerCase() === 'investment';
     await db.insert(fixedExpenses).values({
         dayOfMonth,
         amount: String(amount),
@@ -322,6 +324,7 @@ export async function addFixedExpense(
         toInvestmentAccount: keepDestination
             ? resolvePaymentMethod(toInvestmentAccount)
             : null,
+        instrumentId: keepInstrument ? instrumentId ?? null : null,
         ...loanColumnsForCategory(resolvedCategory, loan),
     });
     return true;
@@ -336,6 +339,7 @@ export type DueFixedExpense = {
     description: string;
     paymentMethod: string | null;
     toInvestmentAccount: string | null;
+    instrumentId: number | null;
     loan: (InstallmentSplit & { method: LoanMethod }) | null;
 };
 
@@ -372,6 +376,7 @@ export async function getFixedExpensesForToday(): Promise<DueFixedExpense[]> {
             toInvestmentAccount: row.toInvestmentAccount
                 ? resolvePaymentMethod(row.toInvestmentAccount)
                 : null,
+            instrumentId: row.instrumentId ?? null,
         };
         const loan = loanFieldsFromRow(row);
         if (!loan.loanMethod) {
@@ -560,6 +565,7 @@ export async function getActiveFixedExpenses() {
         toInvestmentAccount: row.toInvestmentAccount
             ? resolvePaymentMethod(row.toInvestmentAccount)
             : null,
+        instrumentId: row.instrumentId ?? null,
         ...loanFieldsFromRow(row),
     }));
 }
@@ -574,6 +580,7 @@ export async function updateFixedExpenseById(
         frequencyMonths?: number;
         paymentMethod?: string | null;
         toInvestmentAccount?: string | null;
+        instrumentId?: number | null;
         loan?: FixedExpenseLoanFields | null;
     }
 ): Promise<boolean> {
@@ -591,11 +598,17 @@ export async function updateFixedExpenseById(
     if (fields.toInvestmentAccount !== undefined) {
         set.toInvestmentAccount = resolvePaymentMethod(fields.toInvestmentAccount);
     }
+    if (fields.instrumentId !== undefined) {
+        set.instrumentId = fields.instrumentId;
+    }
 
     if (fields.category != null) {
         const c = resolveCategory(fields.category).toLowerCase();
         if (c !== 'investment' && c !== 'other') {
             set.toInvestmentAccount = null;
+        }
+        if (c !== 'investment') {
+            set.instrumentId = null;
         }
     }
 

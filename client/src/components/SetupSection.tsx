@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { FixedExpenseConfig, InterestScheduleConfig } from '../api';
-import { fetchExpenseOverview, fetchFixedExpenses, fetchInterestSchedules } from '../api';
+import { fetchExpenseOverview, fetchFixedExpenses, fetchInterestSchedules, applyDueFixedContributions } from '../api';
 import { isLoanFixedExpense } from '../utils/expenseCategories';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
 
@@ -60,6 +60,16 @@ export default function SetupSection({ month }: Props) {
         });
         void refreshAccounts();
     }, [loadData, refreshAccounts]);
+
+    useEffect(() => {
+        applyDueFixedContributions()
+            .then((result) => {
+                if (result.applied > 0) handleChanged();
+            })
+            .catch(() => {
+                /* ignore auto-apply errors; Contribute remains available */
+            });
+    }, [handleChanged]);
 
     const billRows = useMemo(
         () => fixedConfigs.filter((row) => !isLoanFixedExpense(row)),

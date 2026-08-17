@@ -15,7 +15,7 @@ import {
     normalizeRebateConfig,
     updatePaymentAccount,
 } from '../../agent/services/paymentAccountService';
-import { sumFdLockedByAccount, sumHoldingsMarketValueByAccount } from '../../agent/services/investmentPortfolioService';
+import { sumFdLockedByAccount, sumHoldingsByAccount } from '../../agent/services/investmentPortfolioService';
 import {
     buildAccountActivity,
     computeAccountBalances,
@@ -60,20 +60,31 @@ async function loadAllTransactions() {
 
 router.get('/', async (_req, res) => {
     try {
-        const [accounts, { expenseRows, incomeRows }, holdingsByAccount, fdLockedByAccount] =
+        const emptyHoldings = {
+            marketValue: new Map<number, number>(),
+            costBasis: new Map<number, number>(),
+            unrealizedGain: new Map<number, number>(),
+            names: new Map<number, string[]>(),
+            holdings: new Map<number, { id: number; name: string; kind: string }[]>(),
+        };
+        const [accounts, { expenseRows, incomeRows }, holdings, fdLockedByAccount] =
             await Promise.all([
                 listActivePaymentAccounts(),
                 loadAllTransactions(),
-                sumHoldingsMarketValueByAccount().catch(() => new Map<number, number>()),
+                sumHoldingsByAccount().catch(() => emptyHoldings),
                 sumFdLockedByAccount().catch(() => new Map<number, number>()),
             ]);
         const entries = computeAccountBalances(accounts, expenseRows, incomeRows).map((entry) => {
             if (entry.accountType === 'investment') {
-                const holdingsMarketValue = holdingsByAccount.get(entry.id) ?? 0;
+                const holdingsMarketValue = holdings.marketValue.get(entry.id) ?? 0;
                 const cash = entry.balance ?? 0;
                 return {
                     ...entry,
                     holdingsMarketValue,
+                    totalCostBasis: holdings.costBasis.get(entry.id) ?? 0,
+                    unrealizedGain: holdings.unrealizedGain.get(entry.id) ?? 0,
+                    holdingNames: holdings.names.get(entry.id) ?? [],
+                    holdings: holdings.holdings.get(entry.id) ?? [],
                     nav: Math.round((cash + holdingsMarketValue) * 100) / 100,
                 };
             }

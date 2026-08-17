@@ -1,16 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type {
-    HoldingPosition,
-    InstrumentKind,
-    PaymentAccount,
-    PortfolioSummary,
-} from '../api';
+import type { HoldingPosition, InstrumentKind, PaymentAccount, PortfolioSummary } from '../api';
 import {
     accrueFdInterest,
     createInstrument,
     deleteInstrument,
     fetchPortfolio,
+    recordFundInvest,
+    recordFundWithdraw,
     recordPortfolioBuy,
     recordPortfolioDividend,
     recordPortfolioInterest,
@@ -21,11 +18,9 @@ import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
 import {
     estimateRakutenTradeFee,
     formatFeeAmount,
-    isRakutenSecurityType,
     monthToDateBuyGross,
     roundMoney,
     tradeFeeFromEvent,
-    type RakutenSecurityType,
 } from '../utils/rakutenTradeFees';
 import RecordModal from './RecordModal';
 
@@ -39,13 +34,15 @@ interface Props {
 
 type FormMode =
     | 'closed'
-    | 'add-instrument'
+    | 'add-stock'
     | 'buy'
     | 'sell'
     | 'dividend'
     | 'interest'
     | 'price'
-    | 'accrue';
+    | 'accrue'
+    | 'fund-invest'
+    | 'fund-withdraw';
 
 function today(): string {
     return new Date().toISOString().slice(0, 10);
@@ -56,7 +53,7 @@ function kindLabel(kind: InstrumentKind): string {
         case 'equity':
             return 'Stock';
         case 'fund':
-            return 'Fund';
+            return 'Unit trust';
         case 'fd':
             return 'FD';
         default:
@@ -90,10 +87,10 @@ export default function PortfolioModal({
     const [feeDirty, setFeeDirty] = useState(false);
 
     const [instrumentForm, setInstrumentForm] = useState({
-        kind: 'equity' as InstrumentKind,
+        kind: 'equity' as Extract<InstrumentKind, 'equity' | 'fund'>,
         name: '',
         symbol: '',
-        lastPrice: '',
+        currentValue: '',
     });
 
     const [tradeForm, setTradeForm] = useState({
@@ -103,7 +100,6 @@ export default function PortfolioModal({
         amount: '',
         notes: '',
         fee: '',
-        securityType: 'ordinary' as RakutenSecurityType,
         fromPaymentMethod: '',
         toPaymentMethod: '',
         syncCash: true,
@@ -118,31 +114,30 @@ export default function PortfolioModal({
     );
 
     const tradePreview = useMemo(() => {
-        if (formMode !== 'buy' && formMode !== 'sell') return null;
+        const isBuyLike =
+            (formMode === 'buy' || formMode === 'add-stock') && instrumentForm.kind !== 'fund';
+        if (!isBuyLike && formMode !== 'sell') return null;
         const quantity = parseFloat(tradeForm.quantity);
         const unitPrice = parseFloat(tradeForm.unitPrice);
         if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitPrice) || unitPrice < 0) {
             return null;
         }
+        const side = formMode === 'sell' ? 'sell' : 'buy';
         const gross = roundMoney(quantity * unitPrice);
         const estimate = estimateRakutenTradeFee({
-            side: formMode,
+            side,
             gross,
             monthToDateBuyGross: monthToDateBuyGross(summary?.events ?? [], tradeForm.date),
-            securityType: tradeForm.securityType,
+            securityType: 'ordinary',
             tradeDate: tradeForm.date,
         });
         const parsedFee = parseFeeInput(feeDirty ? tradeForm.fee : formatFeeAmount(estimate.total));
         if (parsedFee == null) return { gross, estimate, fee: null as number | null, cashDelta: null, cashLeft: null };
         const fee = parsedFee;
-        const cashDelta = formMode === 'buy' ? roundMoney(gross + fee) : roundMoney(gross - fee);
-        const syncName = formMode === 'buy' ? tradeForm.fromPaymentMethod : tradeForm.toPaymentMethod;
-        const affectsThisCash = Boolean(account && syncName && syncName === account.name);
+        const cashDelta = side === 'buy' ? roundMoney(gross + fee) : roundMoney(gross - fee);
         const cashLeft =
-            affectsThisCash && summary
-                ? roundMoney(
-                      summary.cashBalance + (formMode === 'buy' ? -cashDelta : cashDelta)
-                  )
+            account && summary
+                ? roundMoney(summary.cashBalance + (side === 'buy' ? -cashDelta : cashDelta))
                 : null;
         return { gross, estimate, fee, cashDelta, cashLeft };
     }, [
@@ -152,11 +147,9 @@ export default function PortfolioModal({
         summary,
         tradeForm.date,
         tradeForm.fee,
-        tradeForm.fromPaymentMethod,
         tradeForm.quantity,
-        tradeForm.securityType,
-        tradeForm.toPaymentMethod,
         tradeForm.unitPrice,
+        instrumentForm.kind,
     ]);
 
     const reload = async () => {
@@ -201,28 +194,48 @@ export default function PortfolioModal({
 
     if (!account) return null;
 
-    const openAddInstrument = () => {
+    const openAdd = () => {
         setSelected(null);
         setInstrumentForm({
             kind: 'equity',
             name: '',
             symbol: '',
-            lastPrice: '',
+            currentValue: '',
         });
-        setFormError(null);
-        setFormMode('add-instrument');
-    };
-
-    const openTrade = (mode: Exclude<FormMode, 'closed' | 'add-instrument'>, holding: HoldingPosition) => {
-        setSelected(holding);
         setTradeForm({
             date: today(),
             quantity: '',
-            unitPrice: holding.lastPrice != null ? String(holding.lastPrice) : '',
+            unitPrice: '',
             amount: '',
             notes: '',
             fee: '',
-            securityType: 'ordinary',
+            fromPaymentMethod: account.name,
+            toPaymentMethod: account.name,
+            syncCash: true,
+        });
+        setFeeDirty(false);
+        setFormError(null);
+        setFormMode('add-stock');
+    };
+
+    const openTrade = (
+        mode: Exclude<FormMode, 'closed' | 'add-stock'>,
+        holding: HoldingPosition
+    ) => {
+        setSelected(holding);
+        const isFund = holding.instrument.kind === 'fund';
+        setTradeForm({
+            date: today(),
+            quantity: '',
+            unitPrice:
+                isFund
+                    ? String(holding.marketValue)
+                    : holding.lastPrice != null
+                      ? String(holding.lastPrice)
+                      : '',
+            amount: '',
+            notes: '',
+            fee: '',
             fromPaymentMethod: account.name,
             toPaymentMethod: account.name,
             syncCash: true,
@@ -248,28 +261,84 @@ export default function PortfolioModal({
         setSaving(true);
         setFormError(null);
         try {
-            if (formMode === 'add-instrument') {
+            if (formMode === 'add-stock') {
                 if (!instrumentForm.name.trim()) {
                     setFormError('Name is required.');
                     setSaving(false);
                     return;
                 }
-                const payload: Parameters<typeof createInstrument>[0] = {
-                    paymentAccountId: account.id,
-                    kind: instrumentForm.kind,
-                    name: instrumentForm.name.trim(),
-                    symbol: instrumentForm.symbol.trim() || null,
-                };
-                if (instrumentForm.lastPrice.trim()) {
-                    const price = parseFloat(instrumentForm.lastPrice);
-                    if (!Number.isFinite(price) || price < 0) {
-                        setFormError('Invalid last price.');
+                if (instrumentForm.kind === 'fund') {
+                    const invested = parsePositive(tradeForm.amount);
+                    if (invested == null) {
+                        setFormError('Invested amount is required.');
                         setSaving(false);
                         return;
                     }
-                    payload.lastPrice = price;
+                    let currentValue = invested;
+                    if (instrumentForm.currentValue.trim()) {
+                        const parsed = parseFloat(instrumentForm.currentValue);
+                        if (!Number.isFinite(parsed) || parsed < 0) {
+                            setFormError('Current value must be zero or more.');
+                            setSaving(false);
+                            return;
+                        }
+                        currentValue = parsed;
+                    }
+                    const created = await createInstrument({
+                        paymentAccountId: account.id,
+                        kind: 'fund',
+                        name: instrumentForm.name.trim(),
+                        principal: 0,
+                    });
+                    await recordFundInvest({
+                        instrumentId: created.id,
+                        date: tradeForm.date,
+                        amount: invested,
+                        fromPaymentMethod: account.name,
+                    });
+                    if (roundMoney(currentValue) !== roundMoney(invested)) {
+                        await recordPortfolioPriceMark({
+                            instrumentId: created.id,
+                            date: tradeForm.date,
+                            unitPrice: currentValue,
+                        });
+                    }
+                } else {
+                    const quantity = parsePositive(tradeForm.quantity);
+                    const unitPrice = parseFloat(tradeForm.unitPrice);
+                    if (quantity == null || !Number.isFinite(unitPrice) || unitPrice < 0) {
+                        setFormError('Quantity and unit price are required.');
+                        setSaving(false);
+                        return;
+                    }
+                    const fee = parseFeeInput(
+                        feeDirty
+                            ? tradeForm.fee
+                            : tradePreview
+                              ? formatFeeAmount(tradePreview.estimate.total)
+                              : '0'
+                    );
+                    if (fee == null) {
+                        setFormError('Service charges must be zero or more.');
+                        setSaving(false);
+                        return;
+                    }
+                    const created = await createInstrument({
+                        paymentAccountId: account.id,
+                        kind: 'equity',
+                        name: instrumentForm.name.trim(),
+                        symbol: instrumentForm.symbol.trim() || null,
+                        lastPrice: unitPrice,
+                    });
+                    await recordPortfolioBuy({
+                        instrumentId: created.id,
+                        date: tradeForm.date,
+                        quantity,
+                        unitPrice,
+                        fee,
+                        fromPaymentMethod: account.name,
+                    });
                 }
-                await createInstrument(payload);
             } else if (selected) {
                 const id = selected.instrument.id;
                 if (formMode === 'buy') {
@@ -298,8 +367,7 @@ export default function PortfolioModal({
                         quantity,
                         unitPrice,
                         fee,
-                        notes: tradeForm.notes.trim() || null,
-                        fromPaymentMethod: tradeForm.fromPaymentMethod || null,
+                        fromPaymentMethod: account.name,
                     });
                 } else if (formMode === 'sell') {
                     const quantity = parsePositive(tradeForm.quantity);
@@ -332,8 +400,7 @@ export default function PortfolioModal({
                         quantity,
                         unitPrice,
                         fee,
-                        notes: tradeForm.notes.trim() || null,
-                        toPaymentMethod: tradeForm.toPaymentMethod || null,
+                        toPaymentMethod: account.name,
                     });
                 } else if (formMode === 'dividend') {
                     const amount = parsePositive(tradeForm.amount);
@@ -367,7 +434,11 @@ export default function PortfolioModal({
                 } else if (formMode === 'price') {
                     const unitPrice = parseFloat(tradeForm.unitPrice);
                     if (!Number.isFinite(unitPrice) || unitPrice < 0) {
-                        setFormError('Price is required.');
+                        setFormError(
+                            selected.instrument.kind === 'fund'
+                                ? 'Current value is required.'
+                                : 'Price is required.'
+                        );
                         setSaving(false);
                         return;
                     }
@@ -385,6 +456,32 @@ export default function PortfolioModal({
                             : undefined,
                         toPaymentMethod: tradeForm.toPaymentMethod || null,
                         syncCash: tradeForm.syncCash,
+                    });
+                } else if (formMode === 'fund-invest') {
+                    const amount = parsePositive(tradeForm.amount);
+                    if (amount == null) {
+                        setFormError('Amount is required.');
+                        setSaving(false);
+                        return;
+                    }
+                    await recordFundInvest({
+                        instrumentId: id,
+                        date: tradeForm.date,
+                        amount,
+                        fromPaymentMethod: account.name,
+                    });
+                } else if (formMode === 'fund-withdraw') {
+                    const amount = parsePositive(tradeForm.amount);
+                    if (amount == null) {
+                        setFormError('Amount is required.');
+                        setSaving(false);
+                        return;
+                    }
+                    await recordFundWithdraw({
+                        instrumentId: id,
+                        date: tradeForm.date,
+                        amount,
+                        toPaymentMethod: account.name,
                     });
                 }
             }
@@ -411,8 +508,8 @@ export default function PortfolioModal({
 
     const formTitle = (() => {
         switch (formMode) {
-            case 'add-instrument':
-                return 'Add instrument';
+            case 'add-stock':
+                return instrumentForm.kind === 'fund' ? 'Add unit trust' : 'Add stock';
             case 'buy':
                 return `Buy — ${selected?.instrument.name ?? ''}`;
             case 'sell':
@@ -422,9 +519,15 @@ export default function PortfolioModal({
             case 'interest':
                 return `Interest — ${selected?.instrument.name ?? ''}`;
             case 'price':
-                return `Set price — ${selected?.instrument.name ?? ''}`;
+                return selected?.instrument.kind === 'fund'
+                    ? `Set value — ${selected?.instrument.name ?? ''}`
+                    : `Set price — ${selected?.instrument.name ?? ''}`;
             case 'accrue':
                 return `Accrue FD interest — ${selected?.instrument.name ?? ''}`;
+            case 'fund-invest':
+                return `Invest — ${selected?.instrument.name ?? ''}`;
+            case 'fund-withdraw':
+                return `Withdraw — ${selected?.instrument.name ?? ''}`;
             default:
                 return '';
         }
@@ -439,10 +542,10 @@ export default function PortfolioModal({
                 >
                     <div className="account-activity-header">
                         <div className="account-activity-header-top">
-                            <h4>{account.name} — Portfolio</h4>
+                            <h4>{account.name}</h4>
                             <div className="portfolio-header-actions">
-                                <button type="button" className="btn-add" onClick={openAddInstrument}>
-                                    + Instrument
+                                <button type="button" className="btn-add" onClick={openAdd}>
+                                    + Add
                                 </button>
                                 {onOpenCashActivity && (
                                     <button
@@ -461,18 +564,8 @@ export default function PortfolioModal({
                                 <span className="account-activity-sep">·</span>
                                 <span>Holdings {formatAmount(summary.totalMarketValue)}</span>
                                 <span className="account-activity-sep">·</span>
-                                <span
-                                    className={
-                                        summary.nav < 0
-                                            ? 'account-balance-negative'
-                                            : 'account-balance-positive'
-                                    }
-                                >
-                                    NAV {formatAmount(summary.nav)}
-                                </span>
-                                <span className="account-activity-sep">·</span>
                                 <span>
-                                    Unreal.{' '}
+                                    P&amp;L{' '}
                                     <strong
                                         className={
                                             summary.totalUnrealizedGain >= 0
@@ -484,18 +577,7 @@ export default function PortfolioModal({
                                     </strong>
                                 </span>
                                 <span className="account-activity-sep">·</span>
-                                <span>
-                                    Realized{' '}
-                                    <strong
-                                        className={
-                                            summary.totalRealizedGain >= 0
-                                                ? 'account-activity-in'
-                                                : 'account-activity-out'
-                                        }
-                                    >
-                                        {formatAmount(summary.totalRealizedGain)}
-                                    </strong>
-                                </span>
+                                <span>Deposit {formatAmount(summary.totalCostBasis)}</span>
                             </div>
                         )}
                     </div>
@@ -504,15 +586,18 @@ export default function PortfolioModal({
                         {loading && <p className="muted">Loading portfolio…</p>}
                         {error && <p className="error">{error}</p>}
                         {!loading && !error && summary && summary.holdings.length === 0 && (
-                            <p className="muted">No instruments yet. Add a stock or fund.</p>
+                            <p className="muted">Add a stock or unit trust.</p>
                         )}
                         {!loading && !error && summary && summary.holdings.length > 0 && (
                             <table className="data-table portfolio-holdings-table">
                                 <thead>
                                     <tr>
-                                        <th>Instrument</th>
-                                        <th>Qty / principal</th>
-                                        <th>Cost</th>
+                                        <th>Stock</th>
+                                        <th>
+                                            {summary.holdings.some((h) => h.instrument.kind === 'equity')
+                                                ? 'Qty'
+                                                : 'Deposit'}
+                                        </th>
                                         <th>Value</th>
                                         <th>P&amp;L</th>
                                         <th></th>
@@ -522,30 +607,34 @@ export default function PortfolioModal({
                                     {summary.holdings.map((holding) => {
                                         const inst = holding.instrument;
                                         const isFd = inst.kind === 'fd';
+                                        const isFund = inst.kind === 'fund';
                                         return (
                                             <tr key={inst.id}>
                                                 <td>
                                                     <div className="portfolio-instrument-name">
-                                                        {inst.symbol
-                                                            ? `${inst.symbol} — ${inst.name}`
-                                                            : inst.name}
+                                                        {inst.name}
                                                     </div>
                                                     <div className="muted portfolio-instrument-meta">
-                                                        {kindLabel(inst.kind)}
-                                                        {isFd && inst.annualRatePct != null
-                                                            ? ` · ${inst.annualRatePct}% p.a.`
-                                                            : ''}
-                                                        {!isFd && holding.lastPrice != null
-                                                            ? ` · @ ${holding.lastPrice}`
-                                                            : ''}
+                                                        {isFd
+                                                            ? `${kindLabel(inst.kind)}${
+                                                                  inst.annualRatePct != null
+                                                                      ? ` · ${inst.annualRatePct}% p.a.`
+                                                                      : ''
+                                                              }`
+                                                            : isFund
+                                                              ? 'Unit trust'
+                                                              : `${holding.quantity}${
+                                                                    holding.lastPrice != null
+                                                                        ? ` @ ${holding.lastPrice}`
+                                                                        : ''
+                                                                }`}
                                                     </div>
                                                 </td>
                                                 <td>
-                                                    {isFd
-                                                        ? formatAmount(inst.principal ?? 0)
+                                                    {isFd || isFund
+                                                        ? formatAmount(holding.costBasis)
                                                         : holding.quantity}
                                                 </td>
-                                                <td>{formatAmount(holding.costBasis)}</td>
                                                 <td>{formatAmount(holding.marketValue)}</td>
                                                 <td
                                                     className={
@@ -581,6 +670,30 @@ export default function PortfolioModal({
                                                                     Accrue
                                                                 </button>
                                                             </>
+                                                        ) : isFund ? (
+                                                            <>
+                                                                <button
+                                                                    type="button"
+                                                                    className="btn-link"
+                                                                    onClick={() =>
+                                                                        openTrade(
+                                                                            'fund-invest',
+                                                                            holding
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    Invest
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    className="btn-link"
+                                                                    onClick={() =>
+                                                                        openTrade('price', holding)
+                                                                    }
+                                                                >
+                                                                    Set value
+                                                                </button>
+                                                            </>
                                                         ) : (
                                                             <>
                                                                 <button
@@ -601,35 +714,64 @@ export default function PortfolioModal({
                                                                 >
                                                                     Sell
                                                                 </button>
-                                                                <button
-                                                                    type="button"
-                                                                    className="btn-link"
-                                                                    onClick={() =>
-                                                                        openTrade('dividend', holding)
-                                                                    }
-                                                                >
-                                                                    Div
-                                                                </button>
-                                                                <button
-                                                                    type="button"
-                                                                    className="btn-link"
-                                                                    onClick={() =>
-                                                                        openTrade('price', holding)
-                                                                    }
-                                                                >
-                                                                    Price
-                                                                </button>
                                                             </>
                                                         )}
-                                                        <button
-                                                            type="button"
-                                                            className="btn-link danger"
-                                                            onClick={() =>
-                                                                handleDeleteInstrument(holding)
-                                                            }
-                                                        >
-                                                            Remove
-                                                        </button>
+                                                        <details className="portfolio-more">
+                                                            <summary className="btn-link">More</summary>
+                                                            <div className="portfolio-more-menu">
+                                                                {isFund && (
+                                                                    <button
+                                                                        type="button"
+                                                                        className="btn-link"
+                                                                        onClick={() =>
+                                                                            openTrade(
+                                                                                'fund-withdraw',
+                                                                                holding
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        Withdraw
+                                                                    </button>
+                                                                )}
+                                                                {!isFd && !isFund && (
+                                                                    <>
+                                                                        <button
+                                                                            type="button"
+                                                                            className="btn-link"
+                                                                            onClick={() =>
+                                                                                openTrade(
+                                                                                    'dividend',
+                                                                                    holding
+                                                                                )
+                                                                            }
+                                                                        >
+                                                                            Dividend
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            className="btn-link"
+                                                                            onClick={() =>
+                                                                                openTrade(
+                                                                                    'price',
+                                                                                    holding
+                                                                                )
+                                                                            }
+                                                                        >
+                                                                            Update price
+                                                                        </button>
+                                                                    </>
+                                                                )}
+                                                                <button
+                                                                    type="button"
+                                                                    className="btn-link danger"
+                                                                    onClick={() =>
+                                                                        handleDeleteInstrument(holding)
+                                                                    }
+                                                                >
+                                                                    Remove
+                                                                </button>
+                                                            </div>
+                                                        </details>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -656,10 +798,19 @@ export default function PortfolioModal({
                                             const holding = summary.holdings.find(
                                                 (h) => h.instrument.id === event.instrumentId
                                             );
+                                            const isFund = holding?.instrument.kind === 'fund';
                                             const label =
                                                 holding?.instrument.symbol ||
                                                 holding?.instrument.name ||
                                                 `#${event.instrumentId}`;
+                                            const eventLabel =
+                                                isFund && event.eventType === 'buy'
+                                                    ? 'invest'
+                                                    : isFund && event.eventType === 'sell'
+                                                      ? 'withdraw'
+                                                      : isFund && event.eventType === 'price_mark'
+                                                        ? 'set value'
+                                                        : event.eventType;
                                             const detailParts: string[] = [label];
                                             if (event.quantity != null) {
                                                 detailParts.push(`qty ${event.quantity}`);
@@ -679,7 +830,7 @@ export default function PortfolioModal({
                                             return (
                                                 <tr key={event.id}>
                                                     <td>{event.date}</td>
-                                                    <td>{event.eventType}</td>
+                                                    <td>{eventLabel}</td>
                                                     <td>{detailParts.join(' · ')}</td>
                                                     <td>
                                                         {event.amount != null
@@ -712,8 +863,13 @@ export default function PortfolioModal({
                 onSave={handleSaveForm}
                 className="portfolio-form-modal"
             >
-                {formMode === 'add-instrument' && (
+                {formMode === 'add-stock' && (
                     <>
+                        {summary && (
+                            <p className="portfolio-trade-cash">
+                                Cash in {account.name} {formatAmount(summary.cashBalance)}
+                            </p>
+                        )}
                         <div className="form-field">
                             <label htmlFor="pf-kind">Type</label>
                             <select
@@ -722,13 +878,12 @@ export default function PortfolioModal({
                                 onChange={(e) =>
                                     setInstrumentForm((f) => ({
                                         ...f,
-                                        kind: e.target.value as InstrumentKind,
+                                        kind: e.target.value as 'equity' | 'fund',
                                     }))
                                 }
                             >
                                 <option value="equity">Stock</option>
-                                <option value="fund">Fund / unit trust</option>
-                                <option value="other">Other</option>
+                                <option value="fund">Unit trust</option>
                             </select>
                         </div>
                         <div className="form-field">
@@ -740,40 +895,113 @@ export default function PortfolioModal({
                                 onChange={(e) =>
                                     setInstrumentForm((f) => ({ ...f, name: e.target.value }))
                                 }
-                                placeholder="e.g. Maybank, ASB"
-                            />
-                        </div>
-                        <div className="form-field">
-                            <label htmlFor="pf-symbol">Symbol (optional)</label>
-                            <input
-                                id="pf-symbol"
-                                type="text"
-                                value={instrumentForm.symbol}
-                                onChange={(e) =>
-                                    setInstrumentForm((f) => ({
-                                        ...f,
-                                        symbol: e.target.value,
-                                    }))
-                                }
-                                placeholder="e.g. 1155"
-                            />
-                        </div>
-                        <div className="form-field">
-                            <label htmlFor="pf-last">Last price (optional)</label>
-                            <input
-                                id="pf-last"
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={instrumentForm.lastPrice}
-                                onChange={(e) =>
-                                    setInstrumentForm((f) => ({
-                                        ...f,
-                                        lastPrice: e.target.value,
-                                    }))
+                                placeholder={
+                                    instrumentForm.kind === 'fund'
+                                        ? 'e.g. ASB, Public Mutual'
+                                        : 'e.g. Maybank, Public Bank'
                                 }
                             />
                         </div>
+                        {instrumentForm.kind === 'fund' ? (
+                            <>
+                                <div className="form-field">
+                                    <label htmlFor="pf-date">Date</label>
+                                    <input
+                                        id="pf-date"
+                                        type="date"
+                                        value={tradeForm.date}
+                                        onChange={(e) =>
+                                            setTradeForm((f) => ({ ...f, date: e.target.value }))
+                                        }
+                                    />
+                                </div>
+                                <div className="form-field">
+                                    <label htmlFor="pf-invested">Invested (RM)</label>
+                                    <input
+                                        id="pf-invested"
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={tradeForm.amount}
+                                        onChange={(e) =>
+                                            setTradeForm((f) => ({ ...f, amount: e.target.value }))
+                                        }
+                                    />
+                                </div>
+                                <div className="form-field">
+                                    <label htmlFor="pf-current">Current value (RM)</label>
+                                    <input
+                                        id="pf-current"
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={instrumentForm.currentValue}
+                                        onChange={(e) =>
+                                            setInstrumentForm((f) => ({
+                                                ...f,
+                                                currentValue: e.target.value,
+                                            }))
+                                        }
+                                        placeholder="Same as invested if blank"
+                                    />
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div className="form-field">
+                                    <label htmlFor="pf-symbol">Ticker (optional)</label>
+                                    <input
+                                        id="pf-symbol"
+                                        type="text"
+                                        value={instrumentForm.symbol}
+                                        onChange={(e) =>
+                                            setInstrumentForm((f) => ({
+                                                ...f,
+                                                symbol: e.target.value,
+                                            }))
+                                        }
+                                        placeholder="e.g. 1155"
+                                    />
+                                </div>
+                                <div className="form-field">
+                                    <label htmlFor="pf-date">Date</label>
+                                    <input
+                                        id="pf-date"
+                                        type="date"
+                                        value={tradeForm.date}
+                                        onChange={(e) =>
+                                            setTradeForm((f) => ({ ...f, date: e.target.value }))
+                                        }
+                                    />
+                                </div>
+                                <div className="form-field">
+                                    <label htmlFor="pf-qty">Quantity</label>
+                                    <input
+                                        id="pf-qty"
+                                        type="number"
+                                        min="0"
+                                        step="any"
+                                        value={tradeForm.quantity}
+                                        onChange={(e) =>
+                                            setTradeForm((f) => ({ ...f, quantity: e.target.value }))
+                                        }
+                                    />
+                                </div>
+                                <div className="form-field">
+                                    <label htmlFor="pf-price">Unit price</label>
+                                    <input
+                                        id="pf-price"
+                                        type="number"
+                                        min="0"
+                                        step="any"
+                                        value={tradeForm.unitPrice}
+                                        onChange={(e) =>
+                                            setTradeForm((f) => ({ ...f, unitPrice: e.target.value }))
+                                        }
+                                    />
+                                </div>
+                            </>
+                        )}
                     </>
                 )}
 
@@ -821,22 +1049,13 @@ export default function PortfolioModal({
                                 }
                             />
                         </div>
-                        <div className="form-field">
-                            <label htmlFor="pf-security">Security type</label>
-                            <select
-                                id="pf-security"
-                                value={tradeForm.securityType}
-                                onChange={(e) => {
-                                    const value = e.target.value;
-                                    if (!isRakutenSecurityType(value)) return;
-                                    setTradeForm((f) => ({ ...f, securityType: value }));
-                                }}
-                            >
-                                <option value="ordinary">Ordinary share</option>
-                                <option value="reit_warrant">REIT / Warrant</option>
-                                <option value="etf">ETF</option>
-                            </select>
-                        </div>
+                    </>
+                )}
+
+                {((formMode === 'add-stock' && instrumentForm.kind !== 'fund') ||
+                    formMode === 'buy' ||
+                    formMode === 'sell') && (
+                    <>
                         <div className="form-field">
                             <div className="form-field-label-row">
                                 <label htmlFor="pf-fee">Service charges</label>
@@ -877,7 +1096,7 @@ export default function PortfolioModal({
                         {tradePreview && tradePreview.fee != null && (
                             <div className="portfolio-trade-breakdown">
                                 <div className="portfolio-trade-breakdown-row">
-                                    <span>{formMode === 'buy' ? 'Shares' : 'Gross'}</span>
+                                    <span>{formMode === 'sell' ? 'Gross' : 'Shares'}</span>
                                     <span>{formatAmount(tradePreview.gross)}</span>
                                 </div>
                                 <div className="portfolio-trade-breakdown-row">
@@ -886,7 +1105,7 @@ export default function PortfolioModal({
                                 </div>
                                 <div className="portfolio-trade-breakdown-row total">
                                     <span>
-                                        {formMode === 'buy' ? 'Total deducted' : 'Net proceeds'}
+                                        {formMode === 'sell' ? 'Net proceeds' : 'Total deducted'}
                                     </span>
                                     <span>{formatAmount(tradePreview.cashDelta ?? 0)}</span>
                                 </div>
@@ -902,7 +1121,7 @@ export default function PortfolioModal({
                                         <span>{formatAmount(tradePreview.cashLeft)}</span>
                                     </div>
                                 )}
-                                {formMode === 'buy' &&
+                                {formMode !== 'sell' &&
                                     tradePreview.cashLeft != null &&
                                     tradePreview.cashLeft < 0 && (
                                         <p className="portfolio-trade-hint account-balance-negative">
@@ -919,61 +1138,6 @@ export default function PortfolioModal({
                                     )}
                             </div>
                         )}
-                        {formMode === 'buy' && (
-                            <div className="form-field">
-                                <label htmlFor="pf-from">Deduct cash from</label>
-                                <select
-                                    id="pf-from"
-                                    value={tradeForm.fromPaymentMethod}
-                                    onChange={(e) =>
-                                        setTradeForm((f) => ({
-                                            ...f,
-                                            fromPaymentMethod: e.target.value,
-                                        }))
-                                    }
-                                >
-                                    <option value="">Do not deduct cash</option>
-                                    {paymentMethodOptions.map((a) => (
-                                        <option key={a.id} value={a.name}>
-                                            {a.name}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        )}
-                        {formMode === 'sell' && (
-                            <div className="form-field">
-                                <label htmlFor="pf-to">Credit proceeds to</label>
-                                <select
-                                    id="pf-to"
-                                    value={tradeForm.toPaymentMethod}
-                                    onChange={(e) =>
-                                        setTradeForm((f) => ({
-                                            ...f,
-                                            toPaymentMethod: e.target.value,
-                                        }))
-                                    }
-                                >
-                                    <option value="">Do not credit cash</option>
-                                    {paymentMethodOptions.map((a) => (
-                                        <option key={a.id} value={a.name}>
-                                            {a.name}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        )}
-                        <div className="form-field">
-                            <label htmlFor="pf-notes">Notes</label>
-                            <input
-                                id="pf-notes"
-                                type="text"
-                                value={tradeForm.notes}
-                                onChange={(e) =>
-                                    setTradeForm((f) => ({ ...f, notes: e.target.value }))
-                                }
-                            />
-                        </div>
                     </>
                 )}
 
@@ -1062,6 +1226,47 @@ export default function PortfolioModal({
                     </>
                 )}
 
+                {(formMode === 'fund-invest' || formMode === 'fund-withdraw') && (
+                    <>
+                        {summary && selected && (
+                            <p className="portfolio-trade-cash">
+                                Invested {formatAmount(selected.costBasis)}
+                                {' · '}
+                                Value {formatAmount(selected.marketValue)}
+                            </p>
+                        )}
+                        <div className="form-field">
+                            <label htmlFor="pf-f-date">Date</label>
+                            <input
+                                id="pf-f-date"
+                                type="date"
+                                value={tradeForm.date}
+                                onChange={(e) =>
+                                    setTradeForm((f) => ({ ...f, date: e.target.value }))
+                                }
+                            />
+                        </div>
+                        <div className="form-field">
+                            <label htmlFor="pf-f-amt">Amount (RM)</label>
+                            <input
+                                id="pf-f-amt"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={tradeForm.amount}
+                                onChange={(e) =>
+                                    setTradeForm((f) => ({ ...f, amount: e.target.value }))
+                                }
+                            />
+                            {formMode === 'fund-withdraw' && selected && (
+                                <span className="portfolio-trade-hint">
+                                    Cannot exceed invested {formatAmount(selected.costBasis)}
+                                </span>
+                            )}
+                        </div>
+                    </>
+                )}
+
                 {formMode === 'price' && (
                     <>
                         <div className="form-field">
@@ -1076,7 +1281,9 @@ export default function PortfolioModal({
                             />
                         </div>
                         <div className="form-field">
-                            <label htmlFor="pf-p-price">Unit price</label>
+                            <label htmlFor="pf-p-price">
+                                {selected?.instrument.kind === 'fund' ? 'Current value (RM)' : 'Unit price'}
+                            </label>
                             <input
                                 id="pf-p-price"
                                 type="number"

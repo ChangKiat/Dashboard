@@ -156,6 +156,9 @@ export interface FixedExpenseConfig {
     currency: string;
     paymentMethod?: string | null;
     toInvestmentAccount?: string | null;
+    instrumentId?: number | null;
+    instrumentName?: string | null;
+    contributedThisMonth?: boolean;
     loanMethod?: LoanMethod | null;
     originalPrincipal?: number | null;
     remainingPrincipal?: number | null;
@@ -186,6 +189,12 @@ export interface InterestSchedulesResponse {
 }
 
 export type PaymentAccountType = 'account' | 'credit' | 'investment';
+
+export interface AccountHolding {
+    id: number;
+    name: string;
+    kind: 'equity' | 'fund' | 'fd' | 'other';
+}
 
 export const REBATE_CATEGORIES = ['Petrol', 'Groceries', 'Dining', 'Grab'] as const;
 
@@ -257,6 +266,13 @@ export interface PaymentAccount {
     availableCredit?: number;
     /** Market value of holdings (investment accounts). */
     holdingsMarketValue?: number;
+    /** Cost basis of holdings (investment accounts). */
+    totalCostBasis?: number;
+    /** Unrealized P/L of holdings (investment accounts). */
+    unrealizedGain?: number;
+    /** Holding names under this investment account (e.g. Maybank, Public Bank). */
+    holdingNames?: string[];
+    holdings?: AccountHolding[];
     /** Cash balance + holdings market value (investment accounts). */
     nav?: number;
     /** Locked FD principal on debit accounts. */
@@ -547,6 +563,7 @@ export function createFixedExpense(
     > & {
         paymentMethod?: string | null;
         toInvestmentAccount?: string | null;
+        instrumentId?: number | null;
         loanMethod?: LoanMethod | null;
         originalPrincipal?: number | null;
         remainingPrincipal?: number | null;
@@ -574,6 +591,7 @@ export function updateFixedExpense(
             | 'frequencyMonths'
             | 'paymentMethod'
             | 'toInvestmentAccount'
+            | 'instrumentId'
             | 'loanMethod'
             | 'originalPrincipal'
             | 'remainingPrincipal'
@@ -592,6 +610,21 @@ export function updateFixedExpense(
 
 export function deleteFixedExpense(id: number) {
     return fetchJson<{ ok: true }>(`/api/expenses/fixed/${id}`, { method: 'DELETE' });
+}
+
+let dueContributionsPromise: Promise<{ ok: true; applied: number; skipped: number }> | null = null;
+
+export function applyDueFixedContributions() {
+    if (!dueContributionsPromise) {
+        dueContributionsPromise = fetchJson<{ ok: true; applied: number; skipped: number }>(
+            '/api/expenses/fixed/contribute-due',
+            { method: 'POST' }
+        ).catch((err) => {
+            dueContributionsPromise = null;
+            throw err;
+        });
+    }
+    return dueContributionsPromise;
 }
 
 export function fetchInterestSchedules() {
@@ -1081,6 +1114,34 @@ export function recordPortfolioSell(fields: {
             body: JSON.stringify(fields),
         }
     );
+}
+
+export function recordFundInvest(fields: {
+    instrumentId: number;
+    date: string;
+    amount: number;
+    notes?: string | null;
+    fromPaymentMethod?: string | null;
+}) {
+    return fetchJson<{ ok: true; eventId: number }>('/api/investments/events/fund-invest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+    });
+}
+
+export function recordFundWithdraw(fields: {
+    instrumentId: number;
+    date: string;
+    amount: number;
+    notes?: string | null;
+    toPaymentMethod?: string | null;
+}) {
+    return fetchJson<{ ok: true; eventId: number }>('/api/investments/events/fund-withdraw', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+    });
 }
 
 export function recordPortfolioDividend(fields: {

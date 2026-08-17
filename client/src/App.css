@@ -468,6 +468,15 @@ div.payment-account-card-main:hover {
   color: var(--danger);
 }
 
+.payment-account-holdings {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
 .account-activity-header {
   margin: 0 0 12px;
   flex-shrink: 0;
@@ -1566,6 +1575,10 @@ div.payment-account-card-main:hover {
   width: 100%;
 }
 
+.portfolio-holdings-table td:last-child {
+  overflow: visible;
+}
+
 .portfolio-instrument-name {
   font-weight: 600;
 }
@@ -1580,6 +1593,37 @@ div.payment-account-card-main:hover {
   flex-wrap: wrap;
   gap: 6px 10px;
   justify-content: flex-end;
+  align-items: center;
+}
+
+.portfolio-more {
+  position: relative;
+}
+
+.portfolio-more > summary {
+  list-style: none;
+}
+
+.portfolio-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.portfolio-more-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 8rem;
+  padding: 8px 10px;
+  margin-top: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
 }
 
 .portfolio-events-heading {

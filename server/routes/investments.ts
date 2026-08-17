@@ -11,6 +11,8 @@ import {
     isValidInstrumentKind,
     recordBuy,
     recordDividend,
+    recordFundInvest,
+    recordFundWithdraw,
     recordInterest,
     recordPriceMark,
     recordSell,
@@ -263,6 +265,79 @@ router.post('/events/sell', async (req, res) => {
             message.includes('must') ||
             message.includes('cannot exceed')
                 ? 400
+                : 500;
+        res.status(status).json({ error: message });
+    }
+});
+
+router.post('/events/fund-invest', async (req, res) => {
+    try {
+        const body = req.body ?? {};
+        const instrumentId =
+            typeof body.instrumentId === 'number'
+                ? body.instrumentId
+                : parseIdParam(String(body.instrumentId ?? ''));
+        if (!instrumentId) return res.status(400).json({ error: 'instrumentId is required' });
+        if (!isValidDate(body.date)) return res.status(400).json({ error: 'Invalid date' });
+        if (!isPositiveNumber(body.amount)) {
+            return res.status(400).json({ error: 'amount must be positive' });
+        }
+
+        const result = await recordFundInvest({
+            instrumentId,
+            date: body.date,
+            amount: body.amount,
+            notes: body.notes ?? null,
+            fromPaymentMethod: body.fromPaymentMethod ?? null,
+        });
+        res.status(201).json({ ok: true, ...result });
+    } catch (err) {
+        console.error('POST /api/investments/events/fund-invest', err);
+        const message = err instanceof Error ? err.message : 'Server error';
+        const status =
+            message.includes('not found') ||
+            message.includes('only for') ||
+            message.includes('must')
+                ? message.includes('not found')
+                    ? 404
+                    : 400
+                : 500;
+        res.status(status).json({ error: message });
+    }
+});
+
+router.post('/events/fund-withdraw', async (req, res) => {
+    try {
+        const body = req.body ?? {};
+        const instrumentId =
+            typeof body.instrumentId === 'number'
+                ? body.instrumentId
+                : parseIdParam(String(body.instrumentId ?? ''));
+        if (!instrumentId) return res.status(400).json({ error: 'instrumentId is required' });
+        if (!isValidDate(body.date)) return res.status(400).json({ error: 'Invalid date' });
+        if (!isPositiveNumber(body.amount)) {
+            return res.status(400).json({ error: 'amount must be positive' });
+        }
+
+        const result = await recordFundWithdraw({
+            instrumentId,
+            date: body.date,
+            amount: body.amount,
+            notes: body.notes ?? null,
+            toPaymentMethod: body.toPaymentMethod ?? null,
+        });
+        res.status(201).json({ ok: true, ...result });
+    } catch (err) {
+        console.error('POST /api/investments/events/fund-withdraw', err);
+        const message = err instanceof Error ? err.message : 'Server error';
+        const status =
+            message.includes('not found') ||
+            message.includes('only for') ||
+            message.includes('must') ||
+            message.includes('cannot exceed')
+                ? message.includes('not found')
+                    ? 404
+                    : 400
                 : 500;
         res.status(status).json({ error: message });
     }

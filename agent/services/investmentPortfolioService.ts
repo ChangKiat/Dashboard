@@ -67,6 +67,12 @@ export interface HoldingPosition {
     lastPrice: number | null;
 }
 
+export interface AccountHoldingSummary {
+    id: number;
+    name: string;
+    kind: InstrumentKind;
+}
+
 export interface PortfolioSummary {
     paymentAccountId: number;
     holdings: HoldingPosition[];
@@ -357,7 +363,9 @@ export async function createInstrument(fields: {
             principal:
                 fields.kind === 'fd' && fields.principal != null
                     ? String(roundMoney(fields.principal))
-                    : null,
+                    : fields.kind === 'fund'
+                      ? String(roundMoney(fields.principal ?? 0))
+                      : null,
             annualRatePct:
                 fields.kind === 'fd' && fields.annualRatePct != null
                     ? String(fields.annualRatePct)
@@ -407,14 +415,14 @@ export async function updateInstrument(
         }
     }
 
-    if (existing.kind === 'fd') {
+    if (existing.kind === 'fd' || existing.kind === 'fund') {
         if (fields.principal !== undefined) {
             if (fields.principal == null || !Number.isFinite(fields.principal) || fields.principal < 0) {
-                throw new Error('Invalid FD principal');
+                throw new Error(existing.kind === 'fund' ? 'Invalid invested amount' : 'Invalid FD principal');
             }
             patch.principal = String(roundMoney(fields.principal));
         }
-        if (fields.annualRatePct !== undefined) {
+        if (existing.kind === 'fd' && fields.annualRatePct !== undefined) {
             if (
                 fields.annualRatePct == null ||
                 !Number.isFinite(fields.annualRatePct) ||
@@ -424,8 +432,10 @@ export async function updateInstrument(
             }
             patch.annualRatePct = String(fields.annualRatePct);
         }
-        if (fields.startDate !== undefined) patch.startDate = fields.startDate;
-        if (fields.maturityDate !== undefined) patch.maturityDate = fields.maturityDate;
+        if (existing.kind === 'fd') {
+            if (fields.startDate !== undefined) patch.startDate = fields.startDate;
+            if (fields.maturityDate !== undefined) patch.maturityDate = fields.maturityDate;
+        }
     }
 
     if (Object.keys(patch).length === 0) return;
@@ -464,6 +474,21 @@ function positionFromLots(
     return { quantity: roundQty(quantity), costBasis: roundMoney(costBasis) };
 }
 
+function isPrincipalFund(instrument: InvestmentInstrument): boolean {
+    return instrument.kind === 'fund' && instrument.principal != null;
+}
+
+function fundPosition(instrument: InvestmentInstrument): {
+    costBasis: number;
+    marketValue: number;
+    lastPrice: number | null;
+} {
+    const costBasis = roundMoney(instrument.principal ?? 0);
+    const marketValue =
+        instrument.lastPrice != null ? roundMoney(instrument.lastPrice) : costBasis;
+    return { costBasis, marketValue, lastPrice: instrument.lastPrice };
+}
+
 function holdingMarketValue(
     instrument: InvestmentInstrument,
     quantity: number,
@@ -473,6 +498,10 @@ function holdingMarketValue(
         const principal = instrument.principal ?? 0;
         return { marketValue: roundMoney(principal), lastPrice: null };
     }
+    if (isPrincipalFund(instrument)) {
+        const pos = fundPosition(instrument);
+        return { marketValue: pos.marketValue, lastPrice: pos.lastPrice };
+    }
     const lastPrice = instrument.lastPrice;
     if (lastPrice != null) {
         return { marketValue: roundMoney(quantity * lastPrice), lastPrice };
@@ -480,14 +509,26 @@ function holdingMarketValue(
     return { marketValue: costBasis, lastPrice: null };
 }
 
-export async function sumHoldingsMarketValueByAccount(): Promise<Map<number, number>> {
+export async function sumHoldingsByAccount(): Promise<{
+    marketValue: Map<number, number>;
+    costBasis: Map<number, number>;
+    unrealizedGain: Map<number, number>;
+    names: Map<number, string[]>;
+    holdings: Map<number, AccountHoldingSummary[]>;
+}> {
     const db = requireDb();
     const instruments = await db
         .select()
         .from(investmentInstruments)
         .where(eq(investmentInstruments.active, true));
-    const result = new Map<number, number>();
-    if (instruments.length === 0) return result;
+    const marketValue = new Map<number, number>();
+    const costBasisByAccount = new Map<number, number>();
+    const unrealizedGain = new Map<number, number>();
+    const names = new Map<number, string[]>();
+    const holdings = new Map<number, AccountHoldingSummary[]>();
+    if (instruments.length === 0) {
+        return { marketValue, costBasis: costBasisByAccount, unrealizedGain, names, holdings };
+    }
 
     const ids = instruments.map((i) => i.id);
     const lots = await db
@@ -504,22 +545,52 @@ export async function sumHoldingsMarketValueByAccount(): Promise<Map<number, num
         lotsByInstrument.set(lot.instrumentId, list);
     }
 
+    const addMoney = (map: Map<number, number>, accountId: number, amount: number) => {
+        map.set(accountId, roundMoney((map.get(accountId) ?? 0) + amount));
+    };
+
     for (const row of instruments) {
         const instrument = mapInstrument(row);
         let mv = 0;
+        let costBasis = 0;
+        let gain = 0;
         if (instrument.kind === 'fd') {
-            mv = roundMoney(instrument.principal ?? 0);
+            costBasis = roundMoney(instrument.principal ?? 0);
+            mv = costBasis;
+        } else if (isPrincipalFund(instrument)) {
+            const pos = fundPosition(instrument);
+            costBasis = pos.costBasis;
+            mv = pos.marketValue;
+            gain = roundMoney(mv - costBasis);
         } else {
             const openLots = lotsByInstrument.get(instrument.id) ?? [];
-            const { quantity, costBasis } = positionFromLots(instrument, openLots);
-            mv = holdingMarketValue(instrument, quantity, costBasis).marketValue;
+            const position = positionFromLots(instrument, openLots);
+            costBasis = position.costBasis;
+            mv = holdingMarketValue(instrument, position.quantity, costBasis).marketValue;
+            gain = roundMoney(mv - costBasis);
         }
-        result.set(
-            instrument.paymentAccountId,
-            roundMoney((result.get(instrument.paymentAccountId) ?? 0) + mv)
-        );
+        addMoney(marketValue, instrument.paymentAccountId, mv);
+        addMoney(costBasisByAccount, instrument.paymentAccountId, costBasis);
+        addMoney(unrealizedGain, instrument.paymentAccountId, gain);
+        const list = names.get(instrument.paymentAccountId) ?? [];
+        list.push(instrument.name);
+        names.set(instrument.paymentAccountId, list);
+        const holdingList = holdings.get(instrument.paymentAccountId) ?? [];
+        holdingList.push({ id: instrument.id, name: instrument.name, kind: instrument.kind });
+        holdings.set(instrument.paymentAccountId, holdingList);
     }
-    return result;
+    for (const list of names.values()) {
+        list.sort((a, b) => a.localeCompare(b, 'en-MY', { sensitivity: 'base' }));
+    }
+    for (const list of holdings.values()) {
+        list.sort((a, b) => a.name.localeCompare(b.name, 'en-MY', { sensitivity: 'base' }));
+    }
+    return { marketValue, costBasis: costBasisByAccount, unrealizedGain, names, holdings };
+}
+
+export async function sumHoldingsMarketValueByAccount(): Promise<Map<number, number>> {
+    const { marketValue } = await sumHoldingsByAccount();
+    return marketValue;
 }
 
 export async function getPortfolioSummary(paymentAccountId: number): Promise<PortfolioSummary> {
@@ -546,6 +617,23 @@ export async function getPortfolioSummary(paymentAccountId: number): Promise<Por
             });
             totalCostBasis += costBasis;
             totalMarketValue += marketValue;
+            continue;
+        }
+
+        if (isPrincipalFund(instrument)) {
+            const { costBasis, marketValue, lastPrice } = fundPosition(instrument);
+            const unrealizedGain = roundMoney(marketValue - costBasis);
+            holdings.push({
+                instrument,
+                quantity: 1,
+                costBasis,
+                marketValue,
+                unrealizedGain,
+                lastPrice,
+            });
+            totalCostBasis += costBasis;
+            totalMarketValue += marketValue;
+            totalUnrealizedGain += unrealizedGain;
             continue;
         }
 
@@ -618,6 +706,7 @@ export async function recordBuy(fields: {
 }): Promise<{ eventId: number; lotId: number }> {
     const instrument = await requireInstrument(fields.instrumentId);
     if (instrument.kind === 'fd') throw new Error('Use FD principal fields; buys are for share lots');
+    if (instrument.kind === 'fund') throw new Error('Use unit trust invest');
     if (!Number.isFinite(fields.quantity) || fields.quantity <= 0) {
         throw new Error('Buy quantity must be positive');
     }
@@ -695,6 +784,7 @@ export async function recordSell(fields: {
 }): Promise<{ eventId: number; realizedGain: number }> {
     const instrument = await requireInstrument(fields.instrumentId);
     if (instrument.kind === 'fd') throw new Error('FD instruments do not support share sells');
+    if (instrument.kind === 'fund') throw new Error('Use unit trust withdraw');
     if (!Number.isFinite(fields.quantity) || fields.quantity <= 0) {
         throw new Error('Sell quantity must be positive');
     }
@@ -772,6 +862,115 @@ export async function recordSell(fields: {
         .where(eq(investmentInstruments.id, instrument.id));
 
     return { eventId: eventRow.id, realizedGain };
+}
+
+export async function recordFundInvest(fields: {
+    instrumentId: number;
+    date: string;
+    amount: number;
+    notes?: string | null;
+    fromPaymentMethod?: string | null;
+}): Promise<{ eventId: number }> {
+    const instrument = await requireInstrument(fields.instrumentId);
+    if (instrument.kind !== 'fund') throw new Error('Invest is only for unit trusts');
+    if (!Number.isFinite(fields.amount) || fields.amount <= 0) {
+        throw new Error('Amount must be positive');
+    }
+    const amount = roundMoney(fields.amount);
+    const principal = roundMoney((instrument.principal ?? 0) + amount);
+    const lastPrice = roundMoney((instrument.lastPrice ?? instrument.principal ?? 0) + amount);
+    const account = await requireInvestmentAccount(instrument.paymentAccountId);
+    const debitFrom = fields.fromPaymentMethod?.trim() || account.name;
+
+    const linkedExpenseId = await appendExpense(
+        fields.date,
+        amount,
+        instrument.currency || 'MYR',
+        'Investment',
+        fields.notes?.trim() || `Invest ${instrument.name}`,
+        debitFrom
+    );
+
+    const db = requireDb();
+    await db
+        .update(investmentInstruments)
+        .set({
+            principal: String(principal),
+            lastPrice: String(lastPrice),
+            lastPriceAt: fields.date,
+        })
+        .where(eq(investmentInstruments.id, instrument.id));
+
+    const [eventRow] = await db
+        .insert(investmentEvents)
+        .values({
+            instrumentId: instrument.id,
+            eventType: 'buy',
+            date: fields.date,
+            amount: String(amount),
+            notes: fields.notes?.trim() || null,
+            linkedExpenseId,
+        })
+        .returning({ id: investmentEvents.id });
+    return { eventId: eventRow.id };
+}
+
+export async function recordFundWithdraw(fields: {
+    instrumentId: number;
+    date: string;
+    amount: number;
+    notes?: string | null;
+    toPaymentMethod?: string | null;
+}): Promise<{ eventId: number }> {
+    const instrument = await requireInstrument(fields.instrumentId);
+    if (instrument.kind !== 'fund') throw new Error('Withdraw is only for unit trusts');
+    if (!Number.isFinite(fields.amount) || fields.amount <= 0) {
+        throw new Error('Amount must be positive');
+    }
+    const amount = roundMoney(fields.amount);
+    const principal = roundMoney(instrument.principal ?? 0);
+    if (amount > principal + 0.005) {
+        throw new Error(`Amount cannot exceed invested (${principal.toFixed(2)})`);
+    }
+    const newPrincipal = roundMoney(principal - amount);
+    const currentValue = instrument.lastPrice ?? principal;
+    const newValue = roundMoney(Math.max(0, currentValue - amount));
+    const account = await requireInvestmentAccount(instrument.paymentAccountId);
+    const creditTo = fields.toPaymentMethod?.trim() || account.name;
+
+    const linkedIncomeId = await appendIncome(
+        fields.date,
+        amount,
+        instrument.currency || 'MYR',
+        'Other',
+        fields.notes?.trim() || `Withdraw ${instrument.name}`,
+        undefined,
+        undefined,
+        creditTo
+    );
+
+    const db = requireDb();
+    await db
+        .update(investmentInstruments)
+        .set({
+            principal: String(newPrincipal),
+            lastPrice: String(newValue),
+            lastPriceAt: fields.date,
+        })
+        .where(eq(investmentInstruments.id, instrument.id));
+
+    const [eventRow] = await db
+        .insert(investmentEvents)
+        .values({
+            instrumentId: instrument.id,
+            eventType: 'sell',
+            date: fields.date,
+            amount: String(amount),
+            notes: fields.notes?.trim() || null,
+            linkedIncomeId,
+        })
+        .returning({ id: investmentEvents.id });
+    return { eventId: eventRow.id };
 }
 
 export async function recordDividend(fields: {

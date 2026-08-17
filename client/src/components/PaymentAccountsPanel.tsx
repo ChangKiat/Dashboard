@@ -77,28 +77,27 @@ function AccountBalanceStats({
         );
     }
     if (account.accountType === 'investment') {
-        const cash = account.balance ?? 0;
-        const nav = account.nav ?? cash + (account.holdingsMarketValue ?? 0);
-        const hasHoldings = (account.holdingsMarketValue ?? 0) > 0;
+        const deposit = account.totalCostBasis ?? 0;
+        const pnl = account.unrealizedGain ?? 0;
+        const holdingNames = account.holdingNames ?? [];
         return (
-            <div className="payment-account-stats">
-                <span
-                    className={`payment-account-stat payment-account-balance ${
-                        cash < 0 ? 'negative' : 'positive'
-                    }`}
-                >
-                    Cash {formatAmount(cash)}
-                </span>
-                {hasHoldings && (
+            <>
+                <div className="payment-account-stats">
+                    <span className="payment-account-stat payment-account-balance positive">
+                        Deposit {formatAmount(deposit)}
+                    </span>
                     <span
                         className={`payment-account-stat payment-account-balance ${
-                            nav < 0 ? 'negative' : 'positive'
+                            pnl < 0 ? 'negative' : 'positive'
                         }`}
                     >
-                        NAV {formatAmount(nav)}
+                        P/L {formatAmount(pnl)}
                     </span>
+                </div>
+                {holdingNames.length > 0 && (
+                    <span className="payment-account-holdings">{holdingNames.join(' · ')}</span>
                 )}
-            </div>
+            </>
         );
     }
     return (
@@ -475,7 +474,7 @@ export default function PaymentAccountsPanel({
                                     type="text"
                                     placeholder={
                                         form.accountType === 'investment'
-                                            ? 'e.g. EPF, ASB, Brokerage'
+                                            ? 'e.g. Rakuten, EPF'
                                             : 'e.g. TnG, CIMB Visa'
                                     }
                                     value={form.name}

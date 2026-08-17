@@ -10,6 +10,7 @@ import {
     fetchExpenseOverview,
     fetchExpenseTransactions,
     fetchSyncStatus,
+    applyDueFixedContributions,
 } from '../api';
 import { useSmartRefresh } from '../hooks/useSmartRefresh';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
@@ -88,6 +89,16 @@ export default function ExpensesSection({ month }: Props) {
         });
         void refreshAccounts();
     }, [loadData, refreshAccounts]);
+
+    useEffect(() => {
+        applyDueFixedContributions()
+            .then((result) => {
+                if (result.applied > 0) handleChanged();
+            })
+            .catch(() => {
+                /* ignore auto-apply errors; Contribute remains available */
+            });
+    }, [handleChanged]);
 
     const handleStale = useCallback(async () => {
         try {

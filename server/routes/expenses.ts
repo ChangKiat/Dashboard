@@ -45,6 +45,12 @@ import {
     parseLoanMethod,
     type FixedExpenseLoanFields,
 } from '../../agent/services/loanService';
+import {
+    attachHoldingContributionStatus,
+    contributeDueFixedExpenses,
+    contributeFixedExpense,
+    resolveContributionHolding,
+} from '../../agent/services/fixedContributionService';
 
 const router = Router();
 
@@ -190,6 +196,26 @@ function fundingDestination(
         return toInvestmentAccount;
     }
     return null;
+}
+
+function parseOptionalInstrumentId(value: unknown): number | null | undefined | 'invalid' {
+    if (value === undefined) return undefined;
+    if (value === null || value === '') return null;
+    if (typeof value === 'number' && Number.isInteger(value) && value > 0) return value;
+    return 'invalid';
+}
+
+async function applyHoldingDestination(
+    category: string,
+    instrumentId: number | null | undefined,
+    toInvestmentAccount: string | null
+): Promise<{ instrumentId: number | null; toInvestmentAccount: string | null } | { error: string }> {
+    if (!isInvestmentCategory(category) || instrumentId == null) {
+        return { instrumentId: null, toInvestmentAccount };
+    }
+    const resolved = await resolveContributionHolding(instrumentId);
+    if ('error' in resolved) return { error: resolved.error };
+    return { instrumentId: resolved.instrumentId, toInvestmentAccount: resolved.parentName };
 }
 
 const TRIP_LEGS = new Set(['exchange', 'fund', 'card']);
@@ -476,7 +502,7 @@ router.get('/categories', async (req, res) => {
 
 router.get('/fixed', async (_req, res) => {
     try {
-        const entries = await getActiveFixedExpenses();
+        const entries = await attachHoldingContributionStatus(await getActiveFixedExpenses());
         res.json({ entries });
     } catch (err) {
         console.error('GET /api/expenses/fixed', err);
@@ -652,6 +678,20 @@ router.post('/fixed', async (req, res) => {
             ));
         }
 
+        const parsedInstrumentId = parseOptionalInstrumentId(body.instrumentId);
+        if (parsedInstrumentId === 'invalid') {
+            return res.status(400).json({ error: 'Invalid holding' });
+        }
+        const holding = await applyHoldingDestination(
+            category,
+            parsedInstrumentId ?? null,
+            fundingDestination(category, paymentMethod, toInvestmentAccount)
+        );
+        if ('error' in holding) {
+            return res.status(400).json({ error: holding.error });
+        }
+        toInvestmentAccount = holding.toInvestmentAccount;
+
         const fundingError = validateFundingAccounts(
             category,
             paymentMethod,
@@ -679,8 +719,9 @@ router.post('/fixed', async (req, res) => {
             body.frequencyMonths,
             startMonth,
             paymentMethod,
-            fundingDestination(category, paymentMethod, toInvestmentAccount),
-            isLoanCategory(category) ? loanParsed.loan ?? null : null
+            holding.toInvestmentAccount,
+            isLoanCategory(category) ? loanParsed.loan ?? null : null,
+            holding.instrumentId
         );
         res.json({ ok: true });
     } catch (err) {
@@ -860,6 +901,7 @@ router.patch('/fixed/:id', async (req, res) => {
             frequencyMonths?: number;
             paymentMethod?: string | null;
             toInvestmentAccount?: string | null;
+            instrumentId?: number | null;
             loan?: FixedExpenseLoanFields | null;
         } = {};
 
@@ -911,6 +953,13 @@ router.patch('/fixed/:id', async (req, res) => {
                 return res.status(400).json({ error: 'Invalid investment account' });
             }
         }
+        const parsedInstrumentId = parseOptionalInstrumentId(body.instrumentId);
+        if (parsedInstrumentId === 'invalid') {
+            return res.status(400).json({ error: 'Invalid holding' });
+        }
+        if (parsedInstrumentId !== undefined) {
+            fields.instrumentId = parsedInstrumentId;
+        }
 
         const existing = (await getActiveFixedExpenses()).find((row) => row.id === id);
         if (!existing && Object.keys(fields).length === 0) {
@@ -926,18 +975,31 @@ router.patch('/fixed/:id', async (req, res) => {
             fields.toInvestmentAccount !== undefined
                 ? fields.toInvestmentAccount
                 : (existing?.toInvestmentAccount ?? null);
+        const nextInstrumentId =
+            fields.instrumentId !== undefined
+                ? fields.instrumentId
+                : (existing?.instrumentId ?? null);
 
         if (isInvestmentCategory(nextCategory)) {
+            const holding = await applyHoldingDestination(
+                nextCategory,
+                nextInstrumentId,
+                toInvestmentAccount
+            );
+            if ('error' in holding) {
+                return res.status(400).json({ error: holding.error });
+            }
             const fundingError = validateFundingAccounts(
                 nextCategory,
                 paymentMethod,
-                toInvestmentAccount,
+                holding.toInvestmentAccount,
                 'fixed'
             );
             if (fundingError) {
                 return res.status(400).json({ error: fundingError });
             }
-            fields.toInvestmentAccount = toInvestmentAccount;
+            fields.toInvestmentAccount = holding.toInvestmentAccount;
+            fields.instrumentId = holding.instrumentId;
         } else if (isOtherCategory(nextCategory)) {
             const normalized = normalizeOtherAccounts(paymentMethod, toInvestmentAccount);
             const fundingError = validateFundingAccounts(
@@ -955,8 +1017,10 @@ router.patch('/fixed/:id', async (req, res) => {
                 normalized.paymentMethod,
                 normalized.toInvestmentAccount
             );
+            fields.instrumentId = null;
         } else if (fields.category != null) {
             fields.toInvestmentAccount = null;
+            fields.instrumentId = null;
         }
 
         const loanParsed = parseLoanFields(body);
@@ -980,6 +1044,51 @@ router.patch('/fixed/:id', async (req, res) => {
     } catch (err) {
         console.error('PATCH /api/expenses/fixed/:id', err);
         res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+    }
+});
+
+router.post('/fixed/contribute-due', async (_req, res) => {
+    try {
+        const result = await contributeDueFixedExpenses();
+        res.json({ ok: true, ...result });
+    } catch (err) {
+        console.error('POST /api/expenses/fixed/contribute-due', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+    }
+});
+
+router.post('/fixed/:id/contribute', async (req, res) => {
+    try {
+        const id = parseIdParam(req.params.id);
+        if (!id) return res.status(400).json({ error: 'Invalid id' });
+        const body = req.body ?? {};
+        if (body.date != null && !isValidDate(body.date)) {
+            return res.status(400).json({ error: 'Invalid date' });
+        }
+        const result = await contributeFixedExpense(
+            id,
+            typeof body.date === 'string' ? body.date : undefined
+        );
+        res.json(result);
+    } catch (err) {
+        const message = err instanceof Error ? err.message : 'Server error';
+        if (
+            message === 'Fixed expense not found' ||
+            message === 'Holding not found' ||
+            message === 'Investment account not found'
+        ) {
+            return res.status(404).json({ error: message });
+        }
+        if (
+            message.startsWith('Only Investment') ||
+            message.startsWith('Select a unit trust') ||
+            message.startsWith('Recurring contributions') ||
+            message.startsWith('Holding must belong')
+        ) {
+            return res.status(400).json({ error: message });
+        }
+        console.error('POST /api/expenses/fixed/:id/contribute', err);
+        res.status(500).json({ error: message });
     }
 });
 

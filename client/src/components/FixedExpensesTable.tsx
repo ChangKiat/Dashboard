@@ -18,6 +18,7 @@ const EMPTY_FORM = {
     category: '',
     paymentMethod: '',
     toInvestmentAccount: '',
+    instrumentId: '',
     amount: '',
     dayOfMonth: '1',
     frequencyMonths: '1',
@@ -29,6 +30,13 @@ function formatFrequencyMonths(months: number): string {
     if (months === 3) return 'Quarterly';
     if (months === 12) return 'Yearly';
     return `Every ${months} months`;
+}
+
+function destinationLabel(row: FixedExpenseConfig): string {
+    if (row.toInvestmentAccount && row.instrumentName) {
+        return `${row.toInvestmentAccount} · ${row.instrumentName}`;
+    }
+    return row.toInvestmentAccount ?? '';
 }
 
 interface Props {
@@ -118,6 +126,7 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
             category: row.category,
             paymentMethod: row.paymentMethod ?? '',
             toInvestmentAccount: row.toInvestmentAccount ?? '',
+            instrumentId: row.instrumentId != null ? String(row.instrumentId) : '',
             amount: String(row.amount),
             dayOfMonth: String(row.dayOfMonth),
             frequencyMonths: String(row.frequencyMonths),
@@ -152,6 +161,11 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
 
         const rawFrom = form.paymentMethod.trim() || null;
         const rawTo = form.toInvestmentAccount.trim() || null;
+        const parsedInstrumentId = parseInt(form.instrumentId, 10);
+        const instrumentId =
+            investment && Number.isInteger(parsedInstrumentId) && parsedInstrumentId > 0
+                ? parsedInstrumentId
+                : null;
 
         let paymentMethod = rawFrom;
         let toInvestmentAccount = rawTo;
@@ -192,6 +206,7 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
                 frequencyMonths,
                 paymentMethod,
                 toInvestmentAccount: hasFundingTransfer ? toInvestmentAccount : null,
+                instrumentId,
             };
             if (modalMode === 'create') {
                 await createFixedExpense({
@@ -219,6 +234,13 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
             setActionError(err instanceof Error ? err.message : 'Failed to delete');
         }
     };
+
+    const destinationValue = (() => {
+        if (form.instrumentId) return `i:${form.instrumentId}`;
+        if (!form.toInvestmentAccount) return '';
+        const account = investmentAccounts.find((a) => a.name === form.toInvestmentAccount);
+        return account ? `a:${account.id}` : '';
+    })();
 
     return (
         <div className="card expenses-fixed-expenses">
@@ -291,9 +313,7 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
                                     <td>{row.category}</td>
                                     <td>
                                         {row.paymentMethod ?? '—'}
-                                        {row.toInvestmentAccount
-                                            ? ` → ${row.toInvestmentAccount}`
-                                            : ''}
+                                        {destinationLabel(row) ? ` → ${destinationLabel(row)}` : ''}
                                     </td>
                                     <td>{formatAmount(row.amount)}</td>
                                     <td>{row.dayOfMonth}</td>
@@ -348,6 +368,7 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
                                 toInvestmentAccount: requiresAccountTransfer(category)
                                     ? f.toInvestmentAccount
                                     : '',
+                                instrumentId: isInvestmentCategory(category) ? f.instrumentId : '',
                             }))
                         }
                     />
@@ -372,17 +393,54 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
                         <label htmlFor="fx-to-investment">To investment account</label>
                         <select
                             id="fx-to-investment"
-                            value={form.toInvestmentAccount}
-                            onChange={(e) =>
-                                setForm((f) => ({ ...f, toInvestmentAccount: e.target.value }))
-                            }
+                            value={destinationValue}
+                            onChange={(e) => {
+                                const value = e.target.value;
+                                if (value.startsWith('i:')) {
+                                    const id = parseInt(value.slice(2), 10);
+                                    const parent = investmentAccounts.find((account) =>
+                                        (account.holdings ?? []).some((holding) => holding.id === id)
+                                    );
+                                    setForm((f) => ({
+                                        ...f,
+                                        instrumentId: String(id),
+                                        toInvestmentAccount: parent?.name ?? '',
+                                    }));
+                                    return;
+                                }
+                                if (value.startsWith('a:')) {
+                                    const id = parseInt(value.slice(2), 10);
+                                    const account = investmentAccounts.find((a) => a.id === id);
+                                    setForm((f) => ({
+                                        ...f,
+                                        instrumentId: '',
+                                        toInvestmentAccount: account?.name ?? '',
+                                    }));
+                                    return;
+                                }
+                                setForm((f) => ({
+                                    ...f,
+                                    instrumentId: '',
+                                    toInvestmentAccount: '',
+                                }));
+                            }}
                         >
                             <option value="">—</option>
-                            {investmentAccounts.map((account) => (
-                                <option key={account.id} value={account.name}>
-                                    {account.name}
-                                </option>
-                            ))}
+                            {investmentAccounts.map((account) => {
+                                const funds = (account.holdings ?? []).filter(
+                                    (holding) => holding.kind === 'fund'
+                                );
+                                return (
+                                    <optgroup key={account.id} label={account.name}>
+                                        <option value={`a:${account.id}`}>{account.name}</option>
+                                        {funds.map((holding) => (
+                                            <option key={holding.id} value={`i:${holding.id}`}>
+                                                {account.name} · {holding.name}
+                                            </option>
+                                        ))}
+                                    </optgroup>
+                                );
+                            })}
                         </select>
                         {investmentAccounts.length === 0 && (
                             <span className="muted form-hint">
