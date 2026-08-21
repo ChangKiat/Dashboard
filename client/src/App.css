@@ -2036,9 +2036,13 @@ div.payment-account-card-main:hover {
 .health-day-panel,
 .health-summary-row,
 .health-volume-chart,
+.health-top-exercises,
 .health-weight-trend,
 .health-pr-table,
-.health-macros-chart {
+.health-macros-chart,
+.health-macro-adherence,
+.health-body-weight-chart,
+.health-burn-chart {
   min-width: 0;
 }
 
@@ -2057,8 +2061,77 @@ div.payment-account-card-main:hover {
 }
 
 .health-workout-parts,
-.health-nutrition-parts {
+.health-nutrition-parts,
+.health-body-parts {
   display: contents;
+}
+
+.day-body-weight-log {
+  margin: 0 0 16px;
+}
+
+.day-body-weight-log > .section-header-row {
+  margin-bottom: 12px;
+}
+
+.day-body-weight-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.day-body-weight-log .form-field input {
+  max-width: 160px;
+}
+
+.macro-adherence-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 4px;
+}
+
+.macro-adherence-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.macro-adherence-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.9rem;
+}
+
+.macro-adherence-header strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.macro-adherence-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.macro-adherence-fill {
+  height: 100%;
+  border-radius: 999px;
+}
+
+.macro-adherence-fill--protein {
+  background: #60a5fa;
+}
+
+.macro-adherence-fill--calories {
+  background: #34d399;
+}
+
+.macro-adherence-note {
+  margin: 0;
+  font-size: 0.8rem;
 }
 
 @media (min-width: 768px) {
@@ -2082,9 +2155,13 @@ div.payment-account-card-main:hover {
   }
 
   .health-volume-chart { grid-column: 1; grid-row: 3; }
-  .health-weight-trend { grid-column: 1 / -1; grid-row: 4; }
-  .health-pr-table { grid-column: 1 / -1; grid-row: 5; }
-  .health-macros-chart { grid-column: 1 / -1; grid-row: 6; }
+  .health-top-exercises { grid-column: 2; grid-row: 3; }
+  .health-weight-trend { grid-column: 1; grid-row: 4; }
+  .health-pr-table { grid-column: 2; grid-row: 4; }
+  .health-macros-chart { grid-column: 1 / -1; grid-row: 5; }
+  .health-macro-adherence { grid-column: 1 / -1; grid-row: 6; }
+  .health-body-weight-chart { grid-column: 1; grid-row: 7; }
+  .health-burn-chart { grid-column: 2; grid-row: 7; }
 }
 
 @media (min-width: 1024px) {
@@ -2112,8 +2189,13 @@ div.payment-account-card-main:hover {
     grid-row: 3;
   }
 
+  .health-top-exercises {
+    grid-column: 2;
+    grid-row: 3;
+  }
+
   .health-weight-trend {
-    grid-column: 2 / -1;
+    grid-column: 3;
     grid-row: 3;
   }
 
@@ -2123,8 +2205,23 @@ div.payment-account-card-main:hover {
   }
 
   .health-macros-chart {
-    grid-column: 1 / -1;
+    grid-column: 1 / 3;
     grid-row: 5;
+  }
+
+  .health-macro-adherence {
+    grid-column: 3;
+    grid-row: 5;
+  }
+
+  .health-body-weight-chart {
+    grid-column: 1 / 3;
+    grid-row: 6;
+  }
+
+  .health-burn-chart {
+    grid-column: 3;
+    grid-row: 6;
   }
 }
 
@@ -2327,7 +2424,11 @@ div.payment-account-card-main:hover {
   margin: 0;
 }
 
-.day-detail-panel > :not(h3):not(.day-detail-stat):not(.section-header-row) {
+.day-detail-panel > :not(h3):not(.day-detail-stat):not(.section-header-row):not(.day-body-weight-log) {
+  grid-column: 1 / -1;
+}
+
+.day-detail-panel > .day-body-weight-log {
   grid-column: 1 / -1;
 }
 
@@ -2506,6 +2607,97 @@ div.payment-account-card-main:hover {
 
 .category-detail-search input::placeholder {
   color: var(--text-dim);
+}
+
+.expense-link-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.expense-link-picker .category-detail-search {
+  margin-bottom: 0;
+}
+
+.expense-link-selected {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.expense-link-empty {
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+.expense-link-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+
+.expense-link-option {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8125rem;
+}
+
+.expense-link-list li:last-child .expense-link-option {
+  border-bottom: none;
+}
+
+.expense-link-option:hover {
+  background: var(--surface);
+}
+
+.expense-link-option--selected {
+  background: var(--surface);
+  outline: 1px solid var(--border);
+  outline-offset: -1px;
+}
+
+.expense-link-option-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.expense-link-option-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.expense-link-option-meta {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.expense-link-option-amount {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
 }
 
 .category-detail-transactions {

@@ -1,5 +1,11 @@
 import { Router } from 'express';
 import {
+    deleteBodyWeightLog,
+    getRecentBodyWeightLogs,
+    listBodyWeightLogs,
+    upsertBodyWeightLog,
+} from '../../agent/services/bodyWeightService';
+import {
     deleteMeal,
     getMealHistory,
     getNutritionSummary,
@@ -8,7 +14,7 @@ import {
     updateMeal,
     updateNutritionTargets,
 } from '../../agent/services/nutritionService';
-import { enumerateDates, parseDateRange } from '../dateUtils';
+import { enumerateDates, parseDateRange, todayInKL } from '../dateUtils';
 import {
     isNonEmptyString,
     isPositiveNumber,
@@ -91,6 +97,9 @@ router.patch('/settings', async (req, res) => {
         }
 
         await updateNutritionTargets(userId, targets);
+        if (body.bodyWeightKg != null && isPositiveNumber(body.bodyWeightKg)) {
+            await upsertBodyWeightLog(userId, todayInKL(), body.bodyWeightKg);
+        }
         const settings = await getOrCreateUserSettings(userId);
         res.json({
             ok: true,
@@ -306,6 +315,63 @@ router.delete('/meals/:id', async (req, res) => {
         res.json({ ok: true });
     } catch (err) {
         console.error('DELETE /api/nutrition/meals/:id', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+    }
+});
+
+router.get('/body-weight', async (req, res) => {
+    try {
+        const { start, end } = parseDateRange(
+            (req.query.start as string | undefined) ?? (req.query.from as string | undefined),
+            (req.query.end as string | undefined) ?? (req.query.to as string | undefined)
+        );
+        const userId = getTelegramUserId();
+        const [entries, recent] = await Promise.all([
+            listBodyWeightLogs(userId, start, end),
+            getRecentBodyWeightLogs(userId, 2),
+        ]);
+        res.json({
+            start,
+            end,
+            entries,
+            latest: recent[0] ?? null,
+            previous: recent[1] ?? null,
+        });
+    } catch (err) {
+        console.error('GET /api/nutrition/body-weight', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+    }
+});
+
+router.put('/body-weight', async (req, res) => {
+    try {
+        const body = req.body ?? {};
+        if (!isValidDate(body.date)) {
+            return res.status(400).json({ error: 'Invalid date' });
+        }
+        if (!isPositiveNumber(body.weightKg)) {
+            return res.status(400).json({ error: 'weightKg must be a positive number' });
+        }
+        const userId = getTelegramUserId();
+        const entry = await upsertBodyWeightLog(userId, body.date, body.weightKg);
+        res.json({ ok: true, entry });
+    } catch (err) {
+        console.error('PUT /api/nutrition/body-weight', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+    }
+});
+
+router.delete('/body-weight/:id', async (req, res) => {
+    try {
+        const id = parseIdParam(req.params.id);
+        if (!id) return res.status(400).json({ error: 'Invalid id' });
+
+        const userId = getTelegramUserId();
+        const ok = await deleteBodyWeightLog(id, userId);
+        if (!ok) return res.status(404).json({ error: 'Body weight log not found' });
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('DELETE /api/nutrition/body-weight/:id', err);
         res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
     }
 });

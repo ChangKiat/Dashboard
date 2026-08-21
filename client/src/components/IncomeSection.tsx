@@ -14,6 +14,7 @@ import {
     fetchIncomeDaily,
     fetchIncomeTransactions,
 } from '../api';
+import { shiftMonth } from '../hooks/useMonth';
 import { monthToDateRange, pickDefaultIncomeDate } from '../utils/dateRange';
 import { isLoanFixedExpense } from '../utils/expenseCategories';
 import { sumIncomeDailyTotals } from '../utils/incomeAggregates';
@@ -47,16 +48,27 @@ export default function IncomeSection({ month }: Props) {
 
     const loadData = useCallback(async (options?: { silent?: boolean }) => {
         const range = monthToDateRange(month);
-        const [overviewRes, incomesRes, expensesRes, dailyRes, fixedRes] = await Promise.all([
-            fetchExpenseOverview(month),
-            fetchIncomeTransactions(month),
-            fetchExpenseTransactions(month),
-            fetchIncomeDaily(range),
-            fetchFixedExpenses(),
-        ]);
+        const prevMonth = shiftMonth(month, -1);
+        const [overviewRes, incomesRes, expensesRes, prevExpensesRes, dailyRes, fixedRes] =
+            await Promise.all([
+                fetchExpenseOverview(month),
+                fetchIncomeTransactions(month),
+                fetchExpenseTransactions(month),
+                fetchExpenseTransactions(prevMonth),
+                fetchIncomeDaily(range),
+                fetchFixedExpenses(),
+            ]);
         setOverview(overviewRes);
         setIncomes(incomesRes.entries);
-        setRecentExpenses(expensesRes.entries);
+        const byId = new Map<number, ExpenseTransaction>();
+        for (const entry of [...prevExpensesRes.entries, ...expensesRes.entries]) {
+            byId.set(entry.id, entry);
+        }
+        setRecentExpenses(
+            [...byId.values()].sort((a, b) =>
+                b.date !== a.date ? (b.date < a.date ? -1 : 1) : b.id - a.id
+            )
+        );
         setDailySeries(dailyRes.series);
         setLoanRows(fixedRes.entries.filter(isLoanFixedExpense));
 

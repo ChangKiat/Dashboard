@@ -1,6 +1,7 @@
 import { and, count, eq, gte, lte, max } from 'drizzle-orm';
 import { requireDb } from '../agent/db/client';
 import {
+    bodyWeightLogs,
     expenses,
     fixedExpenses,
     incomes,
@@ -72,10 +73,15 @@ export async function getHealthSyncFingerprint(month: string): Promise<string> {
         gte(meals.date, start),
         lte(meals.date, end)
     );
+    const weightRange = and(
+        eq(bodyWeightLogs.telegramUserId, userId),
+        gte(bodyWeightLogs.date, start),
+        lte(bodyWeightLogs.date, end)
+    );
 
     const db = requireDb();
 
-    const [workoutRow, mealRow, settings] = await Promise.all([
+    const [workoutRow, mealRow, weightRow, settings] = await Promise.all([
         db
             .select({ count: count(), maxId: max(workouts.id) })
             .from(workouts)
@@ -84,6 +90,10 @@ export async function getHealthSyncFingerprint(month: string): Promise<string> {
             .select({ count: count(), maxId: max(meals.id) })
             .from(meals)
             .where(mealRange),
+        db
+            .select({ count: count(), maxId: max(bodyWeightLogs.id) })
+            .from(bodyWeightLogs)
+            .where(weightRange),
         db
             .select({
                 dailyCalorieTarget: userSettings.dailyCalorieTarget,
@@ -99,12 +109,13 @@ export async function getHealthSyncFingerprint(month: string): Promise<string> {
 
     const workoutStats = stat(workoutRow[0]?.count ?? 0, workoutRow[0]?.maxId ?? 0);
     const mealStats = stat(mealRow[0]?.count ?? 0, mealRow[0]?.maxId ?? 0);
+    const weightStats = stat(weightRow[0]?.count ?? 0, weightRow[0]?.maxId ?? 0);
     const s = settings[0];
     const targets = s
         ? `${s.dailyCalorieTarget}:${s.dailyProteinTargetG}:${s.dailyCarbsTargetG}:${s.dailyFatTargetG}:${s.bodyWeightKg ?? ''}`
         : '0:0:0:0:';
 
-    return `wkt:${workoutStats}|meal:${mealStats}|tgt:${targets}`;
+    return `wkt:${workoutStats}|meal:${mealStats}|bw:${weightStats}|tgt:${targets}`;
 }
 
 export async function getSyncFingerprint(month: string, scope: SyncScope): Promise<string> {

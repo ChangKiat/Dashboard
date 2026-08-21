@@ -28,7 +28,7 @@ export default function WeightTrendChart({ weightTrend }: Props) {
     }));
 
     if (exercises.length === 0) {
-        return <p className="empty-chart">No weight data in this range.</p>;
+        return <p className="empty-chart">No lift weight data in this range.</p>;
     }
 
     return (

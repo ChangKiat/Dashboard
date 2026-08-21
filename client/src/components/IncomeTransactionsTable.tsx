@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import type { ExpenseTransaction, IncomeTransaction } from '../api';
 import {
@@ -16,6 +16,15 @@ import TablePagination from './TablePagination';
 
 const DAY_PAGE_SIZE = 5;
 const MONTH_PAGE_SIZE = 10;
+
+function expenseMatchesQuery(exp: ExpenseTransaction, query: string): boolean {
+    if (String(exp.id).includes(query)) return true;
+    if (exp.description.toLowerCase().includes(query)) return true;
+    if (exp.date.includes(query)) return true;
+    if (String(exp.amount).includes(query)) return true;
+    if (exp.amount.toFixed(2).includes(query)) return true;
+    return false;
+}
 
 type ModalMode = 'closed' | 'create' | 'edit';
 type TableVariant = 'day' | 'month';
@@ -54,10 +63,17 @@ export default function IncomeTransactionsTable({
     const [saving, setSaving] = useState(false);
     const [modalError, setModalError] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
+    const [expenseSearchQuery, setExpenseSearchQuery] = useState('');
 
     const { page, setPage, pageItems, totalPages, totalItems } = usePagination(entries, {
         pageSize: variant === 'month' ? MONTH_PAGE_SIZE : DAY_PAGE_SIZE,
     });
+
+    const filteredExpenses = useMemo(() => {
+        const q = expenseSearchQuery.trim().toLowerCase();
+        if (!q) return recentExpenses;
+        return recentExpenses.filter((exp) => expenseMatchesQuery(exp, q));
+    }, [recentExpenses, expenseSearchQuery]);
 
     const openCreate = useCallback(() => {
         setModalMode('create');
@@ -73,6 +89,7 @@ export default function IncomeTransactionsTable({
             paymentMethod: '',
             fromPaymentMethod: '',
         });
+        setExpenseSearchQuery('');
         setModalError(null);
     }, [defaultDate, month]);
 
@@ -89,12 +106,14 @@ export default function IncomeTransactionsTable({
             paymentMethod: entry.paymentMethod ?? '',
             fromPaymentMethod: entry.fromPaymentMethod ?? '',
         });
+        setExpenseSearchQuery('');
         setModalError(null);
     };
 
     const closeModal = () => {
         setModalMode('closed');
         setEditingEntry(null);
+        setExpenseSearchQuery('');
         setModalError(null);
     };
 
@@ -105,6 +124,7 @@ export default function IncomeTransactionsTable({
             expenseId: category === 'Account transfer' ? '' : f.expenseId,
             fromPaymentMethod: category === 'Account transfer' ? f.fromPaymentMethod : '',
         }));
+        if (category !== 'Transfer') setExpenseSearchQuery('');
     };
 
     const handleSave = async () => {
@@ -268,20 +288,85 @@ export default function IncomeTransactionsTable({
             </div>
             {showExpenseLink && (
                 <div className="form-field">
-                    <label htmlFor="income-expense">Link to expense (optional)</label>
+                    <label htmlFor="income-expense-search">Link to expense (optional)</label>
                     {recentExpenses.length > 0 ? (
-                        <select
-                            id="income-expense"
-                            value={form.expenseId}
-                            onChange={(e) => setForm((f) => ({ ...f, expenseId: e.target.value }))}
-                        >
-                            <option value="">None</option>
-                            {recentExpenses.map((exp) => (
-                                <option key={exp.id} value={String(exp.id)}>
-                                    #{exp.id} — {exp.description} ({formatAmount(exp.amount)})
-                                </option>
-                            ))}
-                        </select>
+                        <div className="expense-link-picker">
+                            {form.expenseId ? (
+                                <div className="expense-link-selected">
+                                    <span>
+                                        Linked to expense #{form.expenseId}
+                                        {(() => {
+                                            const selected = recentExpenses.find(
+                                                (exp) => String(exp.id) === form.expenseId
+                                            );
+                                            return selected
+                                                ? ` — ${selected.description} (${selected.date}, ${formatAmount(selected.amount)})`
+                                                : '';
+                                        })()}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        className="btn-link"
+                                        onClick={() =>
+                                            setForm((f) => ({ ...f, expenseId: '' }))
+                                        }
+                                    >
+                                        Change
+                                    </button>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="category-detail-search">
+                                        <input
+                                            id="income-expense-search"
+                                            type="search"
+                                            placeholder="Search this or last month by name, amount, date, or id…"
+                                            aria-label="Search expenses to link"
+                                            value={expenseSearchQuery}
+                                            onChange={(e) =>
+                                                setExpenseSearchQuery(e.target.value)
+                                            }
+                                        />
+                                    </div>
+                                    {filteredExpenses.length === 0 ? (
+                                        <p className="muted expense-link-empty">
+                                            No expenses match your search.
+                                        </p>
+                                    ) : (
+                                        <ul className="expense-link-list" role="listbox">
+                                            {filteredExpenses.map((exp) => (
+                                                <li key={exp.id}>
+                                                    <button
+                                                        type="button"
+                                                        role="option"
+                                                        aria-selected={false}
+                                                        className="expense-link-option"
+                                                        onClick={() =>
+                                                            setForm((f) => ({
+                                                                ...f,
+                                                                expenseId: String(exp.id),
+                                                            }))
+                                                        }
+                                                    >
+                                                        <span className="expense-link-option-main">
+                                                            <span className="expense-link-option-title">
+                                                                #{exp.id} — {exp.description}
+                                                            </span>
+                                                            <span className="expense-link-option-meta">
+                                                                {exp.date}
+                                                            </span>
+                                                        </span>
+                                                        <span className="expense-link-option-amount">
+                                                            {formatAmount(exp.amount)}
+                                                        </span>
+                                                    </button>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </>
+                            )}
+                        </div>
                     ) : (
                         <input
                             id="income-expense"
@@ -290,7 +375,9 @@ export default function IncomeTransactionsTable({
                             step="1"
                             placeholder="Expense id"
                             value={form.expenseId}
-                            onChange={(e) => setForm((f) => ({ ...f, expenseId: e.target.value }))}
+                            onChange={(e) =>
+                                setForm((f) => ({ ...f, expenseId: e.target.value }))
+                            }
                         />
                     )}
                 </div>

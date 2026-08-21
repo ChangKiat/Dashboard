@@ -918,6 +918,36 @@ export function deleteMeal(id: number) {
     return fetchJson<{ ok: true }>(`/api/nutrition/meals/${id}`, { method: 'DELETE' });
 }
 
+export interface BodyWeightLogEntry {
+    id: number;
+    date: string;
+    weightKg: number;
+}
+
+export interface BodyWeightLogsResponse {
+    start: string;
+    end: string;
+    entries: BodyWeightLogEntry[];
+    latest: BodyWeightLogEntry | null;
+    previous: BodyWeightLogEntry | null;
+}
+
+export function fetchBodyWeightLogs(range: DateRange) {
+    return fetchJson<BodyWeightLogsResponse>(`/api/nutrition/body-weight?${qs(range)}`);
+}
+
+export function upsertBodyWeightLog(fields: { date: string; weightKg: number }) {
+    return fetchJson<{ ok: true; entry: BodyWeightLogEntry }>('/api/nutrition/body-weight', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+    });
+}
+
+export function deleteBodyWeightLog(id: number) {
+    return fetchJson<{ ok: true }>(`/api/nutrition/body-weight/${id}`, { method: 'DELETE' });
+}
+
 export function fetchHealth() {
     return fetchJson<{ ok: boolean; database: string; telegramUser: string }>('/api/health');
 }
