@@ -222,3 +222,23 @@ export const investmentLots = pgTable('investment_lots', {
     buyEventId: integer('buy_event_id').references(() => investmentEvents.id),
     createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+/** Material | Lubricants | Labour | Other */
+export const carServiceVisits = pgTable('car_service_visits', {
+    id: serial('id').primaryKey(),
+    date: text('date').notNull(),
+    odometerKm: integer('odometer_km').notNull(),
+    notes: text('notes'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const carServiceItems = pgTable('car_service_items', {
+    id: serial('id').primaryKey(),
+    visitId: integer('visit_id')
+        .notNull()
+        .references(() => carServiceVisits.id, { onDelete: 'cascade' }),
+    category: text('category').default('Material').notNull(),
+    description: text('description').notNull(),
+    amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+});

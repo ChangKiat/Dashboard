@@ -1234,3 +1234,94 @@ export function accrueFdInterest(
         }
     );
 }
+
+export type CarServiceCategory = 'Material' | 'Lubricants' | 'Labour' | 'Other';
+
+export interface CarServiceItem {
+    id: number;
+    visitId: number;
+    category: CarServiceCategory;
+    description: string;
+    amount: number;
+}
+
+export interface CarServiceVisit {
+    id: number;
+    date: string;
+    odometerKm: number;
+    notes: string | null;
+    total: number;
+    items: CarServiceItem[];
+    kmSincePrev: number | null;
+}
+
+export interface CarServiceItemTotal {
+    category: CarServiceCategory;
+    description: string;
+    total: number;
+    count: number;
+}
+
+export interface CarServiceOverview {
+    visits: CarServiceVisit[];
+    itemTotals: CarServiceItemTotal[];
+    catalog: { category: CarServiceCategory; description: string }[];
+    summary: {
+        visitCount: number;
+        lifetimeTotal: number;
+        latestOdometerKm: number | null;
+        latestDate: string | null;
+        avgCostPerVisit: number;
+        avgKmBetweenVisits: number | null;
+    };
+}
+
+export function fetchCarServiceOverview() {
+    return fetchJson<CarServiceOverview>('/api/car-service');
+}
+
+export function createCarServiceVisit(fields: {
+    date: string;
+    odometerKm: number;
+    notes?: string | null;
+    items?: { category: string; description: string; amount: number }[];
+}) {
+    return fetchJson<{ ok: true; visit: CarServiceVisit }>('/api/car-service/visits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+    });
+}
+
+export function updateCarServiceVisit(
+    id: number,
+    fields: Partial<{ date: string; odometerKm: number; notes: string | null }>
+) {
+    return fetchJson<{ ok: true; visit: CarServiceVisit }>(`/api/car-service/visits/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+    });
+}
+
+export function deleteCarServiceVisit(id: number) {
+    return fetchJson<{ ok: true }>(`/api/car-service/visits/${id}`, { method: 'DELETE' });
+}
+
+export function upsertCarServiceItem(
+    visitId: number,
+    fields: { category: string; description: string; amount: number }
+) {
+    return fetchJson<{ ok: true; item: CarServiceItem | null }>(
+        `/api/car-service/visits/${visitId}/items`,
+        {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(fields),
+        }
+    );
+}
+
+export function deleteCarServiceItem(id: number) {
+    return fetchJson<{ ok: true }>(`/api/car-service/items/${id}`, { method: 'DELETE' });
+}

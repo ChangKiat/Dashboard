@@ -3,6 +3,7 @@ import { fetchHealth, getAuthMe, logoutAuth } from './api';
 import ExpensesSection from './components/ExpensesSection';
 import HealthSection from './components/HealthSection';
 import IncomeSection from './components/IncomeSection';
+import CarServiceSection from './components/CarServiceSection';
 import LoginGate from './components/LoginGate';
 import MonthPicker from './components/MonthPicker';
 import SectionTabs from './components/SectionTabs';
@@ -85,6 +86,7 @@ export default function App() {
                     {activeTab === 'expenses' && <ExpensesSection month={month} />}
                     {activeTab === 'income' && <IncomeSection month={month} />}
                     {activeTab === 'health' && <HealthSection month={month} />}
+                    {activeTab === 'car' && <CarServiceSection />}
                     {activeTab === 'setup' && <SetupSection month={month} />}
                 </main>
             </div>
