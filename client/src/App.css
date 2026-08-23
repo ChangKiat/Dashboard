@@ -856,7 +856,11 @@ div.payment-account-card-main:hover {
 }
 
 .account-activity-table th:nth-child(4),
-.account-activity-table td:nth-child(4),
+.account-activity-table td:nth-child(4) {
+  width: 120px;
+  overflow: hidden;
+}
+
 .account-activity-table th:nth-child(5),
 .account-activity-table td:nth-child(5) {
   width: 130px;
@@ -874,11 +878,27 @@ div.payment-account-card-main:hover {
 
 .account-activity-table .account-activity-category {
   display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-activity-table .account-activity-category-note {
+  display: block;
   font-size: 0.75rem;
   margin-top: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.account-activity-table tr.account-activity-income-row td {
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+}
+
+.account-activity-table tr.account-activity-income-row td:nth-child(2) {
+  color: var(--ok);
+  font-weight: 500;
 }
 
 .account-activity-table tr.account-activity-before-baseline td {
@@ -3209,105 +3229,358 @@ div.payment-account-card-main:hover {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
-.car-service-heading {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 600;
+.car-service-toolbar-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .car-service-hint {
-  margin: 4px 0 12px;
+  margin: 0;
   font-size: 0.85rem;
+}
+
+.car-service-matrix-wrap--edit {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.car-service-header-input {
+  display: block;
+  width: 100%;
+  margin-bottom: 4px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.8rem;
+}
+
+.car-service-header-input--odo {
+  font-variant-numeric: tabular-nums;
+}
+
+.car-service-visit-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+.car-service-visit-btn {
+  padding: 4px 8px;
+  font-size: 0.75rem;
+}
+
+.car-service-items-heading {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding-top: 4px;
+}
+
+.car-service-pending-wrap {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.car-service-pending-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.car-service-pending-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.car-service-pending-total {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.car-service-pending-table {
+  table-layout: auto;
+}
+
+.car-service-pending-table th {
+  font-size: 0.8rem;
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.car-service-pending-table td {
+  font-size: 0.9rem;
+}
+
+.car-service-pending-cat {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+/* Slim horizontal scroll — hides chunky OS scrollbar */
+.scroll-strip {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-muted) 40%, transparent) transparent;
+}
+
+.scroll-strip::-webkit-scrollbar {
+  height: 5px;
+}
+
+.scroll-strip::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scroll-strip::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-muted) 30%, var(--border));
+  border-radius: 999px;
+}
+
+.scroll-strip::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--accent) 55%, var(--text-muted) 45%);
+}
+
+.car-service-next-summary {
+  min-width: 160px;
+}
+
+.car-service-next-detail {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.car-service-scroll-shell {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+
+.car-service-scroll-btn {
+  flex: 0 0 28px;
+  align-self: center;
+  width: 28px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+}
+
+.car-service-scroll-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--border-hover);
+}
+
+.car-service-scroll-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.car-service-scroll-shell .car-service-matrix-wrap {
+  flex: 1;
+  min-width: 0;
 }
 
 .car-service-matrix-wrap {
   overflow-x: auto;
   max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
 }
 
 .car-service-matrix {
   min-width: max-content;
+  table-layout: auto;
+  font-size: 0.9rem;
+}
+
+.car-service-matrix thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-bottom: 2px solid var(--border);
+  vertical-align: bottom;
 }
 
 .car-service-matrix th.car-service-visit-col {
   text-align: right;
-  vertical-align: bottom;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+  min-width: 108px;
+  padding: 12px 10px;
+  border-left: 1px solid var(--border);
+}
+
+.car-service-matrix th.car-service-visit-col:nth-child(even) {
+  background: color-mix(in srgb, var(--surface-2) 88%, var(--accent) 12%);
+}
+
+.car-service-matrix th.car-service-visit-col:nth-child(odd) {
+  background: var(--surface-2);
+}
+
+.car-service-visit-date {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
 }
 
 .car-service-odo {
-  font-weight: 500;
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
   font-size: 0.75rem;
-  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  background: color-mix(in srgb, #f5d547 35%, var(--surface) 65%);
+  border: 1px solid color-mix(in srgb, #f5d547 50%, var(--border) 50%);
 }
 
 .car-service-sticky {
   position: sticky;
   left: 0;
-  z-index: 1;
+  z-index: 3;
   background: var(--surface);
-  min-width: 180px;
+  min-width: 200px;
+  max-width: 260px;
   text-align: left !important;
+  font-weight: 500;
+  box-shadow: 4px 0 8px -4px rgba(0, 0, 0, 0.15);
+  border-right: 1px solid var(--border);
 }
 
-.car-service-category-row td {
-  font-weight: 600;
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  background: var(--surface-2);
-  padding-top: 10px;
-  padding-bottom: 6px;
+.car-service-matrix thead .car-service-sticky {
+  z-index: 4;
 }
 
-.car-service-category-row .car-service-sticky {
+.car-service-category-row .car-service-category-label {
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text);
   background: var(--surface-2);
+  padding: 12px 12px 8px;
+  border-top: 2px solid var(--border);
+  z-index: 3;
+  box-shadow: 4px 0 8px -4px rgba(0, 0, 0, 0.12);
+}
+
+.car-service-category-row .car-service-category-fill {
+  background: var(--surface-2);
+  padding: 12px 12px 8px;
+  border-top: 2px solid var(--border);
+}
+
+.car-service-matrix tbody tr:not(.car-service-category-row):not(.car-service-total-row):hover td {
+  background: var(--surface-hover);
+}
+
+.car-service-matrix tbody tr:not(.car-service-category-row):not(.car-service-total-row):hover .car-service-sticky {
+  background: var(--surface-hover);
+}
+
+.car-service-matrix td.car-service-visit-data {
+  border-left: 1px solid var(--border);
+}
+
+.car-service-matrix td.car-service-visit-data--alt {
+  background: color-mix(in srgb, var(--surface) 92%, var(--accent) 8%);
+}
+
+.car-service-matrix tbody tr:not(.car-service-category-row):not(.car-service-total-row):hover .car-service-visit-data--alt {
+  background: var(--surface-hover);
 }
 
 .car-service-cell {
-  padding: 2px !important;
-  min-width: 72px;
+  padding: 4px 6px !important;
+  min-width: 88px;
+  border-left: 1px solid var(--border);
 }
 
-.car-service-cell-btn {
-  width: 100%;
-  min-height: 32px;
-  padding: 4px 6px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text);
-  font: inherit;
+.car-service-matrix-wrap:not(.car-service-matrix-wrap--edit) .car-service-cell {
+  padding: 10px 12px !important;
+}
+
+.car-service-cell-value {
   font-variant-numeric: tabular-nums;
-  text-align: right;
-  cursor: pointer;
 }
 
-.car-service-cell-btn:hover {
-  background: var(--surface-2);
+.car-service-cell-value--empty {
+  color: var(--text-dim);
 }
 
 .car-service-cell-input {
   width: 100%;
-  padding: 6px;
-  border: 1px solid var(--accent);
-  border-radius: 4px;
+  min-height: 36px;
+  padding: 6px 8px;
+  border: 2px solid var(--accent);
+  border-radius: 6px;
   background: var(--bg);
   color: var(--text);
   font: inherit;
+  font-size: 0.875rem;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
 .car-service-total-row td {
-  border-top: 1px solid var(--border);
+  border-top: 2px solid var(--border);
+  background: var(--surface-2);
+  font-size: 0.9rem;
+  padding-top: 12px;
+  padding-bottom: 12px;
 }
 
-.car-service-item-totals {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.car-service-total-row .car-service-sticky {
+  background: var(--surface-2);
+}
+
+.car-service-matrix .car-service-total-col {
+  border-left: 2px solid var(--border);
+  background: var(--surface-2);
+  min-width: 100px;
+  white-space: nowrap;
+}
+
+.car-service-matrix thead .car-service-total-col {
+  z-index: 2;
+}
+
+.car-service-category-row .car-service-total-col {
+  border-top: 2px solid var(--border);
 }
 

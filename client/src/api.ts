@@ -1262,6 +1262,14 @@ export interface CarServiceItemTotal {
     count: number;
 }
 
+export interface NextServiceSummary {
+    byDate: string;
+    byOdometerKm: number;
+    predictedDate: string;
+    limitingFactor: 'date' | 'km';
+    avgKmPerDay: number | null;
+}
+
 export interface CarServiceOverview {
     visits: CarServiceVisit[];
     itemTotals: CarServiceItemTotal[];
@@ -1273,6 +1281,7 @@ export interface CarServiceOverview {
         latestDate: string | null;
         avgCostPerVisit: number;
         avgKmBetweenVisits: number | null;
+        nextService: NextServiceSummary | null;
     };
 }
 

@@ -80,7 +80,11 @@ export function suggestedInstallmentAmount(input: {
 }): number | null {
     const principal = input.originalPrincipal;
     const n = input.tenureMonths;
-    if (input.method === 'included' || !(principal > 0) || n < 1) return null;
+    if (!(principal > 0) || n < 1) return null;
+
+    if (input.method === 'included') {
+        return roundMoney(principal / n);
+    }
 
     const rate = Math.max(0, input.annualRatePct);
     if (input.method === 'flat') {

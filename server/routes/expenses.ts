@@ -100,13 +100,20 @@ function parseLoanFields(
         const original = isPositiveNumber(body.originalPrincipal)
             ? body.originalPrincipal
             : remaining;
+        let tenureMonths: number | null = null;
+        if (body.tenureMonths != null && body.tenureMonths !== '') {
+            if (!isPositiveNumber(body.tenureMonths) || !Number.isInteger(body.tenureMonths)) {
+                return { error: 'Tenure must be a positive integer' };
+            }
+            tenureMonths = body.tenureMonths;
+        }
         return {
             loan: {
                 loanMethod: method,
                 originalPrincipal: original,
                 remainingPrincipal: remaining,
                 annualRatePct: null,
-                tenureMonths: null,
+                tenureMonths,
                 loanStartDate: null,
             },
         };

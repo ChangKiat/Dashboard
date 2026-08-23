@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { CarServiceCategory, CarServiceOverview, CarServiceVisit } from '../api';
 import {
@@ -10,6 +10,16 @@ import {
 } from '../api';
 
 const CATEGORIES: CarServiceCategory[] = ['Material', 'Lubricants', 'Labour', 'Other'];
+
+type PendingItem = {
+    category: CarServiceCategory;
+    description: string;
+    amount: string;
+};
+
+type VisitDraft = { date: string; odometerKm: string };
+
+const EMPTY_ITEM: PendingItem = { category: 'Material', description: '', amount: '' };
 
 function formatMYR(amount: number) {
     return `RM ${amount.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -24,6 +34,34 @@ function formatKm(km: number) {
     return km.toLocaleString('en-MY');
 }
 
+function todayIsoKl(): string {
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kuala_Lumpur',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).format(new Date());
+}
+
+function daysUntil(iso: string): number {
+    const [y, m, d] = iso.split('-').map(Number);
+    const target = new Date(y, m - 1, d);
+    const [ty, tm, td] = todayIsoKl().split('-').map(Number);
+    const today = new Date(ty, tm - 1, td);
+    return Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function nextServiceStatusLabel(days: number): string {
+    if (days < 0) return `${Math.abs(days)} days overdue`;
+    if (days === 0) return 'Due today';
+    if (days === 1) return 'Due tomorrow';
+    return `Due in ${days} days`;
+}
+
+function cellKey(visitId: number, category: CarServiceCategory, description: string) {
+    return `${visitId}::${category}::${description}`;
+}
+
 function cellAmount(
     visit: CarServiceVisit,
     category: CarServiceCategory,
@@ -33,35 +71,69 @@ function cellAmount(
     return item ? item.amount : null;
 }
 
+function buildLastPriceMap(visits: CarServiceVisit[]): Map<string, number> {
+    const map = new Map<string, number>();
+    for (const visit of [...visits].reverse()) {
+        for (const item of visit.items) {
+            const key = `${item.category}::${item.description}`;
+            if (!map.has(key)) map.set(key, item.amount);
+        }
+    }
+    return map;
+}
+
+function amountForSelectedItem(
+    category: CarServiceCategory,
+    description: string,
+    catalog: string[],
+    lastPrices: Map<string, number>
+): string | null {
+    const trimmed = description.trim();
+    if (!trimmed) return null;
+    const isKnown = catalog.includes(trimmed) || lastPrices.has(`${category}::${trimmed}`);
+    if (!isKnown) return null;
+    const last = lastPrices.get(`${category}::${trimmed}`);
+    return last != null ? String(last) : '';
+}
+
+function buildEditDrafts(visits: CarServiceVisit[], catalog: { category: CarServiceCategory; description: string }[]) {
+    const visitDrafts: Record<number, VisitDraft> = {};
+    const cellDrafts: Record<string, string> = {};
+
+    for (const visit of visits) {
+        visitDrafts[visit.id] = {
+            date: visit.date,
+            odometerKm: String(visit.odometerKm),
+        };
+        for (const row of catalog) {
+            const amount = cellAmount(visit, row.category, row.description);
+            if (amount != null) {
+                cellDrafts[cellKey(visit.id, row.category, row.description)] = String(amount);
+            }
+        }
+    }
+
+    return { visitDrafts, cellDrafts };
+}
+
 export default function CarServiceSection() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [data, setData] = useState<CarServiceOverview | null>(null);
-    const [selectedId, setSelectedId] = useState<number | null>(null);
     const [showVisitForm, setShowVisitForm] = useState(false);
-    const [editingVisitId, setEditingVisitId] = useState<number | null>(null);
     const [visitForm, setVisitForm] = useState({ date: '', odometerKm: '', notes: '' });
-    const [itemForm, setItemForm] = useState({
-        category: 'Material' as CarServiceCategory,
-        description: '',
-        amount: '',
-    });
+    const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
+    const [itemDraft, setItemDraft] = useState<PendingItem>(EMPTY_ITEM);
     const [saving, setSaving] = useState(false);
     const [actionError, setActionError] = useState<string | null>(null);
-    const [editingCell, setEditingCell] = useState<{
-        visitId: number;
-        category: CarServiceCategory;
-        description: string;
-        value: string;
-    } | null>(null);
+    const [matrixEditMode, setMatrixEditMode] = useState(false);
+    const [draftVisits, setDraftVisits] = useState<Record<number, VisitDraft>>({});
+    const [draftCells, setDraftCells] = useState<Record<string, string>>({});
+    const matrixScrollRef = useRef<HTMLDivElement>(null);
+    const [matrixScroll, setMatrixScroll] = useState({ left: false, right: false });
 
     const loadData = useCallback(async () => {
-        const overview = await fetchCarServiceOverview();
-        setData(overview);
-        setSelectedId((prev) => {
-            if (prev != null && overview.visits.some((v) => v.id === prev)) return prev;
-            return overview.visits.length > 0 ? overview.visits[overview.visits.length - 1].id : null;
-        });
+        setData(await fetchCarServiceOverview());
     }, []);
 
     useEffect(() => {
@@ -80,11 +152,6 @@ export default function CarServiceSection() {
         };
     }, [loadData]);
 
-    const selected = useMemo(
-        () => data?.visits.find((v) => v.id === selectedId) ?? null,
-        [data, selectedId]
-    );
-
     const catalogByCategory = useMemo(() => {
         const map = new Map<CarServiceCategory, string[]>();
         for (const cat of CATEGORIES) map.set(cat, []);
@@ -96,10 +163,87 @@ export default function CarServiceSection() {
         return map;
     }, [data]);
 
+    const lastPriceByItem = useMemo(
+        () => buildLastPriceMap(data?.visits ?? []),
+        [data?.visits]
+    );
+
+    const applyItemSelection = (draft: PendingItem, description: string): PendingItem => {
+        const catalog = catalogByCategory.get(draft.category) ?? [];
+        const autoAmount = amountForSelectedItem(draft.category, description, catalog, lastPriceByItem);
+        return {
+            ...draft,
+            description,
+            amount: autoAmount != null ? autoAmount : draft.amount,
+        };
+    };
+
     const refresh = async () => {
         await loadData();
         setActionError(null);
     };
+
+    const closeVisitForm = () => {
+        setShowVisitForm(false);
+        setVisitForm({ date: '', odometerKm: '', notes: '' });
+        setPendingItems([]);
+        setItemDraft(EMPTY_ITEM);
+    };
+
+    const openCreateVisit = () => {
+        setVisitForm({ date: '', odometerKm: '', notes: '' });
+        setPendingItems([]);
+        setItemDraft(EMPTY_ITEM);
+        setShowVisitForm(true);
+    };
+
+    const enterMatrixEditMode = () => {
+        if (!data || data.visits.length === 0) return;
+        closeVisitForm();
+        const { visitDrafts, cellDrafts } = buildEditDrafts(data.visits, data.catalog);
+        setDraftVisits(visitDrafts);
+        setDraftCells(cellDrafts);
+        setMatrixEditMode(true);
+        setActionError(null);
+    };
+
+    const cancelMatrixEditMode = () => {
+        setMatrixEditMode(false);
+        setDraftVisits({});
+        setDraftCells({});
+        setActionError(null);
+    };
+
+    const addPendingItem = () => {
+        const amount = parseFloat(itemDraft.amount);
+        if (!itemDraft.description.trim() || !Number.isFinite(amount) || amount <= 0) {
+            setActionError('Enter item description and amount.');
+            return;
+        }
+        setActionError(null);
+        setPendingItems((rows) => [
+            ...rows,
+            {
+                category: itemDraft.category,
+                description: itemDraft.description.trim(),
+                amount: itemDraft.amount,
+            },
+        ]);
+        setItemDraft({ category: itemDraft.category, description: '', amount: '' });
+    };
+
+    const removePendingItem = (index: number) => {
+        setPendingItems((rows) => rows.filter((_, i) => i !== index));
+    };
+
+    const parsePendingItems = () =>
+        pendingItems
+            .map((row) => ({
+                category: row.category,
+                description: row.description,
+                amount: parseFloat(row.amount),
+            }))
+            .filter((row) => row.description && Number.isFinite(row.amount) && row.amount > 0);
 
     const handleCreateVisit = async () => {
         const odometerKm = parseInt(visitForm.odometerKm, 10);
@@ -110,16 +254,14 @@ export default function CarServiceSection() {
         setSaving(true);
         setActionError(null);
         try {
-            const res = await createCarServiceVisit({
+            await createCarServiceVisit({
                 date: visitForm.date,
                 odometerKm,
                 notes: visitForm.notes.trim() || null,
+                items: parsePendingItems(),
             });
-            setVisitForm({ date: '', odometerKm: '', notes: '' });
-            setShowVisitForm(false);
-            setEditingVisitId(null);
+            closeVisitForm();
             await refresh();
-            setSelectedId(res.visit.id);
         } catch (err) {
             setActionError(err instanceof Error ? err.message : 'Failed to save visit');
         } finally {
@@ -127,44 +269,26 @@ export default function CarServiceSection() {
         }
     };
 
-    const handleUpdateVisit = async () => {
-        if (editingVisitId == null) return;
-        const odometerKm = parseInt(visitForm.odometerKm, 10);
-        if (!visitForm.date || !Number.isInteger(odometerKm) || odometerKm < 0) {
-            setActionError('Enter a valid date and odometer.');
-            return;
-        }
+    const handleDeleteVisit = async (visit: CarServiceVisit) => {
+        if (!window.confirm(`Delete service on ${formatDate(visit.date)}?`)) return;
         setSaving(true);
         setActionError(null);
         try {
-            const id = editingVisitId;
-            await updateCarServiceVisit(id, {
-                date: visitForm.date,
-                odometerKm,
-                notes: visitForm.notes.trim() || null,
+            await deleteCarServiceVisit(visit.id);
+            setDraftVisits((prev) => {
+                const next = { ...prev };
+                delete next[visit.id];
+                return next;
             });
-            setShowVisitForm(false);
-            setEditingVisitId(null);
+            setDraftCells((prev) => {
+                const next = { ...prev };
+                for (const key of Object.keys(next)) {
+                    if (key.startsWith(`${visit.id}::`)) delete next[key];
+                }
+                return next;
+            });
             await refresh();
-            setSelectedId(id);
-        } catch (err) {
-            setActionError(err instanceof Error ? err.message : 'Failed to update visit');
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const handleDeleteVisit = async () => {
-        if (!selected) return;
-        if (!window.confirm(`Delete service on ${formatDate(selected.date)}?`)) return;
-        setSaving(true);
-        setActionError(null);
-        try {
-            await deleteCarServiceVisit(selected.id);
-            setSelectedId(null);
-            setShowVisitForm(false);
-            setEditingVisitId(null);
-            await refresh();
+            if (data && data.visits.length <= 1) cancelMatrixEditMode();
         } catch (err) {
             setActionError(err instanceof Error ? err.message : 'Failed to delete visit');
         } finally {
@@ -172,70 +296,91 @@ export default function CarServiceSection() {
         }
     };
 
-    const openEditVisit = () => {
-        if (!selected) return;
-        setEditingVisitId(selected.id);
-        setVisitForm({
-            date: selected.date,
-            odometerKm: String(selected.odometerKm),
-            notes: selected.notes ?? '',
+    const handleSaveMatrix = async () => {
+        if (!data) return;
+        setSaving(true);
+        setActionError(null);
+        try {
+            for (const visit of data.visits) {
+                const draft = draftVisits[visit.id];
+                if (!draft) continue;
+
+                const odometerKm = parseInt(draft.odometerKm, 10);
+                if (!draft.date || !Number.isInteger(odometerKm) || odometerKm < 0) {
+                    throw new Error(`Invalid date or odometer for ${formatDate(visit.date)}`);
+                }
+
+                if (draft.date !== visit.date || odometerKm !== visit.odometerKm) {
+                    await updateCarServiceVisit(visit.id, {
+                        date: draft.date,
+                        odometerKm,
+                        notes: visit.notes,
+                    });
+                }
+
+                for (const row of data.catalog) {
+                    const key = cellKey(visit.id, row.category, row.description);
+                    const raw = draftCells[key] ?? '';
+                    const trimmed = raw.trim();
+                    const amount = trimmed === '' ? 0 : parseFloat(trimmed);
+                    if (!Number.isFinite(amount) || amount < 0) {
+                        throw new Error(`Invalid amount for ${row.description}`);
+                    }
+
+                    const existing = cellAmount(visit, row.category, row.description);
+                    const unchanged =
+                        (existing == null && trimmed === '') ||
+                        (existing != null && trimmed !== '' && amount === existing);
+                    if (unchanged) continue;
+
+                    await upsertCarServiceItem(visit.id, {
+                        category: row.category,
+                        description: row.description,
+                        amount,
+                    });
+                }
+            }
+
+            cancelMatrixEditMode();
+            await refresh();
+        } catch (err) {
+            setActionError(err instanceof Error ? err.message : 'Failed to save changes');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const setDraftCell = (key: string, value: string) => {
+        setDraftCells((prev) => ({ ...prev, [key]: value }));
+    };
+
+    const setDraftVisit = (visitId: number, patch: Partial<VisitDraft>) => {
+        setDraftVisits((prev) => ({
+            ...prev,
+            [visitId]: { ...prev[visitId], ...patch },
+        }));
+    };
+
+    const updateMatrixScrollHints = useCallback(() => {
+        const el = matrixScrollRef.current;
+        if (!el) return;
+        setMatrixScroll({
+            left: el.scrollLeft > 4,
+            right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4,
         });
-        setShowVisitForm(true);
-    };
+    }, []);
 
-    const openCreateVisit = () => {
-        setEditingVisitId(null);
-        setVisitForm({ date: '', odometerKm: '', notes: '' });
-        setShowVisitForm(true);
-        setSelectedId(null);
-    };
+    useEffect(() => {
+        updateMatrixScrollHints();
+        const el = matrixScrollRef.current;
+        if (!el) return;
+        const observer = new ResizeObserver(updateMatrixScrollHints);
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [data?.visits.length, matrixEditMode, updateMatrixScrollHints]);
 
-    const handleAddItem = async () => {
-        if (!selected) return;
-        const amount = parseFloat(itemForm.amount);
-        if (!itemForm.description.trim() || !Number.isFinite(amount) || amount <= 0) {
-            setActionError('Enter item description and amount.');
-            return;
-        }
-        setSaving(true);
-        setActionError(null);
-        try {
-            await upsertCarServiceItem(selected.id, {
-                category: itemForm.category,
-                description: itemForm.description.trim(),
-                amount,
-            });
-            setItemForm({ category: itemForm.category, description: '', amount: '' });
-            await refresh();
-        } catch (err) {
-            setActionError(err instanceof Error ? err.message : 'Failed to save item');
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const commitCellEdit = async () => {
-        if (!editingCell) return;
-        const amount = editingCell.value.trim() === '' ? 0 : parseFloat(editingCell.value);
-        if (!Number.isFinite(amount) || amount < 0) {
-            setActionError('Invalid amount');
-            return;
-        }
-        setSaving(true);
-        setActionError(null);
-        try {
-            await upsertCarServiceItem(editingCell.visitId, {
-                category: editingCell.category,
-                description: editingCell.description,
-                amount,
-            });
-            setEditingCell(null);
-            await refresh();
-        } catch (err) {
-            setActionError(err instanceof Error ? err.message : 'Failed to update cell');
-        } finally {
-            setSaving(false);
-        }
+    const scrollMatrix = (direction: -1 | 1) => {
+        matrixScrollRef.current?.scrollBy({ left: direction * 280, behavior: 'smooth' });
     };
 
     if (loading) return <section className="panel"><p className="muted">Loading car service…</p></section>;
@@ -248,13 +393,12 @@ export default function CarServiceSection() {
     }
 
     const { summary, visits, itemTotals } = data;
-    const isEditingExisting = showVisitForm && editingVisitId != null;
 
     return (
         <section className="panel car-service-section">
             <div className="trips-summary-strip">
                 <div className="trips-summary-item trips-summary-item--total">
-                    <span className="trips-summary-label">Lifetime spend</span>
+                    <span className="trips-summary-label">Total spend</span>
                     <span className="trips-summary-value">{formatMYR(summary.lifetimeTotal)}</span>
                 </div>
                 <div className="trips-summary-item">
@@ -267,30 +411,76 @@ export default function CarServiceSection() {
                         {summary.latestOdometerKm != null ? `${formatKm(summary.latestOdometerKm)} km` : '—'}
                     </span>
                 </div>
-                <div className="trips-summary-item">
-                    <span className="trips-summary-label">Avg / visit</span>
-                    <span className="trips-summary-value">{formatMYR(summary.avgCostPerVisit)}</span>
-                </div>
-                <div className="trips-summary-item">
-                    <span className="trips-summary-label">Avg km between</span>
-                    <span className="trips-summary-value">
-                        {summary.avgKmBetweenVisits != null
-                            ? `${formatKm(Math.round(summary.avgKmBetweenVisits))} km`
-                            : '—'}
-                    </span>
-                </div>
+                {summary.nextService && (
+                    <div className="trips-summary-item car-service-next-summary">
+                        <span className="trips-summary-label">Next service</span>
+                        <span className="trips-summary-value">
+                            {formatDate(summary.nextService.predictedDate)}
+                        </span>
+                        <span className="car-service-next-detail muted">
+                            {formatKm(summary.nextService.byOdometerKm)} km · 6 months
+                            {' · '}
+                            {nextServiceStatusLabel(daysUntil(summary.nextService.predictedDate))}
+                            {summary.nextService.limitingFactor === 'km' ? ' (km)' : ' (date)'}
+                        </span>
+                    </div>
+                )}
             </div>
 
             {actionError && <p className="error">{actionError}</p>}
 
             <div className="car-service-toolbar">
-                <h3 className="car-service-heading">Service history</h3>
-                <button type="button" className="btn-primary" onClick={openCreateVisit} disabled={saving}>
-                    Add visit
-                </button>
+                <p className="muted car-service-hint">
+                    {matrixEditMode
+                        ? 'Edit costs below. Leave blank to remove an item.'
+                        : 'Use Edit to change visits and costs.'}
+                </p>
+                <div className="car-service-toolbar-actions">
+                    {matrixEditMode ? (
+                        <>
+                            <button
+                                type="button"
+                                className="btn-secondary"
+                                onClick={cancelMatrixEditMode}
+                                disabled={saving}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                className="btn-primary"
+                                onClick={() => void handleSaveMatrix()}
+                                disabled={saving}
+                            >
+                                Save changes
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            {visits.length > 0 && (
+                                <button
+                                    type="button"
+                                    className="btn-secondary"
+                                    onClick={enterMatrixEditMode}
+                                    disabled={saving || showVisitForm}
+                                >
+                                    Edit
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                className="btn-primary"
+                                onClick={openCreateVisit}
+                                disabled={saving || matrixEditMode}
+                            >
+                                Add visit
+                            </button>
+                        </>
+                    )}
+                </div>
             </div>
 
-            {showVisitForm && (
+            {showVisitForm && !matrixEditMode && (
                 <div className="trips-form car-service-visit-form">
                     <label>
                         Date
@@ -319,307 +509,264 @@ export default function CarServiceSection() {
                             placeholder="Optional"
                         />
                     </label>
-                    <div className="trips-form-actions span-full">
-                        <button type="button" onClick={() => { setShowVisitForm(false); setEditingVisitId(null); }} disabled={saving}>
-                            Cancel
-                        </button>
+
+                    <div className="span-full car-service-items-heading">Items</div>
+                    <label>
+                        Category
+                        <select
+                            value={itemDraft.category}
+                            onChange={(e) =>
+                                setItemDraft({
+                                    category: e.target.value as CarServiceCategory,
+                                    description: '',
+                                    amount: '',
+                                })
+                            }
+                        >
+                            {CATEGORIES.map((c) => (
+                                <option key={c} value={c}>
+                                    {c}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                    <label>
+                        Item
+                        <input
+                            list={`car-items-${itemDraft.category}`}
+                            value={itemDraft.description}
+                            onChange={(e) => setItemDraft((f) => applyItemSelection(f, e.target.value))}
+                            onBlur={(e) => setItemDraft((f) => applyItemSelection(f, e.target.value))}
+                            placeholder="e.g. Oil Filter (1.5TD)"
+                        />
+                        <datalist id={`car-items-${itemDraft.category}`}>
+                            {(catalogByCategory.get(itemDraft.category) ?? []).map((d) => (
+                                <option key={d} value={d} />
+                            ))}
+                        </datalist>
+                    </label>
+                    <label>
+                        Amount (RM)
+                        <input
+                            type="number"
+                            min={0}
+                            step={0.01}
+                            value={itemDraft.amount}
+                            onChange={(e) => setItemDraft((f) => ({ ...f, amount: e.target.value }))}
+                        />
+                    </label>
+                    <div className="trips-form-actions">
                         <button
                             type="button"
-                            className="btn-primary"
-                            onClick={isEditingExisting ? handleUpdateVisit : handleCreateVisit}
+                            className="btn-secondary"
+                            onClick={addPendingItem}
                             disabled={saving}
                         >
-                            {isEditingExisting ? 'Save visit' : 'Create visit'}
+                            Add item
+                        </button>
+                    </div>
+
+                    {pendingItems.length > 0 && (
+                        <div className="car-service-pending-wrap span-full">
+                            <div className="car-service-pending-header">
+                                <span className="car-service-pending-title">Added items</span>
+                                <span className="car-service-pending-total">
+                                    {formatMYR(
+                                        pendingItems.reduce((sum, row) => sum + parseFloat(row.amount), 0)
+                                    )}
+                                </span>
+                            </div>
+                            <table className="data-table car-service-pending-table">
+                                <thead>
+                                    <tr>
+                                        <th>Category</th>
+                                        <th>Item</th>
+                                        <th className="trips-col-num">Amount</th>
+                                        <th className="actions-col" />
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {pendingItems.map((row, index) => (
+                                        <tr key={`${row.category}-${row.description}-${index}`}>
+                                            <td className="car-service-pending-cat">{row.category}</td>
+                                            <td>{row.description}</td>
+                                            <td className="trips-col-num">
+                                                {formatMYR(parseFloat(row.amount))}
+                                            </td>
+                                            <td className="actions-col">
+                                                <button
+                                                    type="button"
+                                                    className="btn-link btn-danger-link"
+                                                    onClick={() => removePendingItem(index)}
+                                                    disabled={saving}
+                                                >
+                                                    Remove
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+
+                    <div className="trips-form-actions span-full">
+                        <button type="button" className="btn-secondary" onClick={closeVisitForm} disabled={saving}>
+                            Cancel
+                        </button>
+                        <button type="button" className="btn-primary" onClick={handleCreateVisit} disabled={saving}>
+                            Create visit
                         </button>
                     </div>
                 </div>
             )}
 
-            <div className="trips-layout car-service-layout">
-                <ul className="trips-list">
-                    {visits.length === 0 && <li className="trips-empty muted">No service visits yet.</li>}
-                    {[...visits].reverse().map((visit) => (
-                        <li key={visit.id}>
-                            <button
-                                type="button"
-                                className={
-                                    visit.id === selectedId ? 'trips-list-item active' : 'trips-list-item'
-                                }
-                                onClick={() => {
-                                    setSelectedId(visit.id);
-                                    setShowVisitForm(false);
-                                    setEditingVisitId(null);
-                                }}
-                            >
-                                <span className="trips-list-name">{formatDate(visit.date)}</span>
-                                <span className="muted">{formatMYR(visit.total)}</span>
-                            </button>
-                        </li>
-                    ))}
-                </ul>
-
-                <div className="trips-detail">
-                    {selected ? (
-                        <>
-                            <div className="trips-detail-title">
-                                <h4>{formatDate(selected.date)}</h4>
-                                <p className="muted">
-                                    {formatKm(selected.odometerKm)} km
-                                    {selected.kmSincePrev != null &&
-                                        ` · +${formatKm(selected.kmSincePrev)} km since prior`}
-                                    {selected.notes ? ` · ${selected.notes}` : ''}
-                                </p>
-                            </div>
-                            <div className="trips-detail-actions">
-                                <button type="button" onClick={openEditVisit} disabled={saving}>
-                                    Edit visit
-                                </button>
-                                <button
-                                    type="button"
-                                    className="trips-delete-trip"
-                                    onClick={handleDeleteVisit}
-                                    disabled={saving}
-                                >
-                                    Delete
-                                </button>
-                            </div>
-
-                            <div className="trips-table-wrap">
-                                <table className="data-table trips-expenses-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Category</th>
-                                            <th>Item</th>
-                                            <th className="trips-col-num">Amount</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {selected.items.length === 0 && (
-                                            <tr>
-                                                <td colSpan={3} className="muted">
-                                                    No line items — add below or edit the matrix.
-                                                </td>
-                                            </tr>
-                                        )}
-                                        {selected.items.map((item) => (
-                                            <tr key={item.id}>
-                                                <td>{item.category}</td>
-                                                <td>{item.description}</td>
-                                                <td className="trips-col-num">{formatMYR(item.amount)}</td>
-                                            </tr>
-                                        ))}
-                                        {selected.items.length > 0 && (
-                                            <tr>
-                                                <td colSpan={2}>
-                                                    <strong>Total</strong>
-                                                </td>
-                                                <td className="trips-col-num">
-                                                    <strong>{formatMYR(selected.total)}</strong>
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            <div className="trips-form">
-                                <label>
-                                    Category
-                                    <select
-                                        value={itemForm.category}
-                                        onChange={(e) =>
-                                            setItemForm((f) => ({
-                                                ...f,
-                                                category: e.target.value as CarServiceCategory,
-                                                description: '',
-                                            }))
-                                        }
-                                    >
-                                        {CATEGORIES.map((c) => (
-                                            <option key={c} value={c}>
-                                                {c}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </label>
-                                <label>
-                                    Item
-                                    <input
-                                        list={`car-items-${itemForm.category}`}
-                                        value={itemForm.description}
-                                        onChange={(e) =>
-                                            setItemForm((f) => ({ ...f, description: e.target.value }))
-                                        }
-                                        placeholder="e.g. Oil Filter (1.5TD)"
-                                    />
-                                    <datalist id={`car-items-${itemForm.category}`}>
-                                        {(catalogByCategory.get(itemForm.category) ?? []).map((d) => (
-                                            <option key={d} value={d} />
-                                        ))}
-                                    </datalist>
-                                </label>
-                                <label>
-                                    Amount (RM)
-                                    <input
-                                        type="number"
-                                        min={0}
-                                        step={0.01}
-                                        value={itemForm.amount}
-                                        onChange={(e) =>
-                                            setItemForm((f) => ({ ...f, amount: e.target.value }))
-                                        }
-                                    />
-                                </label>
-                                <div className="trips-form-actions">
-                                    <button
-                                        type="button"
-                                        className="btn-primary"
-                                        onClick={handleAddItem}
-                                        disabled={saving}
-                                    >
-                                        Add / update item
-                                    </button>
-                                </div>
-                            </div>
-                        </>
-                    ) : (
-                        <p className="muted">Select a visit or add one to start logging parts and fluids.</p>
-                    )}
-                </div>
-            </div>
-
-            <div className="car-service-matrix-block">
-                <h3 className="car-service-heading">Cost matrix</h3>
-                <p className="muted car-service-hint">
-                    Click a cell to set or clear the amount (leave blank to remove). Same layout as your spreadsheet.
-                </p>
-                {visits.length === 0 ? (
-                    <p className="muted">Add a visit to build the matrix.</p>
-                ) : (
-                    <div className="car-service-matrix-wrap">
+            {visits.length === 0 ? (
+                <p className="muted">No service visits yet. Add one to start.</p>
+            ) : (
+                <div className="car-service-scroll-shell">
+                    <button
+                        type="button"
+                        className="car-service-scroll-btn car-service-scroll-btn--prev"
+                        aria-label="Scroll left"
+                        disabled={!matrixScroll.left}
+                        onClick={() => scrollMatrix(-1)}
+                    >
+                        ‹
+                    </button>
+                    <div
+                        ref={matrixScrollRef}
+                        className={`car-service-matrix-wrap scroll-strip${matrixEditMode ? ' car-service-matrix-wrap--edit' : ''}`}
+                        onScroll={updateMatrixScrollHints}
+                    >
                         <table className="data-table car-service-matrix">
-                            <thead>
-                                <tr>
-                                    <th className="car-service-sticky">Item Description</th>
-                                    {visits.map((v) => (
-                                        <th key={v.id} className="car-service-visit-col">
-                                            <div>{formatDate(v.date)}</div>
-                                            <div className="car-service-odo muted">{formatKm(v.odometerKm)}</div>
-                                        </th>
-                                    ))}
-                                    <th className="trips-col-num">Total</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {CATEGORIES.map((category) => {
-                                    const descriptions = catalogByCategory.get(category) ?? [];
-                                    if (descriptions.length === 0) return null;
+                        <thead>
+                            <tr>
+                                <th className="car-service-sticky">Item</th>
+                                {visits.map((v) => {
+                                    const draft = draftVisits[v.id];
                                     return (
-                                        <FragmentCategory
-                                            key={category}
-                                            category={category}
-                                            descriptions={descriptions}
-                                            visits={visits}
-                                            itemTotals={itemTotals}
-                                            editingCell={editingCell}
-                                            onStartEdit={(visitId, description, current) =>
-                                                setEditingCell({
-                                                    visitId,
-                                                    category,
-                                                    description,
-                                                    value: current != null ? String(current) : '',
-                                                })
-                                            }
-                                            onEditValue={(value) =>
-                                                setEditingCell((c) => (c ? { ...c, value } : c))
-                                            }
-                                            onCommit={commitCellEdit}
-                                            onCancel={() => setEditingCell(null)}
-                                        />
+                                        <th key={v.id} className="car-service-visit-col">
+                                            {matrixEditMode && draft ? (
+                                                <>
+                                                    <input
+                                                        className="car-service-header-input"
+                                                        type="date"
+                                                        value={draft.date}
+                                                        onChange={(e) =>
+                                                            setDraftVisit(v.id, { date: e.target.value })
+                                                        }
+                                                        disabled={saving}
+                                                    />
+                                                    <input
+                                                        className="car-service-header-input car-service-header-input--odo"
+                                                        type="number"
+                                                        min={0}
+                                                        step={1}
+                                                        value={draft.odometerKm}
+                                                        onChange={(e) =>
+                                                            setDraftVisit(v.id, { odometerKm: e.target.value })
+                                                        }
+                                                        placeholder="km"
+                                                        disabled={saving}
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        className="btn-danger car-service-visit-btn"
+                                                        onClick={() => void handleDeleteVisit(v)}
+                                                        disabled={saving}
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <div className="car-service-visit-date">{formatDate(v.date)}</div>
+                                                    <div className="car-service-odo">{formatKm(v.odometerKm)} km</div>
+                                                </>
+                                            )}
+                                        </th>
                                     );
                                 })}
-                                <tr className="car-service-total-row">
-                                    <td className="car-service-sticky">
-                                        <strong>Visit total</strong>
+                                <th className="trips-col-num car-service-total-col">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {CATEGORIES.map((category) => {
+                                const descriptions = catalogByCategory.get(category) ?? [];
+                                if (descriptions.length === 0) return null;
+                                return (
+                                    <CategoryRows
+                                        key={category}
+                                        category={category}
+                                        descriptions={descriptions}
+                                        visits={visits}
+                                        itemTotals={itemTotals}
+                                        matrixEditMode={matrixEditMode}
+                                        draftCells={draftCells}
+                                        onDraftCellChange={setDraftCell}
+                                    />
+                                );
+                            })}
+                            <tr className="car-service-total-row">
+                                <td className="car-service-sticky">
+                                    <strong>Visit total</strong>
+                                </td>
+                                {visits.map((v, visitIndex) => (
+                                    <td
+                                        key={v.id}
+                                        className={`trips-col-num car-service-visit-data${
+                                            visitIndex % 2 === 1 ? ' car-service-visit-data--alt' : ''
+                                        }`}
+                                    >
+                                        <strong>{v.total > 0 ? formatMYR(v.total) : '—'}</strong>
                                     </td>
-                                    {visits.map((v) => (
-                                        <td key={v.id} className="trips-col-num">
-                                            <strong>{v.total > 0 ? formatMYR(v.total) : '—'}</strong>
-                                        </td>
-                                    ))}
-                                    <td className="trips-col-num">
-                                        <strong>{formatMYR(summary.lifetimeTotal)}</strong>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
-
-            {itemTotals.length > 0 && (
-                <div className="car-service-item-totals">
-                    <h3 className="car-service-heading">Spend by item</h3>
-                    <div className="trips-table-wrap">
-                        <table className="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Category</th>
-                                    <th>Item</th>
-                                    <th className="trips-col-num">Times</th>
-                                    <th className="trips-col-num">Total</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {itemTotals.map((row) => (
-                                    <tr key={`${row.category}-${row.description}`}>
-                                        <td>{row.category}</td>
-                                        <td>{row.description}</td>
-                                        <td className="trips-col-num">{row.count}</td>
-                                        <td className="trips-col-num">{formatMYR(row.total)}</td>
-                                    </tr>
                                 ))}
-                            </tbody>
-                        </table>
+                                <td className="trips-col-num car-service-total-col">
+                                    <strong>{formatMYR(summary.lifetimeTotal)}</strong>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                     </div>
+                    <button
+                        type="button"
+                        className="car-service-scroll-btn car-service-scroll-btn--next"
+                        aria-label="Scroll right"
+                        disabled={!matrixScroll.right}
+                        onClick={() => scrollMatrix(1)}
+                    >
+                        ›
+                    </button>
                 </div>
             )}
         </section>
     );
 }
 
-function FragmentCategory({
+function CategoryRows({
     category,
     descriptions,
     visits,
     itemTotals,
-    editingCell,
-    onStartEdit,
-    onEditValue,
-    onCommit,
-    onCancel,
+    matrixEditMode,
+    draftCells,
+    onDraftCellChange,
 }: {
     category: CarServiceCategory;
     descriptions: string[];
     visits: CarServiceVisit[];
     itemTotals: CarServiceOverview['itemTotals'];
-    editingCell: {
-        visitId: number;
-        category: CarServiceCategory;
-        description: string;
-        value: string;
-    } | null;
-    onStartEdit: (visitId: number, description: string, current: number | null) => void;
-    onEditValue: (value: string) => void;
-    onCommit: () => void;
-    onCancel: () => void;
+    matrixEditMode: boolean;
+    draftCells: Record<string, string>;
+    onDraftCellChange: (key: string, value: string) => void;
 }) {
     return (
         <>
             <tr className="car-service-category-row">
-                <td className="car-service-sticky" colSpan={visits.length + 2}>
-                    {category}
-                </td>
+                <td className="car-service-sticky car-service-category-label">{category}</td>
+                <td className="car-service-category-fill" colSpan={visits.length} />
+                <td className="car-service-category-fill car-service-total-col" />
             </tr>
             {descriptions.map((description) => {
                 const rowTotal =
@@ -628,45 +775,37 @@ function FragmentCategory({
                 return (
                     <tr key={`${category}-${description}`}>
                         <td className="car-service-sticky">{description}</td>
-                        {visits.map((visit) => {
+                        {visits.map((visit, visitIndex) => {
                             const amount = cellAmount(visit, category, description);
-                            const isEditing =
-                                editingCell?.visitId === visit.id &&
-                                editingCell.category === category &&
-                                editingCell.description === description;
+                            const key = cellKey(visit.id, category, description);
+                            const draftValue = draftCells[key] ?? (amount != null ? String(amount) : '');
+
                             return (
-                                <td key={visit.id} className="trips-col-num car-service-cell">
-                                    {isEditing ? (
+                                <td
+                                    key={visit.id}
+                                    className={`trips-col-num car-service-cell car-service-visit-data${
+                                        visitIndex % 2 === 1 ? ' car-service-visit-data--alt' : ''
+                                    }`}
+                                >
+                                    {matrixEditMode ? (
                                         <input
                                             className="car-service-cell-input"
                                             type="number"
                                             min={0}
                                             step={0.01}
-                                            autoFocus
-                                            value={editingCell.value}
-                                            onChange={(e) => onEditValue(e.target.value)}
-                                            onBlur={() => void onCommit()}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter') {
-                                                    e.preventDefault();
-                                                    void onCommit();
-                                                }
-                                                if (e.key === 'Escape') onCancel();
-                                            }}
+                                            value={draftValue}
+                                            placeholder="—"
+                                            onChange={(e) => onDraftCellChange(key, e.target.value)}
                                         />
+                                    ) : amount != null ? (
+                                        <span className="car-service-cell-value">{amount.toFixed(2)}</span>
                                     ) : (
-                                        <button
-                                            type="button"
-                                            className="car-service-cell-btn"
-                                            onClick={() => onStartEdit(visit.id, description, amount)}
-                                        >
-                                            {amount != null ? amount.toFixed(2) : ''}
-                                        </button>
+                                        <span className="car-service-cell-value car-service-cell-value--empty">—</span>
                                     )}
                                 </td>
                             );
                         })}
-                        <td className="trips-col-num">
+                        <td className="trips-col-num car-service-total-col">
                             {rowTotal > 0 ? formatMYR(rowTotal) : '—'}
                         </td>
                     </tr>

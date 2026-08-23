@@ -169,7 +169,7 @@ export default function AccountActivityModal({
     }, [periodEntries, searchQuery]);
 
     const { page, setPage, pageItems, totalPages, totalItems } = usePagination(filteredEntries, {
-        pageSize: 5,
+        pageSize: 8,
     });
 
     useEffect(() => {
@@ -546,19 +546,20 @@ export default function AccountActivityModal({
                                             <th>Date</th>
                                             <th>Type</th>
                                             <th>Description</th>
+                                            <th>Category</th>
                                             <th className="num">Amount</th>
-                                            <th className="num">Balance</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {pageItems.map((entry) => (
                                             <tr
                                                 key={`${entry.type}-${entry.id}-${entry.direction}`}
-                                                className={
-                                                    entry.beforeBaseline
-                                                        ? 'account-activity-before-baseline'
-                                                        : undefined
-                                                }
+                                                className={[
+                                                    entry.type === 'income' && 'account-activity-income-row',
+                                                    entry.beforeBaseline && 'account-activity-before-baseline',
+                                                ]
+                                                    .filter(Boolean)
+                                                    .join(' ') || undefined}
                                             >
                                                 <td>{entry.date}</td>
                                                 <td>{formatTypeLabel(entry.type)}</td>
@@ -566,11 +567,16 @@ export default function AccountActivityModal({
                                                     <span className="account-activity-desc">
                                                         {entry.description}
                                                     </span>
-                                                    <span className="muted account-activity-category">
-                                                        {entry.beforeBaseline
-                                                            ? `${entry.category} · Before balance set`
-                                                            : entry.category}
+                                                </td>
+                                                <td>
+                                                    <span className="account-activity-category">
+                                                        {entry.category}
                                                     </span>
+                                                    {entry.beforeBaseline && (
+                                                        <span className="muted account-activity-category-note">
+                                                            Before balance set
+                                                        </span>
+                                                    )}
                                                 </td>
                                                 <td
                                                     className={`num ${
@@ -581,15 +587,6 @@ export default function AccountActivityModal({
                                                 >
                                                     {entry.direction === 'in' ? '+' : '−'}
                                                     {formatAmount(entry.amount)}
-                                                </td>
-                                                <td className="num">
-                                                    {entry.beforeBaseline
-                                                        ? '—'
-                                                        : accountData?.accountType === 'credit'
-                                                          ? formatAmount(entry.runningOwed ?? 0)
-                                                          : formatAmount(
-                                                                entry.runningBalance ?? 0
-                                                            )}
                                                 </td>
                                             </tr>
                                         ))}

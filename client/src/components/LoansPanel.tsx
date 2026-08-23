@@ -82,10 +82,10 @@ export default function LoansPanel({ rows, formatAmount, mode = 'manage', onChan
     const tenureMonths = parseInt(form.tenureMonths, 10);
     const parsedAmount = parseFloat(form.amount);
     const suggestedAmount =
-        loanMethod && !isIncluded
+        loanMethod
             ? suggestedInstallmentAmount({
                   method: loanMethod,
-                  originalPrincipal,
+                  originalPrincipal: isIncluded ? remainingPrincipal : originalPrincipal,
                   annualRatePct,
                   tenureMonths,
               })
@@ -93,7 +93,7 @@ export default function LoansPanel({ rows, formatAmount, mode = 'manage', onChan
     const installmentAmount =
         Number.isFinite(parsedAmount) && parsedAmount > 0 ? parsedAmount : suggestedAmount;
     const loanPreview =
-        loanMethod && !isIncluded && installmentAmount
+        loanMethod && installmentAmount
             ? computeInstallmentSplit({
                   method: loanMethod,
                   installment: installmentAmount,
@@ -159,13 +159,20 @@ export default function LoansPanel({ rows, formatAmount, mode = 'manage', onChan
                 setModalError('Fill in remaining principal.');
                 return;
             }
+            if (!Number.isInteger(tenureMonths) || tenureMonths <= 0) {
+                setModalError('Fill in tenure (months).');
+                return;
+            }
             original = remaining;
             rate = null;
-            tenure = null;
+            tenure = tenureMonths;
             startDate = null;
             if (!Number.isFinite(amount) || amount <= 0) {
-                setModalError('Enter an installment amount.');
-                return;
+                if (suggestedAmount == null || suggestedAmount <= 0) {
+                    setModalError('Enter an installment amount, or fill remaining and tenure.');
+                    return;
+                }
+                amount = suggestedAmount;
             }
         } else if (
             !Number.isFinite(original) ||
@@ -400,6 +407,8 @@ export default function LoansPanel({ rows, formatAmount, mode = 'manage', onChan
                             onChange={(e) => setForm((f) => ({ ...f, annualRatePct: e.target.value }))}
                         />
                     </div>
+                    </>
+                    )}
                     <div className="form-field">
                         <label htmlFor="loan-tenure">Tenure (months)</label>
                         <input
@@ -411,8 +420,6 @@ export default function LoansPanel({ rows, formatAmount, mode = 'manage', onChan
                             onChange={(e) => setForm((f) => ({ ...f, tenureMonths: e.target.value }))}
                         />
                     </div>
-                    </>
-                    )}
                     <div className="form-field">
                         <label htmlFor="loan-amount">Monthly installment</label>
                         <input
@@ -425,7 +432,9 @@ export default function LoansPanel({ rows, formatAmount, mode = 'manage', onChan
                         />
                         {suggestedAmount != null && form.amount === '' && (
                             <span className="muted form-hint">
-                                Suggested installment {formatAmount(suggestedAmount)}
+                                {isIncluded
+                                    ? `Suggested: ${formatAmount(suggestedAmount)} (remaining ÷ tenure)`
+                                    : `Suggested installment ${formatAmount(suggestedAmount)}`}
                             </span>
                         )}
                     </div>

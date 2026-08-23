@@ -49,6 +49,20 @@ export type CarServiceItemTotal = {
     count: number;
 };
 
+export const SERVICE_INTERVAL_KM = 10_000;
+export const SERVICE_INTERVAL_MONTHS = 6;
+
+export type NextServiceSummary = {
+    /** Last service date + 6 months */
+    byDate: string;
+    /** Last odometer + 10,000 km */
+    byOdometerKm: number;
+    /** Estimated date whichever limit comes first */
+    predictedDate: string;
+    limitingFactor: 'date' | 'km';
+    avgKmPerDay: number | null;
+};
+
 export type CarServiceOverview = {
     visits: CarServiceVisit[];
     itemTotals: CarServiceItemTotal[];
@@ -60,8 +74,79 @@ export type CarServiceOverview = {
         latestDate: string | null;
         avgCostPerVisit: number;
         avgKmBetweenVisits: number | null;
+        nextService: NextServiceSummary | null;
     };
 };
+
+function parseIsoDate(iso: string): Date {
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(y, m - 1, d);
+}
+
+function formatIsoDate(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+function addMonthsToIso(iso: string, months: number): string {
+    const d = parseIsoDate(iso);
+    d.setMonth(d.getMonth() + months);
+    return formatIsoDate(d);
+}
+
+function addDaysToIso(iso: string, days: number): string {
+    const d = parseIsoDate(iso);
+    d.setDate(d.getDate() + Math.round(days));
+    return formatIsoDate(d);
+}
+
+function daysBetweenIso(start: string, end: string): number {
+    return (parseIsoDate(end).getTime() - parseIsoDate(start).getTime()) / (1000 * 60 * 60 * 24);
+}
+
+function computeNextService(visits: CarServiceVisit[]): NextServiceSummary | null {
+    if (visits.length === 0) return null;
+
+    const last = visits[visits.length - 1];
+    const byDate = addMonthsToIso(last.date, SERVICE_INTERVAL_MONTHS);
+    const byOdometerKm = last.odometerKm + SERVICE_INTERVAL_KM;
+
+    let totalKm = 0;
+    let totalDays = 0;
+    for (let i = 1; i < visits.length; i++) {
+        const prev = visits[i - 1];
+        const curr = visits[i];
+        const days = daysBetweenIso(prev.date, curr.date);
+        if (days > 0) {
+            totalKm += curr.odometerKm - prev.odometerKm;
+            totalDays += days;
+        }
+    }
+    const avgKmPerDay = totalDays > 0 ? totalKm / totalDays : null;
+
+    if (avgKmPerDay != null && avgKmPerDay > 0) {
+        const byKmDate = addDaysToIso(last.date, SERVICE_INTERVAL_KM / avgKmPerDay);
+        if (byKmDate < byDate) {
+            return {
+                byDate,
+                byOdometerKm,
+                predictedDate: byKmDate,
+                limitingFactor: 'km',
+                avgKmPerDay,
+            };
+        }
+    }
+
+    return {
+        byDate,
+        byOdometerKm,
+        predictedDate: byDate,
+        limitingFactor: 'date',
+        avgKmPerDay,
+    };
+}
 
 function resolveCategory(value: string): CarServiceCategory {
     const trimmed = value.trim();
@@ -167,6 +252,7 @@ export async function getCarServiceOverview(): Promise<CarServiceOverview> {
             latestDate: latest?.date ?? null,
             avgCostPerVisit: visits.length > 0 ? lifetimeTotal / visits.length : 0,
             avgKmBetweenVisits,
+            nextService: computeNextService(visits),
         },
     };
 }
