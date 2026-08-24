@@ -122,6 +122,7 @@ export interface IncomeTransaction {
     expenseId: number | null;
     paymentMethod?: string | null;
     fromPaymentMethod?: string | null;
+    transferFee?: number | null;
 }
 
 export interface IncomeTransactionsResponse {
@@ -747,6 +748,7 @@ export function createIncomeTransaction(
         expenseId?: number | null;
         paymentMethod?: string | null;
         fromPaymentMethod?: string | null;
+        transferFee?: number | null;
     }
 ) {
     return fetchJson<{ ok: true; id: number }>('/api/incomes/transactions', {
@@ -769,6 +771,7 @@ export function updateIncomeTransaction(
             | 'expenseId'
             | 'paymentMethod'
             | 'fromPaymentMethod'
+            | 'transferFee'
         >
     >
 ) {

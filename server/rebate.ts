@@ -101,10 +101,13 @@ function transferOutsAsSpend(
         const destAccount = accountsByName.get(destName.toLowerCase());
         if (destAccount?.accountType === 'investment') continue;
 
+        const transferFee = income.transferFee ? parseAmount(String(income.transferFee)) : 0;
+        const totalOut = parseAmount(income.amount) + transferFee;
+
         rows.push({
             id: -income.id,
             date: income.date,
-            amount: String(income.amount),
+            amount: String(totalOut),
             category: destName,
             description: income.description || '',
             paymentMethod: account.name,
@@ -465,6 +468,7 @@ export async function computeAccountRebate(
         paymentMethod: row.paymentMethod,
         fromPaymentMethod: row.fromPaymentMethod,
         expenseId: row.expenseId,
+        transferFee: row.transferFee != null ? String(row.transferFee) : null,
     }));
     const fundedExpenseIds = getFundedExpenseIds(incomeRows);
     const accountsByName = new Map(accounts.map((a) => [a.name.toLowerCase(), a]));

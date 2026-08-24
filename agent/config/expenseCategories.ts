@@ -19,6 +19,7 @@ export const DEFAULT_EXPENSE_CATEGORIES: ExpenseCategory[] = [
     { category: 'Insurance', monthlyBudget: 1000 },
     { category: 'Utility', monthlyBudget: 1000 },
     { category: 'Travel', monthlyBudget: 1000 },
+    { category: 'Bank charges', monthlyBudget: 50 },
     { category: 'Other', monthlyBudget: 1000 },
 ];
 

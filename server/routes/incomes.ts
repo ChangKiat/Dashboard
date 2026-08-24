@@ -11,6 +11,7 @@ import { enumerateDates, parseDateRange, parseMonth } from '../dateUtils';
 import { formatIncomeTransactions, groupIncomesByDate } from '../aggregators';
 import {
     isNonEmptyString,
+    isNonNegativeNumber,
     isPositiveNumber,
     isValidDate,
     parseIdParam,
@@ -23,6 +24,13 @@ function parsePaymentMethodField(value: unknown): string | null | undefined {
     if (value === null || value === '') return null;
     if (!isNonEmptyString(value)) return 'invalid';
     return value.trim();
+}
+
+function parseTransferFeeField(value: unknown): number | null | undefined | 'invalid' {
+    if (value === undefined) return undefined;
+    if (value === null || value === '') return null;
+    if (!isNonNegativeNumber(value)) return 'invalid';
+    return value;
 }
 
 router.get('/transactions', async (req, res) => {
@@ -110,6 +118,11 @@ router.post('/transactions', async (req, res) => {
         );
         if (accountError) return res.status(400).json({ error: accountError });
 
+        const transferFee = parseTransferFeeField(body.transferFee);
+        if (transferFee === 'invalid') {
+            return res.status(400).json({ error: 'transferFee must be a non-negative number' });
+        }
+
         const id = await appendIncome(
             body.date,
             body.amount,
@@ -119,7 +132,8 @@ router.post('/transactions', async (req, res) => {
             source,
             expenseId,
             paymentMethod ?? null,
-            fromPaymentMethod ?? null
+            fromPaymentMethod ?? null,
+            transferFee ?? undefined
         );
         res.json({ ok: true, id });
     } catch (err) {
@@ -146,6 +160,7 @@ router.patch('/transactions/:id', async (req, res) => {
             expenseId?: number | null;
             paymentMethod?: string | null;
             fromPaymentMethod?: string | null;
+            transferFee?: number | null;
         } = {};
 
         if (body.date != null) {
@@ -205,6 +220,13 @@ router.patch('/transactions/:id', async (req, res) => {
                 return res.status(400).json({ error: 'Invalid from payment method' });
             }
             fields.fromPaymentMethod = fromPaymentMethod ?? null;
+        }
+        if (body.transferFee !== undefined) {
+            const transferFee = parseTransferFeeField(body.transferFee);
+            if (transferFee === 'invalid') {
+                return res.status(400).json({ error: 'transferFee must be a non-negative number' });
+            }
+            fields.transferFee = transferFee;
         }
 
         if (Object.keys(fields).length === 0) {

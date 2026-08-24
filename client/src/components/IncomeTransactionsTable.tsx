@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { ExpenseTransaction, IncomeTransaction } from '../api';
 import {
@@ -16,6 +16,45 @@ import TablePagination from './TablePagination';
 
 const DAY_PAGE_SIZE = 5;
 const MONTH_PAGE_SIZE = 10;
+
+function roundMoney(value: number): number {
+    return Math.round(value * 100) / 100;
+}
+
+function isTngAccount(name: string): boolean {
+    const n = name.trim().toLowerCase();
+    return n === 'tng' || (n.includes('touch') && n.includes('go'));
+}
+
+function isShellCard(name: string): boolean {
+    return name.trim().toLowerCase().includes('shell');
+}
+
+function isShellToTng(from: string, to: string): boolean {
+    return isShellCard(from) && isTngAccount(to);
+}
+
+function suggestTransferFee(amount: number, from: string, to: string): number {
+    if (!isShellToTng(from, to) || !Number.isFinite(amount) || amount <= 0) return 0;
+    return roundMoney(amount * 0.01);
+}
+
+function formatFeeFieldValue(fee: number): string {
+    return fee.toFixed(2);
+}
+
+function parseFeeInput(value: string): number | null {
+    if (!value.trim()) return 0;
+    const n = parseFloat(value);
+    if (!Number.isFinite(n) || n < 0) return null;
+    return roundMoney(n);
+}
+
+function formatTransferFeeLabel(entry: IncomeTransaction, formatAmount: (amount: number) => string): string | null {
+    const fee = entry.transferFee ?? 0;
+    if (fee <= 0) return null;
+    return `(+${formatAmount(fee)} fee)`;
+}
 
 function expenseMatchesQuery(exp: ExpenseTransaction, query: string): boolean {
     if (String(exp.id).includes(query)) return true;
@@ -59,7 +98,9 @@ export default function IncomeTransactionsTable({
         expenseId: '',
         paymentMethod: '',
         fromPaymentMethod: '',
+        transferFee: '',
     });
+    const [feeDirty, setFeeDirty] = useState(false);
     const [saving, setSaving] = useState(false);
     const [modalError, setModalError] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
@@ -88,7 +129,9 @@ export default function IncomeTransactionsTable({
             expenseId: '',
             paymentMethod: '',
             fromPaymentMethod: '',
+            transferFee: '',
         });
+        setFeeDirty(false);
         setExpenseSearchQuery('');
         setModalError(null);
     }, [defaultDate, month]);
@@ -105,7 +148,9 @@ export default function IncomeTransactionsTable({
             expenseId: entry.expenseId != null ? String(entry.expenseId) : '',
             paymentMethod: entry.paymentMethod ?? '',
             fromPaymentMethod: entry.fromPaymentMethod ?? '',
+            transferFee: entry.transferFee != null && entry.transferFee > 0 ? formatFeeFieldValue(entry.transferFee) : '',
         });
+        setFeeDirty(false);
         setExpenseSearchQuery('');
         setModalError(null);
     };
@@ -113,6 +158,7 @@ export default function IncomeTransactionsTable({
     const closeModal = () => {
         setModalMode('closed');
         setEditingEntry(null);
+        setFeeDirty(false);
         setExpenseSearchQuery('');
         setModalError(null);
     };
@@ -125,7 +171,41 @@ export default function IncomeTransactionsTable({
             fromPaymentMethod: category === 'Account transfer' ? f.fromPaymentMethod : '',
         }));
         if (category !== 'Transfer') setExpenseSearchQuery('');
+        if (category !== 'Account transfer') {
+            setFeeDirty(false);
+            setForm((f) => ({ ...f, transferFee: '' }));
+        }
     };
+
+    const isAccountTransfer = form.category === 'Account transfer';
+
+    const suggestedTransferFee = useMemo(() => {
+        if (!isAccountTransfer) return 0;
+        const parsedAmount = parseFloat(form.amount);
+        return suggestTransferFee(parsedAmount, form.fromPaymentMethod, form.paymentMethod);
+    }, [form.amount, form.fromPaymentMethod, form.paymentMethod, isAccountTransfer]);
+
+    const effectiveTransferFee = useMemo(() => {
+        if (!isAccountTransfer) return 0;
+        if (feeDirty) return parseFeeInput(form.transferFee);
+        if (suggestedTransferFee > 0) return suggestedTransferFee;
+        return parseFeeInput(form.transferFee);
+    }, [feeDirty, form.transferFee, isAccountTransfer, suggestedTransferFee]);
+
+    const transferFromTotal = useMemo(() => {
+        if (!isAccountTransfer || effectiveTransferFee == null) return null;
+        const parsedAmount = parseFloat(form.amount);
+        if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) return null;
+        return roundMoney(parsedAmount + effectiveTransferFee);
+    }, [effectiveTransferFee, form.amount, isAccountTransfer]);
+
+    useEffect(() => {
+        if (!isAccountTransfer || feeDirty) return;
+        setForm((f) => ({
+            ...f,
+            transferFee: suggestedTransferFee > 0 ? formatFeeFieldValue(suggestedTransferFee) : '',
+        }));
+    }, [feeDirty, isAccountTransfer, suggestedTransferFee]);
 
     const handleSave = async () => {
         const amount = parseFloat(form.amount);
@@ -140,17 +220,21 @@ export default function IncomeTransactionsTable({
             return;
         }
 
-        const isAccountTransfer = form.category === 'Account transfer';
+        const isAccountTransferSave = form.category === 'Account transfer';
         const paymentMethod = form.paymentMethod.trim() || null;
-        const fromPaymentMethod = isAccountTransfer ? form.fromPaymentMethod.trim() || null : null;
+        const fromPaymentMethod = isAccountTransferSave ? form.fromPaymentMethod.trim() || null : null;
 
-        if (isAccountTransfer) {
+        if (isAccountTransferSave) {
             if (!fromPaymentMethod || !paymentMethod) {
                 setModalError('Account transfer requires both from and to accounts.');
                 return;
             }
             if (fromPaymentMethod === paymentMethod) {
                 setModalError('From and to accounts must be different.');
+                return;
+            }
+            if (effectiveTransferFee == null) {
+                setModalError('Service charge must be zero or more.');
                 return;
             }
         }
@@ -165,9 +249,16 @@ export default function IncomeTransactionsTable({
             expenseId = parsed;
         } else if (modalMode === 'edit' && form.category === 'Transfer' && !form.expenseId.trim()) {
             expenseId = null;
-        } else if (isAccountTransfer) {
+        } else if (isAccountTransferSave) {
             expenseId = null;
         }
+
+        const transferFee =
+            isAccountTransferSave && effectiveTransferFee != null && effectiveTransferFee > 0
+                ? effectiveTransferFee
+                : isAccountTransferSave
+                  ? 0
+                  : undefined;
 
         setSaving(true);
         setModalError(null);
@@ -180,6 +271,7 @@ export default function IncomeTransactionsTable({
                 source: form.source.trim() || null,
                 paymentMethod,
                 fromPaymentMethod,
+                ...(transferFee !== undefined ? { transferFee } : {}),
                 ...(expenseId !== undefined ? { expenseId } : {}),
             };
             if (modalMode === 'create') {
@@ -237,16 +329,60 @@ export default function IncomeTransactionsTable({
                 />
             </div>
             <div className="form-field">
-                <label htmlFor="income-amount">Amount</label>
+                <label htmlFor="income-amount">
+                    {isAccountTransfer ? 'Amount received (to account)' : 'Amount'}
+                </label>
                 <input
                     id="income-amount"
                     type="number"
                     min="0"
                     step="0.01"
                     value={form.amount}
-                    onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+                    onChange={(e) => {
+                        setFeeDirty(false);
+                        setForm((f) => ({ ...f, amount: e.target.value }));
+                    }}
                 />
             </div>
+            {isAccountTransfer && (
+                <div className="form-field">
+                    <label htmlFor="income-transfer-fee">Service charge</label>
+                    {feeDirty && (
+                        <button
+                            type="button"
+                            className="btn-link"
+                            onClick={() => {
+                                setFeeDirty(false);
+                                setForm((f) => ({ ...f, transferFee: '' }));
+                            }}
+                        >
+                            Reset to suggested
+                        </button>
+                    )}
+                    <input
+                        id="income-transfer-fee"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={
+                            feeDirty
+                                ? form.transferFee
+                                : suggestedTransferFee > 0
+                                  ? formatFeeFieldValue(suggestedTransferFee)
+                                  : form.transferFee
+                        }
+                        onChange={(e) => {
+                            setFeeDirty(true);
+                            setForm((f) => ({ ...f, transferFee: e.target.value }));
+                        }}
+                    />
+                    {transferFromTotal != null && form.fromPaymentMethod.trim() ? (
+                        <p className="muted form-hint">
+                            Total from {form.fromPaymentMethod.trim()}: {formatAmount(transferFromTotal)}
+                        </p>
+                    ) : null}
+                </div>
+            )}
             <div className="form-field">
                 <label htmlFor="income-description">Description</label>
                 <input
@@ -272,9 +408,10 @@ export default function IncomeTransactionsTable({
                     <PaymentMethodSelect
                         id="income-from-account"
                         value={form.fromPaymentMethod}
-                        onChange={(fromPaymentMethod) =>
-                            setForm((f) => ({ ...f, fromPaymentMethod }))
-                        }
+                        onChange={(fromPaymentMethod) => {
+                            setFeeDirty(false);
+                            setForm((f) => ({ ...f, fromPaymentMethod }));
+                        }}
                     />
                 </div>
             )}
@@ -283,7 +420,10 @@ export default function IncomeTransactionsTable({
                 <PaymentMethodSelect
                     id="income-to-account"
                     value={form.paymentMethod}
-                    onChange={(paymentMethod) => setForm((f) => ({ ...f, paymentMethod }))}
+                    onChange={(paymentMethod) => {
+                        setFeeDirty(false);
+                        setForm((f) => ({ ...f, paymentMethod }));
+                    }}
                 />
             </div>
             {showExpenseLink && (
@@ -428,6 +568,9 @@ export default function IncomeTransactionsTable({
                                             {renderAccountFlow(entry)}
                                             <span className="income-entry-amount">
                                                 {formatAmount(entry.amount)}
+                                                {formatTransferFeeLabel(entry, formatAmount)
+                                                    ? ` ${formatTransferFeeLabel(entry, formatAmount)}`
+                                                    : ''}
                                             </span>
                                             {entry.expenseId != null ? (
                                                 <span>expense #{entry.expenseId}</span>
@@ -444,6 +587,9 @@ export default function IncomeTransactionsTable({
                                                 ? ` · ${formatIncomeAccountFlow(entry.paymentMethod, entry.fromPaymentMethod)}`
                                                 : ''}{' '}
                                             · {formatAmount(entry.amount)}
+                                            {formatTransferFeeLabel(entry, formatAmount)
+                                                ? ` ${formatTransferFeeLabel(entry, formatAmount)}`
+                                                : ''}
                                             {entry.expenseId != null
                                                 ? ` · expense #${entry.expenseId}`
                                                 : ''}

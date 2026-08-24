@@ -7,7 +7,7 @@ import {
     paymentMethodsMatch,
     resolvePaymentMethod,
 } from '../config/paymentMethods';
-import { getReimbursementsByExpenseIds, getUnlinkedIncomeTotal, deleteIncomesByExpenseId } from './incomeService';
+import { getReimbursementsByExpenseIds, getUnlinkedIncomeTotal, deleteIncomesByExpenseId, getTransferFeesForSpendingSummary } from './incomeService';
 import {
     computeInstallmentSplit,
     getPaidLoanIdsOnDate,
@@ -258,6 +258,32 @@ export async function getSpendingSummary(
             };
             if (rowMatchesFilters(row, budgetFilters)) {
                 budgetSpent[canonicalCategory] = (budgetSpent[canonicalCategory] || 0) + net;
+            }
+        }
+    }
+
+    const transferFeeSummary = await getTransferFeesForSpendingSummary(
+        effectiveStart,
+        effectiveEnd,
+        {
+            category: resolvedFilterCategory,
+            description,
+            paymentMethod,
+        }
+    );
+    if (transferFeeSummary.total > 0) {
+        totalSpent += transferFeeSummary.total;
+        for (const [cat, amount] of Object.entries(transferFeeSummary.breakdown)) {
+            breakdown[cat] = (breakdown[cat] || 0) + amount;
+        }
+        for (const [method, amount] of Object.entries(transferFeeSummary.byPaymentMethod)) {
+            const methodKey = paymentMethodBucket(method);
+            breakdownByPaymentMethod[methodKey] =
+                (breakdownByPaymentMethod[methodKey] || 0) + amount;
+        }
+        if (budgetPeriod.singleMonth) {
+            for (const [cat, amount] of Object.entries(transferFeeSummary.breakdown)) {
+                budgetSpent[cat] = (budgetSpent[cat] || 0) + amount;
             }
         }
     }

@@ -37,6 +37,8 @@ export const incomes = pgTable('incomes', {
     expenseId: integer('expense_id').references(() => expenses.id),
     paymentMethod: text('payment_method'),
     fromPaymentMethod: text('from_payment_method'),
+    /** Extra debited from from_payment_method on Account transfer (fee on top of amount). */
+    transferFee: numeric('transfer_fee', { precision: 12, scale: 2 }),
     rebateAccountId: integer('rebate_account_id').references(() => paymentAccounts.id),
     rebatePeriodMonth: text('rebate_period_month'),
     rebateCategory: text('rebate_category'),

@@ -21,6 +21,7 @@ export type IncomeRow = {
     paymentMethod?: string | null;
     fromPaymentMethod?: string | null;
     expenseId?: number | null;
+    transferFee?: string | null;
 };
 
 export type AccountBalanceFields = {
@@ -58,6 +59,12 @@ function matchesAccount(stored: string | null | undefined, accountName: string):
 function parseAmount(value: string): number {
     const n = parseFloat(value);
     return Number.isFinite(n) ? n : 0;
+}
+
+function parseTransferFee(value: string | null | undefined): number {
+    if (!value) return 0;
+    const n = parseFloat(value);
+    return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
 function getBaselineDate(account: PaymentAccount): string {
@@ -119,14 +126,16 @@ export function computeAccountBalances(
     for (const income of incomes) {
         const amount = parseAmount(income.amount);
         if (income.category === 'Account transfer') {
+            const transferFee = parseTransferFee(income.transferFee);
+            const fromDebit = amount + transferFee;
             const fromAccount = getAccountByStoredName(income.fromPaymentMethod);
             const toAccount = getAccountByStoredName(income.paymentMethod);
             if (fromAccount && isOnOrAfterBaseline(income.date, fromAccount)) {
                 const fromEntry = deltas.get(fromAccount.id)!;
                 if (fromAccount.accountType === 'credit') {
-                    fromEntry.creditOwedDelta += amount;
+                    fromEntry.creditOwedDelta += fromDebit;
                 } else {
-                    fromEntry.debitDelta -= amount;
+                    fromEntry.debitDelta -= fromDebit;
                 }
             }
             if (toAccount && isOnOrAfterBaseline(income.date, toAccount)) {
@@ -210,12 +219,16 @@ export function buildAccountActivity(
     for (const income of incomes) {
         const amount = parseAmount(income.amount);
         if (income.category === 'Account transfer') {
+            const transferFee = parseTransferFee(income.transferFee);
+            const fromDebit = amount + transferFee;
+            const feeNote =
+                transferFee > 0 ? ` (+${transferFee.toFixed(2)} fee)` : '';
             if (matchesAccount(income.paymentMethod, account.name)) {
                 pushEntry({
                     id: income.id,
                     date: income.date,
                     type: 'transfer_in',
-                    description: income.description || 'Account transfer',
+                    description: (income.description || 'Account transfer') + feeNote,
                     category: income.category,
                     amount,
                     direction: 'in',
@@ -226,9 +239,9 @@ export function buildAccountActivity(
                     id: income.id,
                     date: income.date,
                     type: 'transfer_out',
-                    description: income.description || 'Account transfer',
+                    description: (income.description || 'Account transfer') + feeNote,
                     category: income.category,
-                    amount,
+                    amount: fromDebit,
                     direction: 'out',
                 });
             }

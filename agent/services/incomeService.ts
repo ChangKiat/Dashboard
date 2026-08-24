@@ -1,10 +1,36 @@
 import { and, desc, eq, gte, inArray, lte } from 'drizzle-orm';
-import { resolvePaymentMethod } from '../config/paymentMethods';
+import { resolvePaymentMethod, paymentMethodsMatch } from '../config/paymentMethods';
 import { requireDb } from '../db/client';
 import { expenses, incomes, investmentEvents } from '../db/schema';
 
 const INCOME_CATEGORIES = ['Claim', 'Transfer', 'Salary', 'Account transfer', 'Cashback', 'Interest', 'Other'] as const;
 export type IncomeCategory = (typeof INCOME_CATEGORIES)[number];
+
+export const TRANSFER_FEE_EXPENSE_CATEGORY = 'Bank charges';
+
+function roundMoney(value: number): number {
+    return Math.round(value * 100) / 100;
+}
+
+function parseTransferFeeValue(fee: number | null | undefined, category: string): number {
+    if (!isAccountTransferCategory(category)) {
+        if (fee != null && fee > 0) {
+            throw new Error('Transfer fee is only allowed for Account transfer');
+        }
+        return 0;
+    }
+    if (fee == null) return 0;
+    if (!Number.isFinite(fee) || fee < 0) {
+        throw new Error('Transfer fee must be a non-negative number');
+    }
+    return roundMoney(fee);
+}
+
+export function parseStoredTransferFee(value: string | null | undefined): number {
+    if (!value) return 0;
+    const n = parseFloat(value);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+}
 
 function todayInKL(): string {
     const t = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kuala_Lumpur' }));
@@ -74,7 +100,8 @@ export async function appendIncome(
     source?: string,
     expenseId?: number,
     paymentMethod?: string | null,
-    fromPaymentMethod?: string | null
+    fromPaymentMethod?: string | null,
+    transferFee?: number | null
 ): Promise<number> {
     const resolvedCategory = resolveIncomeCategory(category);
     const validationError = validateIncomePaymentAccounts(
@@ -84,6 +111,7 @@ export async function appendIncome(
     );
     if (validationError) throw new Error(validationError);
 
+    const fee = parseTransferFeeValue(transferFee, resolvedCategory);
     const accounts = normalizeIncomePaymentFields(resolvedCategory, paymentMethod, fromPaymentMethod);
     const db = requireDb();
     const [row] = await db
@@ -98,6 +126,7 @@ export async function appendIncome(
             expenseId: expenseId ?? null,
             paymentMethod: accounts.paymentMethod,
             fromPaymentMethod: accounts.fromPaymentMethod,
+            transferFee: fee > 0 ? String(fee) : null,
         })
         .returning({ id: incomes.id });
     return row.id;
@@ -201,6 +230,7 @@ export async function getIncomeById(id: number) {
         fromPaymentMethod: row.fromPaymentMethod
             ? resolvePaymentMethod(row.fromPaymentMethod)
             : null,
+        transferFee: parseStoredTransferFee(row.transferFee),
     };
 }
 
@@ -279,6 +309,7 @@ export async function updateIncome(
         expenseId?: number | null;
         paymentMethod?: string | null;
         fromPaymentMethod?: string | null;
+        transferFee?: number | null;
     }
 ): Promise<boolean> {
     const db = requireDb();
@@ -308,6 +339,12 @@ export async function updateIncome(
     );
     if (validationError) throw new Error(validationError);
 
+    if (fields.transferFee !== undefined) {
+        parseTransferFeeValue(fields.transferFee, nextCategory);
+    } else if (fields.category != null && !isAccountTransferCategory(nextCategory)) {
+        // category changed away from transfer — fee will be cleared below
+    }
+
     const set: Record<string, string | number | null> = {};
 
     if (fields.date != null) set.date = fields.date;
@@ -330,6 +367,13 @@ export async function updateIncome(
         set.fromPaymentMethod = isAccountTransferCategory(nextCategory)
             ? nextFromPaymentMethod
             : null;
+    }
+
+    if (fields.transferFee !== undefined) {
+        const fee = parseTransferFeeValue(fields.transferFee, nextCategory);
+        set.transferFee = fee > 0 ? String(fee) : null;
+    } else if (fields.category != null && !isAccountTransferCategory(nextCategory)) {
+        set.transferFee = null;
     }
 
     if (Object.keys(set).length === 0) return false;
@@ -459,6 +503,7 @@ export async function upsertInvestmentFundingTransfer(fields: {
             expenseId: fields.expenseId,
             paymentMethod: fields.toInvestmentAccount,
             fromPaymentMethod: fields.fromPaymentMethod,
+            transferFee: 0,
         });
         return transfer.id;
     }
@@ -496,6 +541,59 @@ export async function getUnlinkedIncomeTotal(startDate: string, endDate: string)
         total += parseFloat(row.amount);
     }
     return total;
+}
+
+export async function getTransferFeesForSpendingSummary(
+    startDate: string,
+    endDate: string,
+    filters?: {
+        category?: string;
+        description?: string;
+        paymentMethod?: string;
+    }
+): Promise<{ total: number; breakdown: Record<string, number>; byPaymentMethod: Record<string, number> }> {
+    const resolvedFilterCategory = filters?.category;
+    if (
+        resolvedFilterCategory != null &&
+        resolvedFilterCategory !== TRANSFER_FEE_EXPENSE_CATEGORY
+    ) {
+        return { total: 0, breakdown: {}, byPaymentMethod: {} };
+    }
+
+    const db = requireDb();
+    const rows = await db.select().from(incomes);
+    let total = 0;
+    const breakdown: Record<string, number> = {};
+    const byPaymentMethod: Record<string, number> = {};
+
+    for (const row of rows) {
+        if (!isAccountTransferCategory(row.category)) continue;
+        const fee = parseStoredTransferFee(row.transferFee);
+        if (fee <= 0) continue;
+        if (row.date < startDate || row.date > endDate) continue;
+
+        if (filters?.description) {
+            if (!row.description.toLowerCase().includes(filters.description.toLowerCase())) {
+                continue;
+            }
+        }
+        if (filters?.paymentMethod) {
+            const from = row.fromPaymentMethod
+                ? resolvePaymentMethod(row.fromPaymentMethod)
+                : null;
+            if (!from || !paymentMethodsMatch(from, filters.paymentMethod)) continue;
+        }
+
+        total += fee;
+        breakdown[TRANSFER_FEE_EXPENSE_CATEGORY] =
+            (breakdown[TRANSFER_FEE_EXPENSE_CATEGORY] || 0) + fee;
+        const methodKey = row.fromPaymentMethod
+            ? resolvePaymentMethod(row.fromPaymentMethod) ?? row.fromPaymentMethod
+            : 'Unspecified';
+        byPaymentMethod[methodKey] = (byPaymentMethod[methodKey] || 0) + fee;
+    }
+
+    return { total, breakdown, byPaymentMethod };
 }
 
 export function formatIncomeAccountFlow(

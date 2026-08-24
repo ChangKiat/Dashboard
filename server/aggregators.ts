@@ -104,6 +104,7 @@ export type IncomeTransactionRow = {
     expenseId: number | null;
     paymentMethod?: string | null;
     fromPaymentMethod?: string | null;
+    transferFee?: string | null;
 };
 
 export function formatIncomeTransactions(rows: IncomeTransactionRow[]) {
@@ -117,6 +118,10 @@ export function formatIncomeTransactions(rows: IncomeTransactionRow[]) {
         expenseId: row.expenseId,
         paymentMethod: row.paymentMethod ?? null,
         fromPaymentMethod: row.fromPaymentMethod ?? null,
+        transferFee:
+            row.transferFee != null && row.transferFee !== ''
+                ? parseFloat(row.transferFee)
+                : null,
     }));
 }
 
