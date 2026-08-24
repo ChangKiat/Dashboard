@@ -69,9 +69,10 @@ export function pickDefaultExpenseDate(
     return [...activeDates].sort().reverse()[0];
 }
 
-export function pickDefaultIncomeDate(
+export function pickDefaultCashflowDate(
     month: string,
-    dailySeries: { date: string; total: number }[]
+    expenseSeries: { date: string; total: number }[],
+    incomeSeries: { date: string; total: number }[]
 ): string {
-    return pickDefaultExpenseDate(month, dailySeries);
+    return pickDefaultExpenseDate(month, [...expenseSeries, ...incomeSeries]);
 }

@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { fetchHealth, getAuthMe, logoutAuth } from './api';
-import ExpensesSection from './components/ExpensesSection';
+import CashflowSection from './components/CashflowSection';
 import HealthSection from './components/HealthSection';
-import IncomeSection from './components/IncomeSection';
 import CarServiceSection from './components/CarServiceSection';
 import LoginGate from './components/LoginGate';
 import MonthPicker from './components/MonthPicker';
@@ -83,8 +82,7 @@ export default function App() {
                 )}
 
                 <main className="main">
-                    {activeTab === 'expenses' && <ExpensesSection month={month} />}
-                    {activeTab === 'income' && <IncomeSection month={month} />}
+                    {activeTab === 'cashflow' && <CashflowSection month={month} />}
                     {activeTab === 'health' && <HealthSection month={month} />}
                     {activeTab === 'car' && <CarServiceSection />}
                     {activeTab === 'setup' && <SetupSection month={month} />}

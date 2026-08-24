@@ -4,21 +4,28 @@ import type {
     ExpenseDailyPoint,
     ExpenseOverviewResponse,
     ExpenseTransaction,
+    IncomeDailyPoint,
+    IncomeTransaction,
 } from '../api';
 import {
+    applyDueFixedContributions,
     fetchExpenseDaily,
     fetchExpenseOverview,
     fetchExpenseTransactions,
+    fetchIncomeDaily,
+    fetchIncomeTransactions,
     fetchSyncStatus,
-    applyDueFixedContributions,
 } from '../api';
-import { useSmartRefresh } from '../hooks/useSmartRefresh';
+import { shiftMonth } from '../hooks/useMonth';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
-import { monthToDateRange, pickDefaultExpenseDate } from '../utils/dateRange';
+import { useSmartRefresh } from '../hooks/useSmartRefresh';
 import { getBudgetStatus } from '../utils/budgetStatus';
+import { monthToDateRange, pickDefaultCashflowDate } from '../utils/dateRange';
+import { sumIncomeDailyTotals } from '../utils/incomeAggregates';
 
-import ExpenseCalendar from './ExpenseCalendar';
-import ExpenseDayDetailPanel from './ExpenseDayDetailPanel';
+import CashflowCalendar from './CashflowCalendar';
+import CashflowDayDetailPanel from './CashflowDayDetailPanel';
+import PaymentAccountsPanel from './PaymentAccountsPanel';
 import SummaryCard from './SummaryCard';
 import TripsPanel from './TripsPanel';
 import VariableExpensesTable from './VariableExpensesTable';
@@ -31,31 +38,50 @@ function formatMYR(amount: number) {
     return `RM ${amount.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export default function ExpensesSection({ month }: Props) {
+export default function CashflowSection({ month }: Props) {
     const { refresh: refreshAccounts } = usePaymentAccounts();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [selectedDate, setSelectedDate] = useState<string>('');
     const [data, setData] = useState<ExpenseOverviewResponse | null>(null);
     const [transactions, setTransactions] = useState<ExpenseTransaction[]>([]);
-    const [dailySeries, setDailySeries] = useState<ExpenseDailyPoint[]>([]);
+    const [incomes, setIncomes] = useState<IncomeTransaction[]>([]);
+    const [recentExpenses, setRecentExpenses] = useState<ExpenseTransaction[]>([]);
+    const [expenseSeries, setExpenseSeries] = useState<ExpenseDailyPoint[]>([]);
+    const [incomeSeries, setIncomeSeries] = useState<IncomeDailyPoint[]>([]);
     const fingerprintRef = useRef<string | null>(null);
 
     const loadData = useCallback(async (options?: { silent?: boolean }) => {
         const range = monthToDateRange(month);
-        const [overviewRes, transactionsRes, dailyRes] = await Promise.all([
-            fetchExpenseOverview(month),
-            fetchExpenseTransactions(month),
-            fetchExpenseDaily(range),
-        ]);
+        const prevMonth = shiftMonth(month, -1);
+        const [overviewRes, expensesRes, prevExpensesRes, incomesRes, expenseDaily, incomeDaily] =
+            await Promise.all([
+                fetchExpenseOverview(month),
+                fetchExpenseTransactions(month),
+                fetchExpenseTransactions(prevMonth),
+                fetchIncomeTransactions(month),
+                fetchExpenseDaily(range),
+                fetchIncomeDaily(range),
+            ]);
         setData(overviewRes);
-        setTransactions(transactionsRes.entries);
-        setDailySeries(dailyRes.series);
+        setTransactions(expensesRes.entries);
+        setIncomes(incomesRes.entries);
+        const byId = new Map<number, ExpenseTransaction>();
+        for (const entry of [...prevExpensesRes.entries, ...expensesRes.entries]) {
+            byId.set(entry.id, entry);
+        }
+        setRecentExpenses(
+            [...byId.values()].sort((a, b) =>
+                b.date !== a.date ? (b.date < a.date ? -1 : 1) : b.id - a.id
+            )
+        );
+        setExpenseSeries(expenseDaily.series);
+        setIncomeSeries(incomeDaily.series);
 
         if (!options?.silent) {
             setSelectedDate((prev) => {
                 if (prev.startsWith(`${month}-`)) return prev;
-                return pickDefaultExpenseDate(month, dailyRes.series);
+                return pickDefaultCashflowDate(month, expenseDaily.series, incomeDaily.series);
             });
         }
 
@@ -125,41 +151,65 @@ export default function ExpensesSection({ month }: Props) {
         return 'default' as const;
     }, [data]);
 
+    const monthIncome = useMemo(() => sumIncomeDailyTotals(incomeSeries), [incomeSeries]);
+
+    const budgetLeft = data ? data.totals.budget - data.totals.actualSpend : 0;
+
     const variableCategories = useMemo(
         () => data?.variable.map((v) => v.category) ?? [],
         [data?.variable]
     );
 
-    const dayTransactions = useMemo(
+    const dayExpenses = useMemo(
         () => transactions.filter((t) => t.date === selectedDate && t.tripLeg !== 'fund'),
         [transactions, selectedDate]
     );
 
-    const daySummary = useMemo(
-        () => dailySeries.find((d) => d.date === selectedDate),
-        [dailySeries, selectedDate]
+    const dayIncomes = useMemo(
+        () =>
+            incomes
+                .filter((row) => row.date === selectedDate)
+                .sort((a, b) => b.id - a.id),
+        [incomes, selectedDate]
     );
 
-    if (loading) return <section className="panel"><p className="muted">Loading expenses…</p></section>;
+    const dayExpenseSummary = useMemo(
+        () => expenseSeries.find((d) => d.date === selectedDate),
+        [expenseSeries, selectedDate]
+    );
+
+    const dayIncomeSummary = useMemo(
+        () => incomeSeries.find((d) => d.date === selectedDate),
+        [incomeSeries, selectedDate]
+    );
+
+    if (loading) return <section className="panel"><p className="muted">Loading cashflow…</p></section>;
     if (error) return <section className="panel"><p className="error">{error}</p></section>;
     if (!data) return null;
 
     return (
         <section className="panel">
             <div className="expenses-layout">
-                <div className="expenses-hero-row">
+                <div className="expenses-hero-row cashflow-hero-row">
                     <SummaryCard
-                        label="Salary after tax"
-                        value={formatMYR(data.salaryAfterTax)}
+                        label="Total income"
+                        value={formatMYR(monthIncome)}
                         variant="highlight"
                     />
-                    <SummaryCard label="Amount can use" value={formatMYR(data.totals.amountCanUse)} />
-                    <SummaryCard label="Fixed expenses" value={formatMYR(data.totals.fixExpensesTotal)} />
-                    <SummaryCard label="Budget" value={formatMYR(data.totals.budget)} />
                     <SummaryCard
                         label="Actual spend"
                         value={formatMYR(data.totals.actualSpend)}
                         variant={actualSpendVariant}
+                    />
+                    <SummaryCard
+                        label="Net cashflow"
+                        value={formatMYR(data.totals.netCashflow)}
+                    />
+                    <SummaryCard label="Amount can use" value={formatMYR(data.totals.amountCanUse)} />
+                    <SummaryCard
+                        label="Budget left"
+                        value={formatMYR(budgetLeft)}
+                        sub={`Budget ${formatMYR(data.totals.budget)}`}
                     />
                 </div>
 
@@ -167,9 +217,10 @@ export default function ExpensesSection({ month }: Props) {
 
                 <div className="expenses-calendar-row">
                     <div className="expenses-calendar">
-                        <ExpenseCalendar
+                        <CashflowCalendar
                             month={month}
-                            dailySeries={dailySeries}
+                            expenseSeries={expenseSeries}
+                            incomeSeries={incomeSeries}
                             selectedDate={selectedDate}
                             onSelectDate={setSelectedDate}
                             formatAmount={formatMYR}
@@ -178,10 +229,13 @@ export default function ExpensesSection({ month }: Props) {
 
                     {selectedDate && (
                         <div className="expenses-day-panel">
-                            <ExpenseDayDetailPanel
+                            <CashflowDayDetailPanel
                                 selectedDate={selectedDate}
-                                transactions={dayTransactions}
-                                daySummary={daySummary}
+                                expenses={dayExpenses}
+                                incomes={dayIncomes}
+                                recentExpenses={recentExpenses}
+                                expenseSummary={dayExpenseSummary}
+                                incomeSummary={dayIncomeSummary}
                                 variableCategories={variableCategories}
                                 formatAmount={formatMYR}
                                 onChanged={handleChanged}
@@ -189,6 +243,13 @@ export default function ExpensesSection({ month }: Props) {
                         </div>
                     )}
                 </div>
+
+                <PaymentAccountsPanel
+                    mode="balances"
+                    month={month}
+                    formatAmount={formatMYR}
+                    onChanged={handleChanged}
+                />
 
                 <TripsPanel
                     variableCategories={variableCategories}

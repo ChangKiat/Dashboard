@@ -1,10 +1,10 @@
 import { useCallback, useState } from 'react';
 
-export type TabId = 'expenses' | 'income' | 'health' | 'car' | 'setup';
+export type TabId = 'cashflow' | 'health' | 'car' | 'setup';
 
 const STORAGE_KEY = 'dashboard-active-tab';
 
-const VALID_TABS: TabId[] = ['expenses', 'income', 'health', 'car', 'setup'];
+const VALID_TABS: TabId[] = ['cashflow', 'health', 'car', 'setup'];
 
 function readStoredTab(): TabId {
     try {
@@ -12,18 +12,20 @@ function readStoredTab(): TabId {
         if (stored === 'workouts' || stored === 'meals') {
             return 'health';
         }
+        if (stored === 'expenses' || stored === 'income') {
+            return 'cashflow';
+        }
         if (stored && VALID_TABS.includes(stored as TabId)) {
             return stored as TabId;
         }
     } catch {
         // sessionStorage unavailable
     }
-    return 'expenses';
+    return 'cashflow';
 }
 
 export const TAB_LABELS: Record<TabId, string> = {
-    expenses: 'Expenses',
-    income: 'Income',
+    cashflow: 'Cashflow',
     health: 'Health',
     car: 'Car',
     setup: 'Setup',

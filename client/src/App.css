@@ -1,5 +1,5 @@
 .app {
-  max-width: 1200px;
+  max-width: 1600px;
   margin: 0 auto;
   padding: 20px 20px 48px;
 }
@@ -186,6 +186,10 @@
 
 .expenses-hero-row .summary-card--highlight .summary-value {
   font-size: 1.35rem;
+}
+
+.cashflow-hero-row .summary-card--highlight .summary-value {
+  color: var(--ok);
 }
 
 .card {
@@ -1018,7 +1022,13 @@ div.payment-account-card-main:hover {
 
 @media (min-width: 768px) {
   .expenses-calendar-row {
-    grid-template-columns: minmax(360px, 1.2fr) minmax(280px, 1fr);
+    grid-template-columns: minmax(320px, 0.9fr) minmax(360px, 1.4fr);
+  }
+}
+
+@media (min-width: 1200px) {
+  .expenses-calendar-row {
+    grid-template-columns: minmax(340px, 0.75fr) minmax(640px, 1.6fr);
   }
 }
 
@@ -2401,8 +2411,8 @@ div.payment-account-card-main:hover {
 }
 
 .activity-badge.expense {
-  background: rgba(251, 191, 36, 0.25);
-  color: var(--warn);
+  background: color-mix(in srgb, var(--danger) 25%, transparent);
+  color: var(--danger);
   font-size: 0.6rem;
   padding: 2px 3px;
 }
@@ -2435,6 +2445,47 @@ div.payment-account-card-main:hover {
 .day-detail-panel > .day-detail-stat {
   grid-column: 1;
   grid-row: 2;
+}
+
+.cashflow-day-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  margin: 0 0 4px;
+}
+
+.cashflow-stat.income {
+  color: var(--ok);
+}
+
+.cashflow-stat.expense {
+  color: var(--danger);
+}
+
+.cashflow-day-streams {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  min-width: 0;
+  margin-top: 8px;
+}
+
+.cashflow-day-stream {
+  min-width: 0;
+}
+
+.cashflow-day-stream h4 {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+@media (min-width: 1100px) {
+  .cashflow-day-streams {
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
 }
 
 .day-detail-panel > .section-header-row {
