@@ -22,6 +22,7 @@ import {
     roundMoney,
     tradeFeeFromEvent,
 } from '../utils/rakutenTradeFees';
+import AccountIcon from './AccountIcon';
 import RecordModal from './RecordModal';
 
 interface Props {
@@ -542,7 +543,13 @@ export default function PortfolioModal({
                 >
                     <div className="account-activity-header">
                         <div className="account-activity-header-top">
-                            <h4>{account.name}</h4>
+                            <h4 className="account-activity-title">
+                                <AccountIcon
+                                    name={account.name}
+                                    accountType={account.accountType}
+                                />
+                                {account.name}
+                            </h4>
                             <div className="portfolio-header-actions">
                                 <button type="button" className="btn-add" onClick={openAdd}>
                                     + Add

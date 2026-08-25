@@ -922,12 +922,50 @@ div.payment-account-card-main:hover {
   border-color: var(--ok);
 }
 
+.payment-account-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .payment-account-name {
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--text);
   min-width: 0;
   word-break: break-word;
+}
+
+.account-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 8px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  user-select: none;
+}
+
+.account-icon-sm {
+  width: 22px;
+  height: 22px;
+  font-size: 0.55rem;
+  border-radius: 6px;
+}
+
+.account-icon-md {
+  width: 28px;
+  height: 28px;
+  font-size: 0.62rem;
+}
+
+.account-activity-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .income-transactions-list {

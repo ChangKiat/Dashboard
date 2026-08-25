@@ -15,6 +15,7 @@ import {
 } from '../utils/rebateForm';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
 import AccountActivityModal from './AccountActivityModal';
+import AccountIcon from './AccountIcon';
 import CreditAccountForm, { type CreditSettingsTab } from './CreditAccountForm';
 import PortfolioModal from './PortfolioModal';
 import RecordModal from './RecordModal';
@@ -172,7 +173,13 @@ function PaymentAccountColumn({
                                     className="payment-account-card-main"
                                     onClick={() => onView(account)}
                                 >
-                                    <span className="payment-account-name">{account.name}</span>
+                                    <span className="payment-account-title">
+                                        <AccountIcon
+                                            name={account.name}
+                                            accountType={account.accountType}
+                                        />
+                                        <span className="payment-account-name">{account.name}</span>
+                                    </span>
                                     <AccountBalanceStats
                                         account={account}
                                         formatAmount={formatAmount}
@@ -180,7 +187,13 @@ function PaymentAccountColumn({
                                 </button>
                             ) : (
                                 <div className="payment-account-card-main">
-                                    <span className="payment-account-name">{account.name}</span>
+                                    <span className="payment-account-title">
+                                        <AccountIcon
+                                            name={account.name}
+                                            accountType={account.accountType}
+                                        />
+                                        <span className="payment-account-name">{account.name}</span>
+                                    </span>
                                     <AccountBalanceStats
                                         account={account}
                                         formatAmount={formatAmount}

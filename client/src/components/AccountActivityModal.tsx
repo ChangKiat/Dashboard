@@ -15,6 +15,7 @@ import {
     isDateInRange,
 } from '../utils/statementPeriod';
 import ConfirmDialog from './ConfirmDialog';
+import AccountIcon from './AccountIcon';
 import RebateSummary from './RebateSummary';
 import TablePagination from './TablePagination';
 
@@ -255,7 +256,13 @@ export default function AccountActivityModal({
             <div className="record-modal account-activity-modal" onClick={(e) => e.stopPropagation()}>
                 <div className="account-activity-header">
                     <div className="account-activity-header-top">
-                        <h4>{account.name}</h4>
+                        <h4 className="account-activity-title">
+                            <AccountIcon
+                                name={account.name}
+                                accountType={account.accountType}
+                            />
+                            {account.name}
+                        </h4>
                         {showTabs && (
                             <div className="account-activity-tabs">
                                 <button
