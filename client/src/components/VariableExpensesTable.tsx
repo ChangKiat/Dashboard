@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
 
-import type { ExpenseTransaction } from '../api';
+import type { ExpenseTransaction, IncomeTransaction } from '../api';
 import {
     BUDGET_STATUS_LABELS,
     getBudgetStatus,
     getBudgetUsagePct,
 } from '../utils/budgetStatus';
+import { BANK_CHARGES_CATEGORY, transferFeesToExpenseEntries } from '../utils/bankCharges';
 import VariableCategoryDetailModal from './VariableCategoryDetailModal';
 
 interface Row {
@@ -18,10 +19,11 @@ interface Row {
 interface Props {
     rows: Row[];
     transactions: ExpenseTransaction[];
+    incomes?: IncomeTransaction[];
     formatAmount: (amount: number) => string;
 }
 
-export default function VariableExpensesTable({ rows, transactions, formatAmount }: Props) {
+export default function VariableExpensesTable({ rows, transactions, incomes = [], formatAmount }: Props) {
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
     const selectedRow = useMemo(
@@ -31,10 +33,17 @@ export default function VariableExpensesTable({ rows, transactions, formatAmount
 
     const selectedTransactions = useMemo(() => {
         if (!selectedCategory) return [];
-        return transactions.filter(
+
+        const expenseEntries = transactions.filter(
             (t) => t.category === selectedCategory && t.tripLeg !== 'fund'
         );
-    }, [transactions, selectedCategory]);
+
+        if (selectedCategory !== BANK_CHARGES_CATEGORY) {
+            return expenseEntries;
+        }
+
+        return [...expenseEntries, ...transferFeesToExpenseEntries(incomes)];
+    }, [transactions, incomes, selectedCategory]);
 
     const alertCategories = useMemo(() => {
         return rows

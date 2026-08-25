@@ -213,7 +213,12 @@ export default function CashflowSection({ month }: Props) {
                     />
                 </div>
 
-                <VariableExpensesTable rows={data.variable} transactions={transactions} formatAmount={formatMYR} />
+                <VariableExpensesTable
+                    rows={data.variable}
+                    transactions={transactions}
+                    incomes={incomes}
+                    formatAmount={formatMYR}
+                />
 
                 <div className="expenses-calendar-row">
                     <div className="expenses-calendar">
