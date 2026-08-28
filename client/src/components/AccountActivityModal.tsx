@@ -585,7 +585,7 @@ export default function AccountActivityModal({
                                             <tr
                                                 key={`${entry.type}-${entry.id}-${entry.direction}`}
                                                 className={[
-                                                    entry.type === 'income' && 'account-activity-income-row',
+                                                    entry.direction === 'in' && 'account-activity-in-row',
                                                     entry.beforeBaseline && 'account-activity-before-baseline',
                                                 ]
                                                     .filter(Boolean)

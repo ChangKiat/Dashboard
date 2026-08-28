@@ -896,11 +896,11 @@ div.payment-account-card-main:hover {
   white-space: nowrap;
 }
 
-.account-activity-table tr.account-activity-income-row td {
+.account-activity-table tr.account-activity-in-row td {
   background: color-mix(in srgb, var(--ok) 12%, transparent);
 }
 
-.account-activity-table tr.account-activity-income-row td:nth-child(2) {
+.account-activity-table tr.account-activity-in-row td:nth-child(2) {
   color: var(--ok);
   font-weight: 500;
 }
@@ -914,6 +914,14 @@ div.payment-account-card-main:hover {
 }
 
 .account-activity-out {
+  color: var(--danger);
+}
+
+.data-table td.account-activity-in {
+  color: var(--ok);
+}
+
+.data-table td.account-activity-out {
   color: var(--danger);
 }
 
