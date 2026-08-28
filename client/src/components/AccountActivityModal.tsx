@@ -151,11 +151,17 @@ export default function AccountActivityModal({
     const periodTotals = useMemo(() => {
         let totalOut = 0;
         let totalIn = 0;
+        let totalCashback = 0;
         for (const entry of periodEntries) {
             if (entry.direction === 'out') totalOut += entry.amount;
-            else totalIn += entry.amount;
+            else {
+                totalIn += entry.amount;
+                if (entry.category === 'Cashback') totalCashback += entry.amount;
+            }
         }
-        return { totalOut, totalIn, net: totalIn - totalOut };
+        const net = totalIn - totalOut;
+        const afterCashback = Math.max(0, totalOut - totalCashback);
+        return { totalOut, totalIn, net, afterCashback };
     }, [periodEntries]);
 
     const hasPreBaseline = useMemo(
@@ -350,25 +356,42 @@ export default function AccountActivityModal({
                 </div>
                 {showActivityContent && !loading && !error && periodEntries.length > 0 && (
                     <div className="account-activity-period-summary">
-                        <span>
-                            Charges: <strong>{formatAmount(periodTotals.totalOut)}</strong>
-                        </span>
-                        <span>
-                            Credits: <strong>{formatAmount(periodTotals.totalIn)}</strong>
-                        </span>
-                        <span>
-                            Net:{' '}
-                            <strong
-                                className={
-                                    periodTotals.net >= 0
-                                        ? 'account-activity-in'
-                                        : 'account-activity-out'
-                                }
-                            >
-                                {periodTotals.net >= 0 ? '+' : '−'}
-                                {formatAmount(Math.abs(periodTotals.net))}
-                            </strong>
-                        </span>
+                        {accountData?.accountType === 'credit' ? (
+                            <>
+                                <span>
+                                    Total used:{' '}
+                                    <strong>{formatAmount(periodTotals.totalOut)}</strong>
+                                </span>
+                                <span>
+                                    After cashback:{' '}
+                                    <strong className="account-activity-out">
+                                        {formatAmount(periodTotals.afterCashback)}
+                                    </strong>
+                                </span>
+                            </>
+                        ) : (
+                            <>
+                                <span>
+                                    Charges: <strong>{formatAmount(periodTotals.totalOut)}</strong>
+                                </span>
+                                <span>
+                                    Credits: <strong>{formatAmount(periodTotals.totalIn)}</strong>
+                                </span>
+                                <span>
+                                    Net:{' '}
+                                    <strong
+                                        className={
+                                            periodTotals.net >= 0
+                                                ? 'account-activity-in'
+                                                : 'account-activity-out'
+                                        }
+                                    >
+                                        {periodTotals.net >= 0 ? '+' : '−'}
+                                        {formatAmount(Math.abs(periodTotals.net))}
+                                    </strong>
+                                </span>
+                            </>
+                        )}
                     </div>
                 )}
                 {showActivityContent &&
