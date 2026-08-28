@@ -23,10 +23,21 @@ interface Props {
     formatAmount: (amount: number) => string;
     onChanged: () => void;
     defaultDate?: string;
+    searchQuery?: string;
 }
 
 function emptyReimbursement(): ReimbursementRow {
     return { source: '', amount: '', paymentMethod: '' };
+}
+
+function expenseEntryMatchesQuery(entry: ExpenseTransaction, query: string): boolean {
+    if (entry.description.toLowerCase().includes(query)) return true;
+    if (entry.category.toLowerCase().includes(query)) return true;
+    if (entry.paymentMethod?.toLowerCase().includes(query)) return true;
+    if (entry.toInvestmentAccount?.toLowerCase().includes(query)) return true;
+    if (String(entry.amount).includes(query)) return true;
+    if (entry.amount.toFixed(2).includes(query)) return true;
+    return false;
 }
 
 export default function ExpenseTransactionsTable({
@@ -35,6 +46,7 @@ export default function ExpenseTransactionsTable({
     formatAmount,
     onChanged,
     defaultDate,
+    searchQuery = '',
 }: Props) {
     const { accounts } = usePaymentAccounts();
     const investmentAccounts = useMemo(
@@ -61,7 +73,13 @@ export default function ExpenseTransactionsTable({
     const [modalError, setModalError] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
 
-    const { page, setPage, pageItems, totalPages, totalItems } = usePagination(entries, {
+    const filteredEntries = useMemo(() => {
+        const q = searchQuery.trim().toLowerCase();
+        if (!q) return entries;
+        return entries.filter((entry) => expenseEntryMatchesQuery(entry, q));
+    }, [entries, searchQuery]);
+
+    const { page, setPage, pageItems, totalPages, totalItems } = usePagination(filteredEntries, {
         pageSize: DAY_PAGE_SIZE,
     });
 
@@ -433,6 +451,9 @@ export default function ExpenseTransactionsTable({
                 <p className="muted">No transactions logged this day.</p>
             ) : (
                 <>
+                    {filteredEntries.length === 0 && (
+                        <p className="muted">No transactions match your search.</p>
+                    )}
                     <ul className="day-entry-list">
                         {pageItems.map((entry) => (
                             <li key={entry.id} className="day-entry-card">

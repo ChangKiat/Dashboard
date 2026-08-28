@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 import type { ExpenseDailyPoint, ExpenseTransaction, IncomeDailyPoint, IncomeTransaction } from '../api';
 import ExpenseTransactionsTable from './ExpenseTransactionsTable';
 import IncomeTransactionsTable from './IncomeTransactionsTable';
@@ -37,6 +39,11 @@ export default function CashflowDayDetailPanel({
 }: Props) {
     const spendTotal = expenseSummary?.total ?? 0;
     const incomeTotal = incomeSummary?.total ?? 0;
+    const [searchQuery, setSearchQuery] = useState('');
+
+    useEffect(() => {
+        setSearchQuery('');
+    }, [selectedDate]);
 
     return (
         <div className="day-detail-panel cashflow-day-panel">
@@ -45,6 +52,17 @@ export default function CashflowDayDetailPanel({
                 <span className="cashflow-stat income">Income: {formatAmount(incomeTotal)}</span>
                 <span className="cashflow-stat expense">Spend: {formatAmount(spendTotal)}</span>
             </p>
+            {incomes.length + expenses.length > 0 && (
+                <div className="category-detail-search">
+                    <input
+                        type="search"
+                        placeholder="Search income and expenses…"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        aria-label="Search income and expenses"
+                    />
+                </div>
+            )}
             <div className="cashflow-day-streams">
                 <div className="cashflow-day-stream">
                     <h4>Income</h4>
@@ -55,6 +73,7 @@ export default function CashflowDayDetailPanel({
                         onChanged={onChanged}
                         variant="day"
                         defaultDate={selectedDate}
+                        searchQuery={searchQuery}
                     />
                 </div>
                 <div className="cashflow-day-stream">
@@ -65,6 +84,7 @@ export default function CashflowDayDetailPanel({
                         formatAmount={formatAmount}
                         onChanged={onChanged}
                         defaultDate={selectedDate}
+                        searchQuery={searchQuery}
                     />
                 </div>
             </div>

@@ -515,6 +515,10 @@ div.payment-account-card-main:hover {
   color: var(--text-dim);
 }
 
+.account-activity-payoff-btn {
+  flex-shrink: 0;
+}
+
 .account-activity-period-range {
   margin: 4px 0 0;
   font-size: 0.75rem;

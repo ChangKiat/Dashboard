@@ -4,6 +4,7 @@ import type { AccountActivityEntry, HoldingPosition, PaymentAccount } from '../a
 import {
     accrueFdInterest,
     createInstrument,
+    createIncomeTransaction,
     deleteInstrument,
     fetchAccountActivity,
     fetchPortfolio,
@@ -16,7 +17,9 @@ import {
 } from '../utils/statementPeriod';
 import ConfirmDialog from './ConfirmDialog';
 import AccountIcon from './AccountIcon';
+import PaymentMethodSelect from './PaymentMethodSelect';
 import RebateSummary from './RebateSummary';
+import RecordModal from './RecordModal';
 import TablePagination from './TablePagination';
 
 interface Props {
@@ -94,6 +97,10 @@ export default function AccountActivityModal({
     const [fdSaving, setFdSaving] = useState(false);
     const [fdError, setFdError] = useState<string | null>(null);
     const [closingFd, setClosingFd] = useState<HoldingPosition | null>(null);
+    const [payingOff, setPayingOff] = useState(false);
+    const [payForm, setPayForm] = useState({ date: today(), fromPaymentMethod: '', amount: '' });
+    const [paySaving, setPaySaving] = useState(false);
+    const [payError, setPayError] = useState<string | null>(null);
 
     const fdEnabled = account?.accountType === 'account';
 
@@ -251,6 +258,60 @@ export default function AccountActivityModal({
         }
     };
 
+    const openPayOff = () => {
+        const periodOwed = periodTotals.afterCashback;
+        setPayForm({
+            date: periodRange?.end ?? today(),
+            fromPaymentMethod: '',
+            amount: periodOwed > 0 ? periodOwed.toFixed(2) : '',
+        });
+        setPayError(null);
+        setPayingOff(true);
+    };
+
+    const closePayOff = () => {
+        setPayingOff(false);
+        setPayError(null);
+    };
+
+    const handlePayOff = async () => {
+        if (!account) return;
+        const parsedAmount = parseFloat(payForm.amount);
+        if (!payForm.date || !payForm.fromPaymentMethod) {
+            setPayError('Date and from account are required.');
+            return;
+        }
+        if (payForm.fromPaymentMethod === account.name) {
+            setPayError('From account must be different from this card.');
+            return;
+        }
+        if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+            setPayError('Amount must be positive.');
+            return;
+        }
+        const amount = Math.round(parsedAmount * 100) / 100;
+        setPaySaving(true);
+        setPayError(null);
+        try {
+            await createIncomeTransaction({
+                date: payForm.date,
+                category: 'Account transfer',
+                amount,
+                description: `Payment to ${account.name}`,
+                paymentMethod: account.name,
+                fromPaymentMethod: payForm.fromPaymentMethod,
+                transferFee: 0,
+            });
+            setPayingOff(false);
+            await reload();
+            onChanged?.();
+        } catch (err) {
+            setPayError(err instanceof Error ? err.message : 'Failed to record payment');
+        } finally {
+            setPaySaving(false);
+        }
+    };
+
     if (!account) return null;
 
     const showActivityContent = (!showTabs || activeTab === 'activity');
@@ -297,6 +358,15 @@ export default function AccountActivityModal({
                                     </button>
                                 )}
                             </div>
+                        )}
+                        {accountData?.accountType === 'credit' && periodTotals.afterCashback > 0 && (
+                            <button
+                                type="button"
+                                className="btn-add account-activity-payoff-btn"
+                                onClick={openPayOff}
+                            >
+                                Pay off
+                            </button>
                         )}
                     </div>
                     {accountData && (
@@ -653,6 +723,41 @@ export default function AccountActivityModal({
                     onConfirm={() => void handleCloseFd()}
                     onCancel={() => setClosingFd(null)}
                 />
+                <RecordModal
+                    title={`Pay off ${account.name}`}
+                    open={payingOff}
+                    saving={paySaving}
+                    error={payError}
+                    onClose={closePayOff}
+                    onSave={() => void handlePayOff()}
+                >
+                    <div className="form-field">
+                        <label htmlFor="payoff-date">Date</label>
+                        <input id="payoff-date" type="date" value={payForm.date} disabled />
+                    </div>
+                    <div className="form-field">
+                        <label htmlFor="payoff-from-account">From account</label>
+                        <PaymentMethodSelect
+                            id="payoff-from-account"
+                            value={payForm.fromPaymentMethod}
+                            onChange={(fromPaymentMethod) =>
+                                setPayForm((f) => ({ ...f, fromPaymentMethod }))
+                            }
+                            excludeTypes={['investment']}
+                        />
+                    </div>
+                    <div className="form-field">
+                        <label htmlFor="payoff-amount">Amount</label>
+                        <input
+                            id="payoff-amount"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={payForm.amount}
+                            onChange={(e) => setPayForm((f) => ({ ...f, amount: e.target.value }))}
+                        />
+                    </div>
+                </RecordModal>
             </div>
         </div>
     );

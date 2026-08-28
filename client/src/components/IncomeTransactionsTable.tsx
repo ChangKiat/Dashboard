@@ -65,6 +65,17 @@ function expenseMatchesQuery(exp: ExpenseTransaction, query: string): boolean {
     return false;
 }
 
+function incomeEntryMatchesQuery(entry: IncomeTransaction, query: string): boolean {
+    if (entry.description.toLowerCase().includes(query)) return true;
+    if (entry.category.toLowerCase().includes(query)) return true;
+    if (entry.source?.toLowerCase().includes(query)) return true;
+    if (entry.paymentMethod?.toLowerCase().includes(query)) return true;
+    if (entry.fromPaymentMethod?.toLowerCase().includes(query)) return true;
+    if (String(entry.amount).includes(query)) return true;
+    if (entry.amount.toFixed(2).includes(query)) return true;
+    return false;
+}
+
 type ModalMode = 'closed' | 'create' | 'edit';
 type TableVariant = 'day' | 'month';
 
@@ -76,6 +87,7 @@ interface Props {
     defaultDate?: string;
     variant?: TableVariant;
     month?: string;
+    searchQuery?: string;
 }
 
 export default function IncomeTransactionsTable({
@@ -86,6 +98,7 @@ export default function IncomeTransactionsTable({
     defaultDate,
     variant = defaultDate != null ? 'day' : 'month',
     month,
+    searchQuery = '',
 }: Props) {
     const [modalMode, setModalMode] = useState<ModalMode>('closed');
     const [editingEntry, setEditingEntry] = useState<IncomeTransaction | null>(null);
@@ -106,8 +119,16 @@ export default function IncomeTransactionsTable({
     const [actionError, setActionError] = useState<string | null>(null);
     const [expenseSearchQuery, setExpenseSearchQuery] = useState('');
 
-    const { page, setPage, pageItems, totalPages, totalItems } = usePagination(entries, {
-        pageSize: variant === 'month' ? MONTH_PAGE_SIZE : DAY_PAGE_SIZE,
+    const pageSize = variant === 'month' ? MONTH_PAGE_SIZE : DAY_PAGE_SIZE;
+
+    const filteredEntries = useMemo(() => {
+        const q = searchQuery.trim().toLowerCase();
+        if (!q) return entries;
+        return entries.filter((entry) => incomeEntryMatchesQuery(entry, q));
+    }, [entries, searchQuery]);
+
+    const { page, setPage, pageItems, totalPages, totalItems } = usePagination(filteredEntries, {
+        pageSize,
     });
 
     const filteredExpenses = useMemo(() => {
@@ -549,6 +570,9 @@ export default function IncomeTransactionsTable({
                 <p className="muted">{emptyMessage}</p>
             ) : (
                 <>
+                    {filteredEntries.length === 0 && (
+                        <p className="muted">No income matches your search.</p>
+                    )}
                     <ul
                         className={
                             variant === 'month'
