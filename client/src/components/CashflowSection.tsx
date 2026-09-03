@@ -160,6 +160,11 @@ export default function CashflowSection({ month }: Props) {
         [data?.variable]
     );
 
+    const fixedCategories = useMemo(
+        () => data?.fixed.map((f) => f.category) ?? [],
+        [data?.fixed]
+    );
+
     const dayExpenses = useMemo(
         () => transactions.filter((t) => t.date === selectedDate && t.tripLeg !== 'fund'),
         [transactions, selectedDate]
@@ -226,6 +231,7 @@ export default function CashflowSection({ month }: Props) {
                             month={month}
                             expenseSeries={expenseSeries}
                             incomeSeries={incomeSeries}
+                            fixedCategories={fixedCategories}
                             selectedDate={selectedDate}
                             onSelectDate={setSelectedDate}
                             formatAmount={formatMYR}

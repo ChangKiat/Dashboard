@@ -2357,6 +2357,10 @@ div.payment-account-card-main:hover {
 }
 
 .legend-dot.expense {
+  background: var(--danger);
+}
+
+.legend-dot.fixed {
   background: var(--warn);
 }
 
@@ -2463,6 +2467,13 @@ div.payment-account-card-main:hover {
 .activity-badge.expense {
   background: color-mix(in srgb, var(--danger) 25%, transparent);
   color: var(--danger);
+  font-size: 0.6rem;
+  padding: 2px 3px;
+}
+
+.activity-badge.fixed {
+  background: color-mix(in srgb, var(--warn) 25%, transparent);
+  color: var(--warn);
   font-size: 0.6rem;
   padding: 2px 3px;
 }

@@ -13,6 +13,7 @@ interface Props {
     month: string;
     expenseSeries: ExpenseDailyPoint[];
     incomeSeries: IncomeDailyPoint[];
+    fixedCategories: string[];
     selectedDate: string;
     onSelectDate: (date: string) => void;
     formatAmount: (amount: number) => string;
@@ -22,6 +23,7 @@ export default function CashflowCalendar({
     month,
     expenseSeries,
     incomeSeries,
+    fixedCategories,
     selectedDate,
     onSelectDate,
     formatAmount,
@@ -29,13 +31,28 @@ export default function CashflowCalendar({
     const cells = useMemo(() => getCalendarCells(month), [month]);
     const today = todayInKL();
 
-    const spendByDate = useMemo(() => {
+    const fixedCategorySet = useMemo(() => new Set(fixedCategories), [fixedCategories]);
+
+    const fixedSpendByDate = useMemo(() => {
         const map = new Map<string, number>();
         for (const d of expenseSeries) {
-            if (d.total > 0) map.set(d.date, d.total);
+            let fixedTotal = 0;
+            for (const [cat, amount] of Object.entries(d.byCategory)) {
+                if (fixedCategorySet.has(cat)) fixedTotal += amount;
+            }
+            if (fixedTotal > 0) map.set(d.date, fixedTotal);
         }
         return map;
-    }, [expenseSeries]);
+    }, [expenseSeries, fixedCategorySet]);
+
+    const variableSpendByDate = useMemo(() => {
+        const map = new Map<string, number>();
+        for (const d of expenseSeries) {
+            const variableTotal = d.total - (fixedSpendByDate.get(d.date) ?? 0);
+            if (variableTotal > 0) map.set(d.date, variableTotal);
+        }
+        return map;
+    }, [expenseSeries, fixedSpendByDate]);
 
     const incomeByDate = useMemo(() => {
         const map = new Map<string, number>();
@@ -49,6 +66,20 @@ export default function CashflowCalendar({
         <div className="activity-calendar">
             <div className="activity-calendar-header">
                 <h3>Cashflow calendar</h3>
+                <div className="activity-calendar-legend">
+                    <span className="legend-item">
+                        <span className="legend-dot income" aria-hidden="true" />
+                        Income
+                    </span>
+                    <span className="legend-item">
+                        <span className="legend-dot fixed" aria-hidden="true" />
+                        Fixed
+                    </span>
+                    <span className="legend-item">
+                        <span className="legend-dot expense" aria-hidden="true" />
+                        Variable
+                    </span>
+                </div>
             </div>
             <div className="activity-calendar-weekdays">
                 {WEEKDAYS.map((day) => (
@@ -64,13 +95,15 @@ export default function CashflowCalendar({
                     }
 
                     const dayNum = parseInt(date.slice(8), 10);
-                    const spend = spendByDate.get(date) ?? 0;
+                    const fixedSpend = fixedSpendByDate.get(date) ?? 0;
+                    const variableSpend = variableSpendByDate.get(date) ?? 0;
                     const income = incomeByDate.get(date) ?? 0;
                     const isToday = date === today;
                     const isSelected = date === selectedDate;
                     const parts: string[] = [];
                     if (income > 0) parts.push(`income ${formatAmount(income)}`);
-                    if (spend > 0) parts.push(`spent ${formatAmount(spend)}`);
+                    if (fixedSpend > 0) parts.push(`fixed ${formatAmount(fixedSpend)}`);
+                    if (variableSpend > 0) parts.push(`variable ${formatAmount(variableSpend)}`);
 
                     return (
                         <button
@@ -98,12 +131,20 @@ export default function CashflowCalendar({
                                         {compactAmountLabel(income)}
                                     </span>
                                 )}
-                                {spend > 0 && (
+                                {fixedSpend > 0 && (
+                                    <span
+                                        className="activity-badge fixed"
+                                        title={`Fixed ${formatAmount(fixedSpend)}`}
+                                    >
+                                        {compactAmountLabel(fixedSpend)}
+                                    </span>
+                                )}
+                                {variableSpend > 0 && (
                                     <span
                                         className="activity-badge expense"
-                                        title={formatAmount(spend)}
+                                        title={`Variable ${formatAmount(variableSpend)}`}
                                     >
-                                        {compactAmountLabel(spend)}
+                                        {compactAmountLabel(variableSpend)}
                                     </span>
                                 )}
                             </span>
