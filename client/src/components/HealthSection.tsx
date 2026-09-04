@@ -52,6 +52,32 @@ function formatWeightDelta(latest: BodyWeightLogEntry | null, previous: BodyWeig
     return `${sign}${delta} kg vs prior log`;
 }
 
+function computeTrainingStreak(series: WorkoutDailyPoint[], month: string, elapsed: number) {
+    if (elapsed === 0) return { current: 0, best: 0 };
+    const trainedDates = new Set(series.filter((d) => d.sessionCount > 0).map((d) => d.date));
+
+    let current = 0;
+    for (let day = elapsed; day >= 1; day--) {
+        const dateStr = `${month}-${String(day).padStart(2, '0')}`;
+        if (!trainedDates.has(dateStr)) break;
+        current++;
+    }
+
+    let best = 0;
+    let run = 0;
+    for (let day = 1; day <= elapsed; day++) {
+        const dateStr = `${month}-${String(day).padStart(2, '0')}`;
+        if (trainedDates.has(dateStr)) {
+            run++;
+            best = Math.max(best, run);
+        } else {
+            run = 0;
+        }
+    }
+
+    return { current, best };
+}
+
 export default function HealthSection({ month }: Props) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -185,6 +211,7 @@ export default function HealthSection({ month }: Props) {
         const elapsed = monthElapsedDays(month);
         const adherence = computeMacroAdherence(nutritionSeries);
         const displayWeight = latestWeight?.weightKg ?? null;
+        const streak = computeTrainingStreak(workoutSeries, month, elapsed);
         return {
             displayWeight,
             weightSub: formatWeightDelta(latestWeight, previousWeight),
@@ -194,8 +221,38 @@ export default function HealthSection({ month }: Props) {
             proteinHitPct: adherence.proteinHitPct,
             calorieHitPct: adherence.calorieHitPct,
             loggedMealDays: adherence.loggedDays,
+            streakCurrent: streak.current,
+            streakBest: streak.best,
         };
     }, [workoutSeries, nutritionSeries, month, latestWeight, previousWeight]);
+
+    const netCalorieSeries = useMemo(() => {
+        const burnByDate = new Map(burnSeries.map((b) => [b.date, b.caloriesBurned]));
+        return nutritionSeries.map((d) => {
+            const burned = burnByDate.get(d.date) ?? 0;
+            return {
+                date: d.date,
+                calories: d.calories,
+                caloriesBurned: burned,
+                net: Math.round(d.calories - burned),
+                target: d.targets.calories,
+            };
+        });
+    }, [nutritionSeries, burnSeries]);
+
+    const netCalorieSummary = useMemo(() => {
+        const logged = netCalorieSeries.filter((d) => d.calories > 0);
+        if (logged.length === 0) {
+            return { avgNet: 0, avgTarget: 0, loggedDays: 0 };
+        }
+        const totalNet = logged.reduce((sum, d) => sum + d.net, 0);
+        const totalTarget = logged.reduce((sum, d) => sum + d.target, 0);
+        return {
+            avgNet: Math.round(totalNet / logged.length),
+            avgTarget: Math.round(totalTarget / logged.length),
+            loggedDays: logged.length,
+        };
+    }, [netCalorieSeries]);
 
     const dayWeightLog = useMemo(
         () => bodyWeightLogs.find((l) => l.date === selectedDate) ?? null,
@@ -258,6 +315,42 @@ export default function HealthSection({ month }: Props) {
                                 : undefined
                         }
                     />
+                    <SummaryCard
+                        label="Training streak"
+                        value={`${summaryMetrics.streakCurrent} day${summaryMetrics.streakCurrent === 1 ? '' : 's'}`}
+                        sub={
+                            summaryMetrics.streakBest > 0
+                                ? `Best this month: ${summaryMetrics.streakBest} day${summaryMetrics.streakBest === 1 ? '' : 's'}`
+                                : 'No training days yet'
+                        }
+                    />
+                    <SummaryCard
+                        label="Net calories"
+                        value={
+                            netCalorieSummary.loggedDays > 0
+                                ? `${netCalorieSummary.avgNet} kcal/day`
+                                : '—'
+                        }
+                        sub={
+                            netCalorieSummary.loggedDays > 0
+                                ? (() => {
+                                      const delta = netCalorieSummary.avgNet - netCalorieSummary.avgTarget;
+                                      if (Math.abs(delta) <= netCalorieSummary.avgTarget * 0.1) {
+                                          return 'On target after burn';
+                                      }
+                                      const sign = delta > 0 ? '+' : '';
+                                      return `${sign}${delta} kcal vs target after burn`;
+                                  })()
+                                : 'No meal days yet'
+                        }
+                        variant={
+                            netCalorieSummary.loggedDays > 0 &&
+                            Math.abs(netCalorieSummary.avgNet - netCalorieSummary.avgTarget) >
+                                netCalorieSummary.avgTarget * 0.1
+                                ? 'warning'
+                                : 'default'
+                        }
+                    />
                 </div>
 
                 <div className="health-calendar">
@@ -290,7 +383,7 @@ export default function HealthSection({ month }: Props) {
                     prs={prs}
                 />
 
-                <NutritionAnalytics series={nutritionSeries} />
+                <NutritionAnalytics series={nutritionSeries} netCalorieSeries={netCalorieSeries} />
 
                 <BodyAnalytics bodyWeightLogs={bodyWeightLogs} burnSeries={burnSeries} />
             </div>

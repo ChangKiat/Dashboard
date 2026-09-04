@@ -183,13 +183,20 @@ function applyCap(rawEarned: number, cap: number | null): {
     };
 }
 
+// Word order in a multi-word keyword shouldn't matter (e.g. "Reload TNG" should also match "TNG Reload").
+function matchesKeyword(searchText: string, keyword: string): boolean {
+    const words = keyword.toLowerCase().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return false;
+    return words.every((word) => searchText.includes(word));
+}
+
 function resolveRebateCategory(expense: ExpenseRow, config: RebateConfig): string | null {
     const descriptionRules = config.descriptionRules ?? [];
     // Include category (destination account for transfers) so keyword rules like "Shopee" match.
     const searchText = `${expense.description} ${expense.category}`.toLowerCase();
     for (const rule of descriptionRules) {
         if (rule.expenseCategory && rule.expenseCategory !== expense.category) continue;
-        if (rule.keywords.some((kw) => searchText.includes(kw.toLowerCase()))) {
+        if (rule.keywords.some((kw) => matchesKeyword(searchText, kw))) {
             return rule.rebateCategory;
         }
     }
