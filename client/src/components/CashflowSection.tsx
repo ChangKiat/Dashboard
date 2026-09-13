@@ -4,6 +4,7 @@ import type {
     ExpenseDailyPoint,
     ExpenseOverviewResponse,
     ExpenseTransaction,
+    FixedExpenseConfig,
     IncomeDailyPoint,
     IncomeTransaction,
 } from '../api';
@@ -12,11 +13,12 @@ import {
     fetchExpenseDaily,
     fetchExpenseOverview,
     fetchExpenseTransactions,
+    fetchFixedExpenses,
     fetchIncomeDaily,
     fetchIncomeTransactions,
     fetchSyncStatus,
 } from '../api';
-import { shiftMonth } from '../hooks/useMonth';
+import { shiftMonth, useMonth } from '../hooks/useMonth';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
 import { useSmartRefresh } from '../hooks/useSmartRefresh';
 import { getBudgetStatus } from '../utils/budgetStatus';
@@ -30,15 +32,12 @@ import SummaryCard from './SummaryCard';
 import TripsPanel from './TripsPanel';
 import VariableExpensesTable from './VariableExpensesTable';
 
-interface Props {
-    month: string;
-}
-
 function formatMYR(amount: number) {
     return `RM ${amount.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export default function CashflowSection({ month }: Props) {
+export default function CashflowSection() {
+    const { month, setMonth } = useMonth();
     const { refresh: refreshAccounts } = usePaymentAccounts();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -49,12 +48,13 @@ export default function CashflowSection({ month }: Props) {
     const [recentExpenses, setRecentExpenses] = useState<ExpenseTransaction[]>([]);
     const [expenseSeries, setExpenseSeries] = useState<ExpenseDailyPoint[]>([]);
     const [incomeSeries, setIncomeSeries] = useState<IncomeDailyPoint[]>([]);
+    const [fixedConfigs, setFixedConfigs] = useState<FixedExpenseConfig[]>([]);
     const fingerprintRef = useRef<string | null>(null);
 
     const loadData = useCallback(async (options?: { silent?: boolean }) => {
         const range = monthToDateRange(month);
         const prevMonth = shiftMonth(month, -1);
-        const [overviewRes, expensesRes, prevExpensesRes, incomesRes, expenseDaily, incomeDaily] =
+        const [overviewRes, expensesRes, prevExpensesRes, incomesRes, expenseDaily, incomeDaily, fixedRes] =
             await Promise.all([
                 fetchExpenseOverview(month),
                 fetchExpenseTransactions(month),
@@ -62,8 +62,10 @@ export default function CashflowSection({ month }: Props) {
                 fetchIncomeTransactions(month),
                 fetchExpenseDaily(range),
                 fetchIncomeDaily(range),
+                fetchFixedExpenses(),
             ]);
         setData(overviewRes);
+        setFixedConfigs(fixedRes.entries);
         setTransactions(expensesRes.entries);
         setIncomes(incomesRes.entries);
         const byId = new Map<number, ExpenseTransaction>();
@@ -160,9 +162,9 @@ export default function CashflowSection({ month }: Props) {
         [data?.variable]
     );
 
-    const fixedCategories = useMemo(
-        () => data?.fixed.map((f) => f.category) ?? [],
-        [data?.fixed]
+    const fixedDescriptions = useMemo(
+        () => fixedConfigs.map((f) => f.description),
+        [fixedConfigs]
     );
 
     const dayExpenses = useMemo(
@@ -229,9 +231,11 @@ export default function CashflowSection({ month }: Props) {
                     <div className="expenses-calendar">
                         <CashflowCalendar
                             month={month}
+                            onMonthChange={setMonth}
                             expenseSeries={expenseSeries}
                             incomeSeries={incomeSeries}
-                            fixedCategories={fixedCategories}
+                            transactions={transactions}
+                            fixedDescriptions={fixedDescriptions}
                             selectedDate={selectedDate}
                             onSelectDate={setSelectedDate}
                             formatAmount={formatMYR}
@@ -248,6 +252,7 @@ export default function CashflowSection({ month }: Props) {
                                 expenseSummary={dayExpenseSummary}
                                 incomeSummary={dayIncomeSummary}
                                 variableCategories={variableCategories}
+                                fixedDescriptions={fixedDescriptions}
                                 formatAmount={formatMYR}
                                 onChanged={handleChanged}
                             />

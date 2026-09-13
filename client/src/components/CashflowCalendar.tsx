@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
-import type { ExpenseDailyPoint, IncomeDailyPoint } from '../api';
+import type { ExpenseDailyPoint, ExpenseTransaction, IncomeDailyPoint } from '../api';
 import { getCalendarCells, todayInKL } from '../utils/dateRange';
+import { normalizeDescription } from '../utils/fixedExpenses';
+import MonthPicker from './MonthPicker';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -11,9 +13,11 @@ function compactAmountLabel(total: number): string {
 
 interface Props {
     month: string;
+    onMonthChange: (month: string) => void;
     expenseSeries: ExpenseDailyPoint[];
     incomeSeries: IncomeDailyPoint[];
-    fixedCategories: string[];
+    transactions: ExpenseTransaction[];
+    fixedDescriptions: string[];
     selectedDate: string;
     onSelectDate: (date: string) => void;
     formatAmount: (amount: number) => string;
@@ -21,9 +25,11 @@ interface Props {
 
 export default function CashflowCalendar({
     month,
+    onMonthChange,
     expenseSeries,
     incomeSeries,
-    fixedCategories,
+    transactions,
+    fixedDescriptions,
     selectedDate,
     onSelectDate,
     formatAmount,
@@ -31,19 +37,21 @@ export default function CashflowCalendar({
     const cells = useMemo(() => getCalendarCells(month), [month]);
     const today = todayInKL();
 
-    const fixedCategorySet = useMemo(() => new Set(fixedCategories), [fixedCategories]);
+    const fixedDescriptionSet = useMemo(
+        () => new Set(fixedDescriptions.map(normalizeDescription)),
+        [fixedDescriptions]
+    );
 
     const fixedSpendByDate = useMemo(() => {
         const map = new Map<string, number>();
-        for (const d of expenseSeries) {
-            let fixedTotal = 0;
-            for (const [cat, amount] of Object.entries(d.byCategory)) {
-                if (fixedCategorySet.has(cat)) fixedTotal += amount;
-            }
-            if (fixedTotal > 0) map.set(d.date, fixedTotal);
+        for (const t of transactions) {
+            if (t.tripLeg === 'fund') continue;
+            if (!fixedDescriptionSet.has(normalizeDescription(t.description))) continue;
+            const amount = t.netAmount ?? t.amount;
+            map.set(t.date, (map.get(t.date) ?? 0) + amount);
         }
         return map;
-    }, [expenseSeries, fixedCategorySet]);
+    }, [transactions, fixedDescriptionSet]);
 
     const variableSpendByDate = useMemo(() => {
         const map = new Map<string, number>();
@@ -66,6 +74,7 @@ export default function CashflowCalendar({
         <div className="activity-calendar">
             <div className="activity-calendar-header">
                 <h3>Cashflow calendar</h3>
+                <MonthPicker month={month} onChange={onMonthChange} />
                 <div className="activity-calendar-legend">
                     <span className="legend-item">
                         <span className="legend-dot income" aria-hidden="true" />

@@ -5,6 +5,7 @@ import { createExpenseTransaction, deleteExpenseTransaction, updateExpenseTransa
 import { usePagination } from '../hooks/usePagination';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
 import { isInvestmentCategory, isOtherCategory, requiresAccountTransfer, resolveOtherAccountFields } from '../utils/expenseCategories';
+import { normalizeDescription } from '../utils/fixedExpenses';
 import ExpenseCategorySelect from './ExpenseCategorySelect';
 import PaymentMethodSelect from './PaymentMethodSelect';
 import RecordModal from './RecordModal';
@@ -20,6 +21,7 @@ type ReimbursementRow = { source: string; amount: string; paymentMethod: string 
 interface Props {
     entries: ExpenseTransaction[];
     variableCategories: string[];
+    fixedDescriptions?: string[];
     formatAmount: (amount: number) => string;
     onChanged: () => void;
     defaultDate?: string;
@@ -43,11 +45,16 @@ function expenseEntryMatchesQuery(entry: ExpenseTransaction, query: string): boo
 export default function ExpenseTransactionsTable({
     entries,
     variableCategories,
+    fixedDescriptions = [],
     formatAmount,
     onChanged,
     defaultDate,
     searchQuery = '',
 }: Props) {
+    const fixedDescriptionSet = useMemo(
+        () => new Set(fixedDescriptions.map(normalizeDescription)),
+        [fixedDescriptions]
+    );
     const { accounts } = usePaymentAccounts();
     const investmentAccounts = useMemo(
         () =>
@@ -458,7 +465,14 @@ export default function ExpenseTransactionsTable({
                         {pageItems.map((entry) => (
                             <li key={entry.id} className="day-entry-card">
                                 <div className="day-entry-main">
-                                    <span className="day-entry-title">{entry.description}</span>
+                                    <span className="day-entry-title">
+                                        {entry.description}
+                                        {fixedDescriptionSet.has(normalizeDescription(entry.description)) && (
+                                            <span className="fixed-tag" title="Counted as a fixed expense">
+                                                Fixed
+                                            </span>
+                                        )}
+                                    </span>
                                     <span className="day-entry-sub">
                                         {entry.category}
                                         {entry.paymentMethod ? ` · ${entry.paymentMethod}` : ''}

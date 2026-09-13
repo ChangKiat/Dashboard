@@ -3008,6 +3008,20 @@ div.payment-account-card-main:hover {
   word-break: break-word;
 }
 
+.fixed-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: #1a1a1a;
+  background: var(--warn);
+  vertical-align: middle;
+}
+
 .day-entry-sub {
   font-size: 0.75rem;
   color: var(--text-muted);

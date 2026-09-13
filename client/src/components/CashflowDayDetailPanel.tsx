@@ -12,6 +12,7 @@ interface Props {
     expenseSummary: ExpenseDailyPoint | undefined;
     incomeSummary: IncomeDailyPoint | undefined;
     variableCategories: string[];
+    fixedDescriptions: string[];
     formatAmount: (amount: number) => string;
     onChanged: () => void;
 }
@@ -34,6 +35,7 @@ export default function CashflowDayDetailPanel({
     expenseSummary,
     incomeSummary,
     variableCategories,
+    fixedDescriptions,
     formatAmount,
     onChanged,
 }: Props) {
@@ -81,6 +83,7 @@ export default function CashflowDayDetailPanel({
                     <ExpenseTransactionsTable
                         entries={expenses}
                         variableCategories={variableCategories}
+                        fixedDescriptions={fixedDescriptions}
                         formatAmount={formatAmount}
                         onChanged={onChanged}
                         defaultDate={selectedDate}
