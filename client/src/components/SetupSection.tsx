@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FixedExpenseConfig, InterestScheduleConfig } from '../api';
 import { fetchExpenseOverview, fetchFixedExpenses, fetchInterestSchedules, applyDueFixedContributions } from '../api';
 import { isLoanFixedExpense } from '../utils/expenseCategories';
+import { currentMonthInKL } from '../hooks/useMonth';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
 
 import FixedExpensesTable from './FixedExpensesTable';
@@ -11,15 +12,12 @@ import LoansPanel from './LoansPanel';
 import MealsSetupPanel from './MealsSetupPanel';
 import PaymentAccountsPanel from './PaymentAccountsPanel';
 
-interface Props {
-    month: string;
-}
-
 function formatMYR(amount: number) {
     return `RM ${amount.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export default function SetupSection({ month }: Props) {
+export default function SetupSection() {
+    const month = currentMonthInKL();
     const { refresh: refreshAccounts } = usePaymentAccounts();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);

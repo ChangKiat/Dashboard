@@ -6,6 +6,11 @@ import {
     upsertBodyWeightLog,
 } from '../../agent/services/bodyWeightService';
 import {
+    deleteDailyActivityLog,
+    listDailyActivityLogs,
+    upsertDailyActivityLog,
+} from '../../agent/services/dailyActivityService';
+import {
     deleteMeal,
     getMealHistory,
     getNutritionSummary,
@@ -35,6 +40,9 @@ router.get('/settings', async (_req, res) => {
             dailyCarbsTargetG: settings.dailyCarbsTargetG,
             dailyFatTargetG: settings.dailyFatTargetG,
             bodyWeightKg: settings.bodyWeightKg,
+            heightCm: settings.heightCm,
+            age: settings.age,
+            sex: settings.sex,
         });
     } catch (err) {
         console.error('GET /api/nutrition/settings', err);
@@ -51,6 +59,9 @@ router.patch('/settings', async (req, res) => {
             dailyCarbsTargetG?: number;
             dailyFatTargetG?: number;
             bodyWeightKg?: number | null;
+            heightCm?: number | null;
+            age?: number | null;
+            sex?: 'male' | 'female' | null;
         };
 
         const targets: Parameters<typeof updateNutritionTargets>[1] = {};
@@ -90,6 +101,27 @@ router.patch('/settings', async (req, res) => {
             }
             targets.bodyWeightKg = body.bodyWeightKg;
         }
+        if (body.heightCm !== undefined) {
+            if (body.heightCm !== null && !isPositiveNumber(body.heightCm)) {
+                res.status(400).json({ error: 'heightCm must be a positive number or null' });
+                return;
+            }
+            targets.heightCm = body.heightCm;
+        }
+        if (body.age !== undefined) {
+            if (body.age !== null && (typeof body.age !== 'number' || body.age <= 0)) {
+                res.status(400).json({ error: 'age must be a positive number or null' });
+                return;
+            }
+            targets.age = body.age;
+        }
+        if (body.sex !== undefined) {
+            if (body.sex !== null && body.sex !== 'male' && body.sex !== 'female') {
+                res.status(400).json({ error: "sex must be 'male', 'female', or null" });
+                return;
+            }
+            targets.sex = body.sex;
+        }
 
         if (Object.keys(targets).length === 0) {
             res.status(400).json({ error: 'No settings fields provided' });
@@ -108,6 +140,9 @@ router.patch('/settings', async (req, res) => {
             dailyCarbsTargetG: settings.dailyCarbsTargetG,
             dailyFatTargetG: settings.dailyFatTargetG,
             bodyWeightKg: settings.bodyWeightKg,
+            heightCm: settings.heightCm,
+            age: settings.age,
+            sex: settings.sex,
         });
     } catch (err) {
         console.error('PATCH /api/nutrition/settings', err);
@@ -372,6 +407,54 @@ router.delete('/body-weight/:id', async (req, res) => {
         res.json({ ok: true });
     } catch (err) {
         console.error('DELETE /api/nutrition/body-weight/:id', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+    }
+});
+
+router.get('/daily-activity', async (req, res) => {
+    try {
+        const { start, end } = parseDateRange(
+            req.query.start as string | undefined,
+            req.query.end as string | undefined
+        );
+        const userId = getTelegramUserId();
+        const entries = await listDailyActivityLogs(userId, start, end);
+        res.json({ start, end, entries });
+    } catch (err) {
+        console.error('GET /api/nutrition/daily-activity', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+    }
+});
+
+router.put('/daily-activity', async (req, res) => {
+    try {
+        const body = req.body ?? {};
+        if (!isValidDate(body.date)) {
+            return res.status(400).json({ error: 'Invalid date' });
+        }
+        if (typeof body.steps !== 'number' || body.steps < 0 || !Number.isFinite(body.steps)) {
+            return res.status(400).json({ error: 'steps must be a non-negative number' });
+        }
+        const userId = getTelegramUserId();
+        const entry = await upsertDailyActivityLog(userId, body.date, Math.round(body.steps));
+        res.json({ ok: true, entry });
+    } catch (err) {
+        console.error('PUT /api/nutrition/daily-activity', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+    }
+});
+
+router.delete('/daily-activity/:id', async (req, res) => {
+    try {
+        const id = parseIdParam(req.params.id);
+        if (!id) return res.status(400).json({ error: 'Invalid id' });
+
+        const userId = getTelegramUserId();
+        const ok = await deleteDailyActivityLog(id, userId);
+        if (!ok) return res.status(404).json({ error: 'Daily activity log not found' });
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('DELETE /api/nutrition/daily-activity/:id', err);
         res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
     }
 });

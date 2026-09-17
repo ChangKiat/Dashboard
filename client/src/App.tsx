@@ -4,16 +4,13 @@ import CashflowSection from './components/CashflowSection';
 import HealthSection from './components/HealthSection';
 import CarServiceSection from './components/CarServiceSection';
 import LoginGate from './components/LoginGate';
-import MonthPicker from './components/MonthPicker';
 import SectionTabs from './components/SectionTabs';
 import SetupSection from './components/SetupSection';
 import { PaymentAccountsProvider } from './hooks/usePaymentAccounts';
-import { useMonth } from './hooks/useMonth';
 import { useSectionTab } from './hooks/useSectionTab';
 import './App.css';
 
 export default function App() {
-    const { month, setMonth } = useMonth();
     const { activeTab, setActiveTab } = useSectionTab();
     const [authChecked, setAuthChecked] = useState(false);
     const [authenticated, setAuthenticated] = useState(false);
@@ -67,7 +64,6 @@ export default function App() {
                         <SectionTabs active={activeTab} onChange={setActiveTab} />
                     </div>
                     <div className="header-controls">
-                        <MonthPicker month={month} onChange={setMonth} />
                         <button type="button" className="logout-btn" onClick={onLogout}>
                             Lock
                         </button>
@@ -82,10 +78,10 @@ export default function App() {
                 )}
 
                 <main className="main">
-                    {activeTab === 'cashflow' && <CashflowSection month={month} />}
-                    {activeTab === 'health' && <HealthSection month={month} />}
+                    {activeTab === 'cashflow' && <CashflowSection />}
+                    {activeTab === 'health' && <HealthSection />}
                     {activeTab === 'car' && <CarServiceSection />}
-                    {activeTab === 'setup' && <SetupSection month={month} />}
+                    {activeTab === 'setup' && <SetupSection />}
                 </main>
             </div>
         </PaymentAccountsProvider>

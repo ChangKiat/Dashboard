@@ -519,6 +519,10 @@ div.payment-account-card-main:hover {
   flex-shrink: 0;
 }
 
+.account-activity-header-top .month-picker {
+  flex-shrink: 0;
+}
+
 .account-activity-period-range {
   margin: 4px 0 0;
   font-size: 0.75rem;
@@ -959,6 +963,17 @@ div.payment-account-card-main:hover {
   letter-spacing: -0.02em;
   line-height: 1;
   user-select: none;
+  overflow: hidden;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.account-icon-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 3px;
+  box-sizing: border-box;
 }
 
 .account-icon-sm {
@@ -2159,13 +2174,6 @@ div.payment-account-card-main:hover {
   margin-bottom: 12px;
 }
 
-.day-body-weight-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-
 .day-body-weight-log .form-field input {
   max-width: 160px;
 }
@@ -2567,11 +2575,7 @@ div.payment-account-card-main:hover {
   margin: 0;
 }
 
-.day-detail-panel > :not(h3):not(.day-detail-stat):not(.section-header-row):not(.day-body-weight-log) {
-  grid-column: 1 / -1;
-}
-
-.day-detail-panel > .day-body-weight-log {
+.day-detail-panel > :not(h3):not(.day-detail-stat):not(.section-header-row) {
   grid-column: 1 / -1;
 }
 

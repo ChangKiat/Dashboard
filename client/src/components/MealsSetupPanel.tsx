@@ -13,6 +13,9 @@ export default function MealsSetupPanel() {
     const [carbs, setCarbs] = useState('');
     const [fat, setFat] = useState('');
     const [bodyWeight, setBodyWeight] = useState('');
+    const [height, setHeight] = useState('');
+    const [age, setAge] = useState('');
+    const [sex, setSex] = useState<'male' | 'female' | ''>('');
 
     const load = useCallback(async () => {
         const settings = await fetchNutritionSettings();
@@ -21,6 +24,9 @@ export default function MealsSetupPanel() {
         setCarbs(String(settings.dailyCarbsTargetG));
         setFat(String(settings.dailyFatTargetG));
         setBodyWeight(settings.bodyWeightKg != null ? String(settings.bodyWeightKg) : '');
+        setHeight(settings.heightCm != null ? String(settings.heightCm) : '');
+        setAge(settings.age != null ? String(settings.age) : '');
+        setSex(settings.sex ?? '');
     }, []);
 
     useEffect(() => {
@@ -46,6 +52,10 @@ export default function MealsSetupPanel() {
         const dailyFatTargetG = Number(fat);
         const trimmedWeight = bodyWeight.trim();
         const bodyWeightKg = trimmedWeight === '' ? null : Number(trimmedWeight);
+        const trimmedHeight = height.trim();
+        const heightCm = trimmedHeight === '' ? null : Number(trimmedHeight);
+        const trimmedAge = age.trim();
+        const ageValue = trimmedAge === '' ? null : Number(trimmedAge);
 
         if (
             !(dailyCalorieTarget > 0) ||
@@ -60,6 +70,14 @@ export default function MealsSetupPanel() {
             setError('Body weight must be a positive number or left blank.');
             return;
         }
+        if (heightCm !== null && !(heightCm > 0)) {
+            setError('Height must be a positive number or left blank.');
+            return;
+        }
+        if (ageValue !== null && !(ageValue > 0)) {
+            setError('Age must be a positive number or left blank.');
+            return;
+        }
 
         setSaving(true);
         setError(null);
@@ -71,12 +89,18 @@ export default function MealsSetupPanel() {
                 dailyCarbsTargetG,
                 dailyFatTargetG,
                 bodyWeightKg,
+                heightCm,
+                age: ageValue,
+                sex: sex === '' ? null : sex,
             });
             setCalories(String(updated.dailyCalorieTarget));
             setProtein(String(updated.dailyProteinTargetG));
             setCarbs(String(updated.dailyCarbsTargetG));
             setFat(String(updated.dailyFatTargetG));
             setBodyWeight(updated.bodyWeightKg != null ? String(updated.bodyWeightKg) : '');
+            setHeight(updated.heightCm != null ? String(updated.heightCm) : '');
+            setAge(updated.age != null ? String(updated.age) : '');
+            setSex(updated.sex ?? '');
             setSavedMsg('Saved.');
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to save');
@@ -103,7 +127,8 @@ export default function MealsSetupPanel() {
                 </button>
             </div>
             <p className="muted meals-setup-hint">
-                Daily nutrition targets and body weight used for Health charts and workout burn estimates.
+                Daily nutrition targets and body stats used for Health charts and calorie burn
+                estimates (resting metabolism + steps + workouts).
             </p>
             {error && <p className="error">{error}</p>}
             {savedMsg && <p className="muted">{savedMsg}</p>}
@@ -163,6 +188,42 @@ export default function MealsSetupPanel() {
                         onChange={(e) => setBodyWeight(e.target.value)}
                         placeholder="Optional"
                     />
+                </div>
+                <div className="form-field">
+                    <label htmlFor="meal-height">Height (cm)</label>
+                    <input
+                        id="meal-height"
+                        type="number"
+                        min="1"
+                        step="0.1"
+                        value={height}
+                        onChange={(e) => setHeight(e.target.value)}
+                        placeholder="For BMR"
+                    />
+                </div>
+                <div className="form-field">
+                    <label htmlFor="meal-age">Age</label>
+                    <input
+                        id="meal-age"
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={age}
+                        onChange={(e) => setAge(e.target.value)}
+                        placeholder="For BMR"
+                    />
+                </div>
+                <div className="form-field">
+                    <label htmlFor="meal-sex">Sex</label>
+                    <select
+                        id="meal-sex"
+                        value={sex}
+                        onChange={(e) => setSex(e.target.value as 'male' | 'female' | '')}
+                    >
+                        <option value="">Not set</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                    </select>
                 </div>
             </div>
         </div>

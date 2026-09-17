@@ -1,11 +1,13 @@
 import { useMemo } from 'react';
 import type { NutritionDailyPoint, WorkoutDailyPoint } from '../api';
 import { getCalendarCells, todayInKL } from '../utils/dateRange';
+import MonthPicker from './MonthPicker';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 interface Props {
     month: string;
+    onMonthChange: (month: string) => void;
     workoutSeries: WorkoutDailyPoint[];
     nutritionSeries: NutritionDailyPoint[];
     selectedDate: string;
@@ -14,6 +16,7 @@ interface Props {
 
 export default function ActivityCalendar({
     month,
+    onMonthChange,
     workoutSeries,
     nutritionSeries,
     selectedDate,
@@ -42,6 +45,7 @@ export default function ActivityCalendar({
         <div className="activity-calendar">
             <div className="activity-calendar-header">
                 <h3>Activity calendar</h3>
+                <MonthPicker month={month} onChange={onMonthChange} />
                 <div className="activity-calendar-legend">
                     <span className="legend-item">
                         <span className="legend-dot workout" aria-hidden="true" />

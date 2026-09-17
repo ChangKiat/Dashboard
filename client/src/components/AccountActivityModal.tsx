@@ -17,6 +17,7 @@ import {
 } from '../utils/statementPeriod';
 import ConfirmDialog from './ConfirmDialog';
 import AccountIcon from './AccountIcon';
+import MonthPicker from './MonthPicker';
 import PaymentMethodSelect from './PaymentMethodSelect';
 import RebateSummary from './RebateSummary';
 import RecordModal from './RecordModal';
@@ -24,6 +25,7 @@ import TablePagination from './TablePagination';
 
 interface Props {
     account: PaymentAccount | null;
+    /** Month the activity list opens on; the modal owns its own month selection after that. */
     month: string;
     formatAmount: (amount: number) => string;
     onClose: () => void;
@@ -81,7 +83,7 @@ const emptyFdForm = () => ({
 
 export default function AccountActivityModal({
     account,
-    month,
+    month: initialMonth,
     formatAmount,
     onClose,
     onChanged,
@@ -90,6 +92,7 @@ export default function AccountActivityModal({
     const [error, setError] = useState<string | null>(null);
     const [accountData, setAccountData] = useState<PaymentAccount | null>(null);
     const [entries, setEntries] = useState<AccountActivityEntry[]>([]);
+    const [month, setMonth] = useState(initialMonth);
     const [searchQuery, setSearchQuery] = useState('');
     const [activeTab, setActiveTab] = useState<ActivityTab>('activity');
     const [fdHoldings, setFdHoldings] = useState<HoldingPosition[]>([]);
@@ -122,6 +125,7 @@ export default function AccountActivityModal({
         let cancelled = false;
         setLoading(true);
         setError(null);
+        setMonth(initialMonth);
         setSearchQuery('');
         setActiveTab('activity');
         setFdForm(emptyFdForm());
@@ -330,6 +334,7 @@ export default function AccountActivityModal({
                             />
                             {account.name}
                         </h4>
+                        <MonthPicker month={month} onChange={setMonth} />
                         {showTabs && (
                             <div className="account-activity-tabs">
                                 <button

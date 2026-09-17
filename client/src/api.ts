@@ -872,6 +872,9 @@ export interface NutritionSettings {
     dailyCarbsTargetG: number;
     dailyFatTargetG: number;
     bodyWeightKg: number | null;
+    heightCm: number | null;
+    age: number | null;
+    sex: 'male' | 'female' | null;
 }
 
 export function fetchNutritionSettings() {
@@ -949,6 +952,34 @@ export function upsertBodyWeightLog(fields: { date: string; weightKg: number }) 
 
 export function deleteBodyWeightLog(id: number) {
     return fetchJson<{ ok: true }>(`/api/nutrition/body-weight/${id}`, { method: 'DELETE' });
+}
+
+export interface DailyActivityLogEntry {
+    id: number;
+    date: string;
+    steps: number;
+}
+
+export interface DailyActivityLogsResponse {
+    start: string;
+    end: string;
+    entries: DailyActivityLogEntry[];
+}
+
+export function fetchDailyActivityLogs(range: DateRange) {
+    return fetchJson<DailyActivityLogsResponse>(`/api/nutrition/daily-activity?${qs(range)}`);
+}
+
+export function upsertDailyActivityLog(fields: { date: string; steps: number }) {
+    return fetchJson<{ ok: true; entry: DailyActivityLogEntry }>('/api/nutrition/daily-activity', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+    });
+}
+
+export function deleteDailyActivityLog(id: number) {
+    return fetchJson<{ ok: true }>(`/api/nutrition/daily-activity/${id}`, { method: 'DELETE' });
 }
 
 export function fetchHealth() {

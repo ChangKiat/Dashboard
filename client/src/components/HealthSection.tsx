@@ -1,23 +1,29 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
     BodyWeightLogEntry,
+    DailyActivityLogEntry,
     MealEntry,
     NutritionDailyPoint,
+    NutritionSettings,
     PersonalRecord,
     WorkoutDailyPoint,
     WorkoutEntry,
 } from '../api';
 import {
     fetchBodyWeightLogs,
+    fetchDailyActivityLogs,
     fetchMeals,
     fetchNutritionDaily,
+    fetchNutritionSettings,
     fetchSyncStatus,
     fetchWorkoutDaily,
     fetchWorkoutExercises,
     fetchWorkoutHistory,
     fetchWorkoutPRs,
 } from '../api';
+import { useMonth } from '../hooks/useMonth';
 import { useSmartRefresh } from '../hooks/useSmartRefresh';
+import { caloriesFromSteps, computeBMR } from '../utils/calorieEstimate';
 import { monthToDateRange, pickDefaultSelectedDate } from '../utils/dateRange';
 import ActivityCalendar from './ActivityCalendar';
 import BodyAnalytics from './BodyAnalytics';
@@ -26,10 +32,6 @@ import { computeMacroAdherence } from './MacroAdherenceStrip';
 import NutritionAnalytics from './NutritionAnalytics';
 import SummaryCard from './SummaryCard';
 import WorkoutAnalytics from './WorkoutAnalytics';
-
-interface Props {
-    month: string;
-}
 
 function monthElapsedDays(month: string): number {
     const [yearStr, monthStr] = month.split('-');
@@ -78,7 +80,8 @@ function computeTrainingStreak(series: WorkoutDailyPoint[], month: string, elaps
     return { current, best };
 }
 
-export default function HealthSection({ month }: Props) {
+export default function HealthSection() {
+    const { month, setMonth } = useMonth();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [selectedDate, setSelectedDate] = useState<string>('');
@@ -98,20 +101,33 @@ export default function HealthSection({ month }: Props) {
     const [bodyWeightLogs, setBodyWeightLogs] = useState<BodyWeightLogEntry[]>([]);
     const [latestWeight, setLatestWeight] = useState<BodyWeightLogEntry | null>(null);
     const [previousWeight, setPreviousWeight] = useState<BodyWeightLogEntry | null>(null);
+    const [dailyActivity, setDailyActivity] = useState<DailyActivityLogEntry[]>([]);
+    const [nutritionSettings, setNutritionSettings] = useState<NutritionSettings | null>(null);
     const fingerprintRef = useRef<string | null>(null);
 
     const loadData = useCallback(async (options?: { silent?: boolean }) => {
         const range = monthToDateRange(month);
-        const [dailyRes, exRes, prsRes, historyRes, nutritionRes, mealsRes, weightRes] =
-            await Promise.all([
-                fetchWorkoutDaily(range),
-                fetchWorkoutExercises(range),
-                fetchWorkoutPRs(),
-                fetchWorkoutHistory(range),
-                fetchNutritionDaily(range),
-                fetchMeals(range),
-                fetchBodyWeightLogs(range),
-            ]);
+        const [
+            dailyRes,
+            exRes,
+            prsRes,
+            historyRes,
+            nutritionRes,
+            mealsRes,
+            weightRes,
+            activityRes,
+            settingsRes,
+        ] = await Promise.all([
+            fetchWorkoutDaily(range),
+            fetchWorkoutExercises(range),
+            fetchWorkoutPRs(),
+            fetchWorkoutHistory(range),
+            fetchNutritionDaily(range),
+            fetchMeals(range),
+            fetchBodyWeightLogs(range),
+            fetchDailyActivityLogs(range),
+            fetchNutritionSettings(),
+        ]);
 
         setWorkoutSeries(dailyRes.series);
         setNutritionSeries(nutritionRes.series);
@@ -138,6 +154,8 @@ export default function HealthSection({ month }: Props) {
         setBodyWeightLogs(weightRes.entries);
         setLatestWeight(weightRes.latest);
         setPreviousWeight(weightRes.previous);
+        setDailyActivity(activityRes.entries);
+        setNutritionSettings(settingsRes);
 
         const status = await fetchSyncStatus(month, 'health');
         fingerprintRef.current = status.fingerprint;
@@ -178,32 +196,65 @@ export default function HealthSection({ month }: Props) {
         onStale: handleStale,
     });
 
+    const bmr = useMemo(
+        () =>
+            computeBMR(
+                nutritionSettings?.bodyWeightKg ?? null,
+                nutritionSettings?.heightCm ?? null,
+                nutritionSettings?.age ?? null,
+                nutritionSettings?.sex ?? null
+            ),
+        [nutritionSettings]
+    );
+
+    const burnSeries = useMemo(() => {
+        const workoutByDate = new Map<string, number>();
+        for (const entry of history) {
+            if (entry.caloriesBurned == null) continue;
+            workoutByDate.set(entry.date, (workoutByDate.get(entry.date) ?? 0) + entry.caloriesBurned);
+        }
+        const stepsByDate = new Map(dailyActivity.map((a) => [a.date, a.steps]));
+
+        const elapsed = monthElapsedDays(month);
+        const dates = new Set<string>();
+        for (let day = 1; day <= elapsed; day++) {
+            dates.add(`${month}-${String(day).padStart(2, '0')}`);
+        }
+        for (const date of workoutByDate.keys()) dates.add(date);
+        for (const date of stepsByDate.keys()) dates.add(date);
+
+        return [...dates]
+            .sort()
+            .map((date) => {
+                const workout = workoutByDate.get(date) ?? 0;
+                const steps = stepsByDate.get(date) ?? 0;
+                const stepCalories = caloriesFromSteps(steps, nutritionSettings?.bodyWeightKg ?? null);
+                const baseline = bmr ?? 0;
+                return { date, caloriesBurned: Math.round(workout + stepCalories + baseline) };
+            })
+            .filter((d) => d.caloriesBurned > 0);
+    }, [history, dailyActivity, bmr, nutritionSettings, month]);
+
     const burnTotals = useMemo(() => {
-        let caloriesBurned = 0;
         let fatBurnG = 0;
         for (const entry of history) {
-            if (entry.caloriesBurned != null) caloriesBurned += entry.caloriesBurned;
             if (entry.fatBurnG != null) fatBurnG += entry.fatBurnG;
         }
+        const caloriesBurned = burnSeries.reduce((sum, d) => sum + d.caloriesBurned, 0);
         return {
             caloriesBurned: Math.round(caloriesBurned),
             fatBurnG: Math.round(fatBurnG * 10) / 10,
         };
-    }, [history]);
+    }, [history, burnSeries]);
 
-    const burnSeries = useMemo(() => {
-        const byDate = new Map<string, number>();
-        for (const entry of history) {
-            if (entry.caloriesBurned == null) continue;
-            byDate.set(entry.date, (byDate.get(entry.date) ?? 0) + entry.caloriesBurned);
-        }
-        return [...byDate.entries()]
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([date, caloriesBurned]) => ({
-                date,
-                caloriesBurned: Math.round(caloriesBurned),
-            }));
-    }, [history]);
+    const stepsSummary = useMemo(() => {
+        if (dailyActivity.length === 0) return { avgSteps: 0, loggedDays: 0 };
+        const total = dailyActivity.reduce((sum, d) => sum + d.steps, 0);
+        return {
+            avgSteps: Math.round(total / dailyActivity.length),
+            loggedDays: dailyActivity.length,
+        };
+    }, [dailyActivity]);
 
     const summaryMetrics = useMemo(() => {
         const trainingDays = workoutSeries.filter((d) => d.sessionCount > 0).length;
@@ -259,6 +310,11 @@ export default function HealthSection({ month }: Props) {
         [bodyWeightLogs, selectedDate]
     );
 
+    const dayActivityLog = useMemo(
+        () => dailyActivity.find((a) => a.date === selectedDate) ?? null,
+        [dailyActivity, selectedDate]
+    );
+
     if (loading) {
         return (
             <section className="panel">
@@ -310,9 +366,20 @@ export default function HealthSection({ month }: Props) {
                         label="Calories burned"
                         value={`${burnTotals.caloriesBurned} kcal`}
                         sub={
-                            burnTotals.fatBurnG > 0
-                                ? `Fat burned ${burnTotals.fatBurnG} g`
-                                : undefined
+                            bmr != null
+                                ? `Incl. BMR (${Math.round(bmr)}/day) + steps`
+                                : (burnTotals.fatBurnG > 0
+                                      ? `Fat burned ${burnTotals.fatBurnG} g`
+                                      : 'Add height/age/sex in Meal goals for BMR')
+                        }
+                    />
+                    <SummaryCard
+                        label="Steps"
+                        value={stepsSummary.avgSteps > 0 ? `${stepsSummary.avgSteps}/day` : '—'}
+                        sub={
+                            stepsSummary.loggedDays > 0
+                                ? `${stepsSummary.loggedDays} day${stepsSummary.loggedDays === 1 ? '' : 's'} logged`
+                                : 'No steps logged yet'
                         }
                     />
                     <SummaryCard
@@ -356,6 +423,7 @@ export default function HealthSection({ month }: Props) {
                 <div className="health-calendar">
                     <ActivityCalendar
                         month={month}
+                        onMonthChange={setMonth}
                         workoutSeries={workoutSeries}
                         nutritionSeries={nutritionSeries}
                         selectedDate={selectedDate}
@@ -371,6 +439,7 @@ export default function HealthSection({ month }: Props) {
                             meals={meals}
                             nutritionSeries={nutritionSeries}
                             bodyWeightLog={dayWeightLog}
+                            dailyActivityLog={dayActivityLog}
                             onChanged={handleChanged}
                         />
                     </div>

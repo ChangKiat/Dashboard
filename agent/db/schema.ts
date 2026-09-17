@@ -160,6 +160,10 @@ export const userSettings = pgTable('user_settings', {
     timezone: text('timezone').default('Asia/Kuala_Lumpur').notNull(),
     salaryAfterTax: numeric('salary_after_tax', { precision: 12, scale: 2 }).default('0').notNull(),
     bodyWeightKg: numeric('body_weight_kg', { precision: 6, scale: 2 }),
+    heightCm: numeric('height_cm', { precision: 6, scale: 2 }),
+    age: integer('age'),
+    /** 'male' | 'female', used for BMR calculation. */
+    sex: text('sex'),
 });
 
 export const bodyWeightLogs = pgTable(
@@ -172,6 +176,18 @@ export const bodyWeightLogs = pgTable(
         createdAt: timestamp('created_at').defaultNow().notNull(),
     },
     (t) => [unique('body_weight_logs_user_date').on(t.telegramUserId, t.date)]
+);
+
+export const dailyActivityLogs = pgTable(
+    'daily_activity_logs',
+    {
+        id: serial('id').primaryKey(),
+        telegramUserId: bigint('telegram_user_id', { mode: 'number' }).notNull(),
+        date: text('date').notNull(),
+        steps: integer('steps').notNull(),
+        createdAt: timestamp('created_at').defaultNow().notNull(),
+    },
+    (t) => [unique('daily_activity_logs_user_date').on(t.telegramUserId, t.date)]
 );
 
 /** equity | fund | fd | other */
