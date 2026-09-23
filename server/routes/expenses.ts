@@ -237,6 +237,17 @@ function roundMoney(n: number): number {
     return Math.round(n * 100) / 100;
 }
 
+/** Optional trip grouping for a plain (non trip-leg) transaction. */
+async function parseGroupTripId(value: unknown): Promise<number | null | { error: string }> {
+    if (value == null || value === '') return null;
+    if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+        return { error: 'Invalid tripId' };
+    }
+    const trip = await getTripById(value);
+    if (!trip) return { error: 'Trip not found' };
+    return value;
+}
+
 /** Resolve MYR amount + FX fields for trip legs. Returns error string or payload. */
 async function resolveTripExpenseFields(body: Record<string, unknown>): Promise<
     | { error: string }
@@ -604,6 +615,15 @@ router.post('/transactions', async (req, res) => {
             }
         }
 
+        let groupTripId: number | null = null;
+        if (!tripLegHint) {
+            const parsedTrip = await parseGroupTripId(body.tripId);
+            if (parsedTrip != null && typeof parsedTrip === 'object') {
+                return res.status(400).json({ error: parsedTrip.error });
+            }
+            groupTripId = parsedTrip;
+        }
+
         const expenseId = await appendExpense(
             body.date,
             amount,
@@ -611,7 +631,7 @@ router.post('/transactions', async (req, res) => {
             category,
             body.description.trim(),
             paymentMethod,
-            tripFields
+            tripFields ?? (groupTripId != null ? { tripId: groupTripId } : undefined)
         );
 
         if (reimbursements?.length) {
@@ -750,7 +770,16 @@ router.patch('/transactions/:id', async (req, res) => {
             category?: string;
             description?: string;
             paymentMethod?: string | null;
+            tripId?: number | null;
         } = {};
+
+        if (body.tripId !== undefined) {
+            const parsedTrip = await parseGroupTripId(body.tripId);
+            if (parsedTrip != null && typeof parsedTrip === 'object') {
+                return res.status(400).json({ error: parsedTrip.error });
+            }
+            fields.tripId = parsedTrip;
+        }
 
         if (body.date != null) {
             if (!isValidDate(body.date)) return res.status(400).json({ error: 'Invalid date' });
@@ -797,6 +826,15 @@ router.patch('/transactions/:id', async (req, res) => {
         const db = requireDb();
         const [beforeUpdate] = await db.select().from(expenses).where(eq(expenses.id, id)).limit(1);
         if (!beforeUpdate) return res.status(404).json({ error: 'Expense not found' });
+
+        if (fields.tripId !== undefined && beforeUpdate.tripLeg != null) {
+            if (fields.tripId !== beforeUpdate.tripId) {
+                return res
+                    .status(400)
+                    .json({ error: 'Exchange / fund / card entries cannot be moved to another trip' });
+            }
+            delete fields.tripId;
+        }
 
         if (Object.keys(fields).length > 0) {
             const ok = await updateExpense(id, fields);

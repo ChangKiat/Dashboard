@@ -111,9 +111,17 @@ export default function VariableCategoryDetailModal({
                                         {tx.paymentMethod ? ` · ${tx.paymentMethod}` : ''}
                                     </span>
                                 </div>
-                                <span className="category-detail-transaction-amount">
-                                    {formatAmount(tx.amount)}
-                                </span>
+                                <div className="category-detail-transaction-amounts">
+                                    <span className="category-detail-transaction-amount">
+                                        {formatAmount(tx.grossAmount ?? tx.amount)}
+                                    </span>
+                                    {(tx.reimbursed ?? 0) > 0 && (
+                                        <span className="category-detail-transaction-net">
+                                            net {formatAmount(tx.netAmount ?? tx.amount)} ·
+                                            reimbursed {formatAmount(tx.reimbursed ?? 0)}
+                                        </span>
+                                    )}
+                                </div>
                             </li>
                         ))}
                     </ul>

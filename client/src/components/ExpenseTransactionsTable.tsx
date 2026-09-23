@@ -1,7 +1,12 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import type { ExpenseTransaction } from '../api';
-import { createExpenseTransaction, deleteExpenseTransaction, updateExpenseTransaction } from '../api';
+import type { ExpenseTransaction, TripWithTotals } from '../api';
+import {
+    createExpenseTransaction,
+    deleteExpenseTransaction,
+    fetchTrips,
+    updateExpenseTransaction,
+} from '../api';
 import { usePagination } from '../hooks/usePagination';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
 import { isInvestmentCategory, isOtherCategory, requiresAccountTransfer, resolveOtherAccountFields } from '../utils/expenseCategories';
@@ -30,6 +35,15 @@ interface Props {
 
 function emptyReimbursement(): ReimbursementRow {
     return { source: '', amount: '', paymentMethod: '' };
+}
+
+/** The trip whose date range covers `date`, when exactly one does. */
+function tripForDate(trips: TripWithTotals[], date: string): TripWithTotals | null {
+    if (!date) return null;
+    const matches = trips.filter(
+        (t) => t.startDate && t.endDate && t.startDate <= date && date <= t.endDate
+    );
+    return matches.length === 1 ? matches[0] : null;
 }
 
 function expenseEntryMatchesQuery(entry: ExpenseTransaction, query: string): boolean {
@@ -64,6 +78,24 @@ export default function ExpenseTransactionsTable({
         [accounts]
     );
 
+    const [trips, setTrips] = useState<TripWithTotals[]>([]);
+    const tripNameById = useMemo(() => new Map(trips.map((t) => [t.id, t.name])), [trips]);
+
+    const loadTrips = useCallback(async () => {
+        try {
+            const res = await fetchTrips();
+            setTrips(res.entries);
+            return res.entries;
+        } catch {
+            // trip grouping is optional; the form still works without it
+            return [];
+        }
+    }, []);
+
+    useEffect(() => {
+        void loadTrips();
+    }, [loadTrips]);
+
     const [modalMode, setModalMode] = useState<ModalMode>('closed');
     const [editingEntry, setEditingEntry] = useState<ExpenseTransaction | null>(null);
     const [form, setForm] = useState({
@@ -73,6 +105,7 @@ export default function ExpenseTransactionsTable({
         description: '',
         paymentMethod: '',
         toInvestmentAccount: '',
+        tripId: '',
     });
     const [showReimbursements, setShowReimbursements] = useState(false);
     const [reimbursements, setReimbursements] = useState<ReimbursementRow[]>([emptyReimbursement()]);
@@ -91,23 +124,33 @@ export default function ExpenseTransactionsTable({
     });
 
     const showTransferDestination = requiresAccountTransfer(form.category);
+    /** Exchange / fund / card entries belong to their trip; only the Trips panel manages them. */
+    const tripLocked = modalMode === 'edit' && editingEntry?.tripLeg != null;
     const investment = isInvestmentCategory(form.category);
 
     const openCreate = useCallback(() => {
+        const date = defaultDate ?? '';
         setModalMode('create');
         setEditingEntry(null);
         setForm({
-            date: defaultDate ?? '',
+            date,
             category: '',
             amount: '',
             description: '',
             paymentMethod: '',
             toInvestmentAccount: '',
+            tripId: '',
         });
         setShowReimbursements(false);
         setReimbursements([emptyReimbursement()]);
         setModalError(null);
-    }, [defaultDate]);
+        // Refresh so newly created trips show up, and pre-select the trip covering this date.
+        void loadTrips().then((list) => {
+            const match = tripForDate(list, date);
+            if (!match) return;
+            setForm((f) => (f.date === date && !f.tripId ? { ...f, tripId: String(match.id) } : f));
+        });
+    }, [defaultDate, loadTrips]);
 
     const openEdit = (entry: ExpenseTransaction) => {
         setModalMode('edit');
@@ -119,8 +162,10 @@ export default function ExpenseTransactionsTable({
             description: entry.description,
             paymentMethod: entry.paymentMethod ?? '',
             toInvestmentAccount: entry.toInvestmentAccount ?? '',
+            tripId: entry.tripId != null ? String(entry.tripId) : '',
         });
         setModalError(null);
+        void loadTrips();
     };
 
     const closeModal = () => {
@@ -202,6 +247,8 @@ export default function ExpenseTransactionsTable({
             reimbursementPayload = parsed.length > 0 ? parsed : undefined;
         }
 
+        const tripId = form.tripId ? Number(form.tripId) : null;
+
         setSaving(true);
         setModalError(null);
         try {
@@ -213,6 +260,7 @@ export default function ExpenseTransactionsTable({
                 paymentMethod,
                 toInvestmentAccount: hasFundingTransfer ? toInvestmentAccount : null,
                 ...(reimbursementPayload ? { reimbursements: reimbursementPayload } : {}),
+                ...(tripId != null ? { tripId } : {}),
             };
             if (modalMode === 'create') {
                 await createExpenseTransaction(payload);
@@ -224,6 +272,7 @@ export default function ExpenseTransactionsTable({
                     description: payload.description,
                     paymentMethod,
                     toInvestmentAccount: hasFundingTransfer ? toInvestmentAccount : null,
+                    ...(tripLocked ? {} : { tripId }),
                 });
             }
             closeModal();
@@ -361,6 +410,31 @@ export default function ExpenseTransactionsTable({
                     />
                 </div>
             )}
+            <div className="form-field">
+                <label htmlFor="tx-trip">Trip</label>
+                <select
+                    id="tx-trip"
+                    value={form.tripId}
+                    disabled={tripLocked}
+                    onChange={(e) => setForm((f) => ({ ...f, tripId: e.target.value }))}
+                >
+                    <option value="">No trip</option>
+                    {trips.map((trip) => (
+                        <option key={trip.id} value={trip.id}>
+                            {trip.name}
+                            {trip.startDate ? ` (${trip.startDate}${trip.endDate ? ` → ${trip.endDate}` : ''})` : ''}
+                        </option>
+                    ))}
+                </select>
+                {tripLocked && (
+                    <span className="muted form-hint">
+                        Trip exchange / fund / card entries are managed from the Trips panel.
+                    </span>
+                )}
+                {!tripLocked && trips.length === 0 && (
+                    <span className="muted form-hint">Create a trip in the Trips panel to group spending.</span>
+                )}
+            </div>
             {modalMode === 'create' && !showTransferDestination && (
                 <div className="form-field">
                     <label>
@@ -470,6 +544,11 @@ export default function ExpenseTransactionsTable({
                                         {fixedDescriptionSet.has(normalizeDescription(entry.description)) && (
                                             <span className="fixed-tag" title="Counted as a fixed expense">
                                                 Fixed
+                                            </span>
+                                        )}
+                                        {entry.tripId != null && tripNameById.has(entry.tripId) && (
+                                            <span className="trip-tag" title="Grouped in this trip">
+                                                {tripNameById.get(entry.tripId)}
                                             </span>
                                         )}
                                     </span>

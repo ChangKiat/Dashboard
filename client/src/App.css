@@ -2893,6 +2893,21 @@ div.payment-account-card-main:hover {
   flex-shrink: 0;
 }
 
+.category-detail-transaction-amounts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.category-detail-transaction-net {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
 .variable-expense-card.budget-row--ok {
   border-left: 3px solid var(--ok);
 }
@@ -3012,6 +3027,22 @@ div.payment-account-card-main:hover {
   word-break: break-word;
 }
 
+.trip-tag {
+  display: inline-block;
+  max-width: 140px;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--accent-text);
+  border: 1px solid var(--accent);
+  vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .fixed-tag {
   display: inline-block;
   margin-left: 6px;
@@ -3129,11 +3160,29 @@ div.payment-account-card-main:hover {
   background: var(--surface);
 }
 
+.trips-list-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
 .trips-list-name {
   font-weight: 600;
   font-size: 0.9rem;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trips-list-meta {
+  font-size: 0.72rem;
+}
+
+.trips-list-total {
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
@@ -3200,6 +3249,175 @@ div.payment-account-card-main:hover {
   font-size: 1.05rem;
 }
 
+.trips-summary-item--spent .trips-summary-value {
+  font-size: 1.25rem;
+  color: var(--accent-text);
+}
+
+.trips-summary-sub {
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.trips-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.trips-breakdown-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.trips-breakdown-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trips-breakdown-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(90px, 160px) 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.trips-breakdown-row:hover,
+.trips-breakdown-row.active {
+  background: var(--surface-2);
+}
+
+.trips-breakdown-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trips-breakdown-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.trips-breakdown-fill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--accent);
+}
+
+.trips-breakdown-amount {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.trips-breakdown-amount .muted {
+  font-weight: 400;
+  font-size: 0.75rem;
+}
+
+.trips-link-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 0;
+}
+
+.trips-link-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 12px;
+}
+
+.trips-link-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.trips-link-filters input {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.875rem;
+}
+
+.trips-link-search {
+  flex: 1 1 200px;
+}
+
+.trips-link-table-wrap {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.trips-link-table-wrap tbody tr {
+  cursor: pointer;
+}
+
+.trips-link-table-wrap tr.is-picked td {
+  background: var(--surface-2);
+}
+
+.data-table .trips-col-check {
+  width: 44px;
+  padding-right: 0;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.trips-col-check input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.trips-link-table-wrap .data-table th:nth-child(2),
+.trips-link-table-wrap .data-table td:nth-child(2) {
+  width: 110px;
+}
+
+.trips-link-table-wrap .data-table th:nth-child(3),
+.trips-link-table-wrap .data-table td:nth-child(3) {
+  width: 130px;
+}
+
+.trips-link-table-wrap .data-table th:last-child,
+.trips-link-table-wrap .data-table td:last-child {
+  width: 110px;
+}
+
+.trips-link-count {
+  margin-right: auto;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .trips-form {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -3257,7 +3475,7 @@ div.payment-account-card-main:hover {
 }
 
 .trips-expenses-table .actions-col {
-  width: 1%;
+  width: 72px;
   white-space: nowrap;
   text-align: right;
 }

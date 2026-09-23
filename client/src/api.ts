@@ -80,6 +80,26 @@ export interface Trip {
     notes: string | null;
 }
 
+export interface TripWithTotals extends Trip {
+    spentMyr: number;
+    entryCount: number;
+}
+
+export interface TripCategorySpend {
+    category: string;
+    amountMyr: number;
+    count: number;
+}
+
+export interface TripLinkCandidate {
+    id: number;
+    date: string;
+    amount: number;
+    category: string;
+    description: string;
+    paymentMethod: string | null;
+}
+
 export interface TripExpense {
     id: number;
     date: string;
@@ -98,9 +118,14 @@ export interface TripSummary {
     exchangedMyr: number;
     fundReceived: number;
     fundSpent: number;
+    fundSpentMyr: number;
     fundRemaining: number;
     cardMyr: number;
+    linkedMyr: number;
+    spentMyr: number;
     tripTotalMyr: number;
+    days: number | null;
+    byCategory: TripCategorySpend[];
     latestExchangeRate: number | null;
     expenses: TripExpense[];
 }
@@ -521,7 +546,7 @@ export function createExpenseTransaction(
         paymentMethod?: string | null;
         toInvestmentAccount?: string | null;
         reimbursements?: { source: string; amount: number; paymentMethod?: string | null }[];
-        tripId?: number;
+        tripId?: number | null;
         tripLeg?: TripLeg;
         fxAmount?: number;
         fxCurrency?: string;
@@ -538,7 +563,10 @@ export function createExpenseTransaction(
 export function updateExpenseTransaction(
     id: number,
     fields: Partial<
-        Pick<ExpenseTransaction, 'date' | 'amount' | 'category' | 'description' | 'paymentMethod' | 'toInvestmentAccount'>
+        Pick<
+            ExpenseTransaction,
+            'date' | 'amount' | 'category' | 'description' | 'paymentMethod' | 'toInvestmentAccount' | 'tripId'
+        >
     >
 ) {
     return fetchJson<{ ok: true }>(`/api/expenses/transactions/${id}`, {
@@ -993,7 +1021,7 @@ export function fetchSyncStatus(month: string, scope: SyncScope) {
 }
 
 export function fetchTrips() {
-    return fetchJson<{ entries: Trip[] }>('/api/trips');
+    return fetchJson<{ entries: TripWithTotals[] }>('/api/trips');
 }
 
 export function createTrip(fields: {
@@ -1033,6 +1061,28 @@ export function deleteTrip(id: number) {
 
 export function fetchTripSummary(id: number) {
     return fetchJson<TripSummary>(`/api/trips/${id}/summary`);
+}
+
+export function fetchTripLinkCandidates(id: number, range?: { start?: string; end?: string }) {
+    const params = new URLSearchParams();
+    if (range?.start) params.set('start', range.start);
+    if (range?.end) params.set('end', range.end);
+    const query = params.toString();
+    return fetchJson<{ start: string; end: string; entries: TripLinkCandidate[] }>(
+        `/api/trips/${id}/candidates${query ? `?${query}` : ''}`
+    );
+}
+
+export function linkTripExpenses(id: number, expenseIds: number[]) {
+    return fetchJson<{ ok: true; linked: number }>(`/api/trips/${id}/link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expenseIds }),
+    });
+}
+
+export function unlinkTripExpense(id: number, expenseId: number) {
+    return fetchJson<{ ok: true }>(`/api/trips/${id}/link/${expenseId}`, { method: 'DELETE' });
 }
 
 export type InstrumentKind = 'equity' | 'fund' | 'fd' | 'other';

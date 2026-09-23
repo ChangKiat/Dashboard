@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import type { Trip, TripLeg, TripSummary } from '../api';
+import type { TripLeg, TripLinkCandidate, TripSummary, TripWithTotals } from '../api';
 import {
     createExpenseTransaction,
     createTrip,
     deleteExpenseTransaction,
     deleteTrip,
+    fetchTripLinkCandidates,
     fetchTripSummary,
     fetchTrips,
+    linkTripExpenses,
+    unlinkTripExpense,
 } from '../api';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
+import ConfirmDialog from './ConfirmDialog';
 import ExpenseCategorySelect from './ExpenseCategorySelect';
 import PaymentMethodSelect from './PaymentMethodSelect';
 
@@ -17,9 +21,11 @@ interface Props {
     variableCategories: string[];
     formatAmount: (amount: number) => string;
     onChanged?: () => void;
+    /** Bump to reload trips after transactions change elsewhere (e.g. tagged from the expense form). */
+    reloadKey?: number;
 }
 
-type FormMode = 'none' | 'create-trip' | 'exchange' | 'expense';
+type FormMode = 'none' | 'create-trip' | 'exchange' | 'expense' | 'link';
 
 function formatFx(amount: number, currency: string) {
     return `${currency} ${amount.toLocaleString('en-MY', {
@@ -32,7 +38,7 @@ function legLabel(leg: TripLeg | null) {
     if (leg === 'exchange') return 'Exchange';
     if (leg === 'fund') return 'Trip fund';
     if (leg === 'card') return 'Credit card';
-    return '—';
+    return 'Linked';
 }
 
 function todayKL(): string {
@@ -43,9 +49,9 @@ function todayKL(): string {
     return `${y}-${m}-${d}`;
 }
 
-export default function TripsPanel({ variableCategories, formatAmount, onChanged }: Props) {
+export default function TripsPanel({ variableCategories, formatAmount, onChanged, reloadKey = 0 }: Props) {
     const { refresh: refreshAccounts } = usePaymentAccounts();
-    const [trips, setTrips] = useState<Trip[]>([]);
+    const [trips, setTrips] = useState<TripWithTotals[]>([]);
     const [selectedId, setSelectedId] = useState<number | null>(null);
     const [summary, setSummary] = useState<TripSummary | null>(null);
     const [loading, setLoading] = useState(true);
@@ -68,6 +74,19 @@ export default function TripsPanel({ variableCategories, formatAmount, onChanged
     const [fxAmount, setFxAmount] = useState('');
     const [spendSource, setSpendSource] = useState<'fund' | 'card'>('fund');
 
+    // link existing transactions
+    const [candidates, setCandidates] = useState<TripLinkCandidate[]>([]);
+    const [candStart, setCandStart] = useState('');
+    const [candEnd, setCandEnd] = useState('');
+    const [candSearch, setCandSearch] = useState('');
+    const [candLoading, setCandLoading] = useState(false);
+    const [picked, setPicked] = useState<Set<number>>(new Set());
+
+    const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+    const [pendingDelete, setPendingDelete] = useState<
+        { kind: 'trip' } | { kind: 'entry'; id: number } | null
+    >(null);
+
     const categories = useMemo(() => {
         const set = new Set(variableCategories);
         set.add('Travel');
@@ -84,6 +103,38 @@ export default function TripsPanel({ variableCategories, formatAmount, onChanged
         const res = await fetchTripSummary(id);
         setSummary(res);
     }, []);
+
+    /** Refresh the open trip plus the list totals after any change. */
+    const reloadSelected = useCallback(
+        async (id: number) => {
+            await Promise.all([loadSummary(id), loadTrips()]);
+        },
+        [loadSummary, loadTrips]
+    );
+
+    const filteredCandidates = useMemo(() => {
+        const q = candSearch.trim().toLowerCase();
+        if (!q) return candidates;
+        return candidates.filter(
+            (c) =>
+                c.description.toLowerCase().includes(q) ||
+                c.category.toLowerCase().includes(q) ||
+                (c.paymentMethod ?? '').toLowerCase().includes(q)
+        );
+    }, [candidates, candSearch]);
+
+    const pickedTotal = useMemo(
+        () => candidates.filter((c) => picked.has(c.id)).reduce((sum, c) => sum + c.amount, 0),
+        [candidates, picked]
+    );
+
+    const visibleExpenses = useMemo(() => {
+        if (!summary) return [];
+        if (!categoryFilter) return summary.expenses;
+        return summary.expenses.filter(
+            (row) => row.category === categoryFilter && row.tripLeg !== 'exchange'
+        );
+    }, [summary, categoryFilter]);
 
     useEffect(() => {
         let cancelled = false;
@@ -115,6 +166,19 @@ export default function TripsPanel({ variableCategories, formatAmount, onChanged
         };
     }, [selectedId, loadSummary]);
 
+    useEffect(() => {
+        if (reloadKey === 0) return;
+        loadTrips().catch(() => {
+            /* keep current list on background refresh failure */
+        });
+        if (selectedId != null) {
+            loadSummary(selectedId).catch(() => {
+                /* keep current summary */
+            });
+        }
+        // Only reload when the key bumps; selectedId changes are handled by the effect above.
+    }, [reloadKey]);
+
     function resetForms() {
         setFormMode('none');
         setTripName('');
@@ -128,6 +192,74 @@ export default function TripsPanel({ variableCategories, formatAmount, onChanged
         setMyrAmount('');
         setFxAmount('');
         setSpendSource('fund');
+        setCandidates([]);
+        setCandSearch('');
+        setPicked(new Set());
+    }
+
+    async function loadCandidates(id: number, range?: { start?: string; end?: string }) {
+        setCandLoading(true);
+        setError(null);
+        try {
+            const res = await fetchTripLinkCandidates(id, range);
+            setCandidates(res.entries);
+            setCandStart(res.start);
+            setCandEnd(res.end);
+            setPicked(new Set());
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to load transactions');
+        } finally {
+            setCandLoading(false);
+        }
+    }
+
+    function togglePicked(id: number) {
+        setPicked((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    }
+
+    function toggleAllVisible() {
+        setPicked((prev) => {
+            const allPicked = filteredCandidates.every((c) => prev.has(c.id));
+            const next = new Set(prev);
+            for (const c of filteredCandidates) {
+                if (allPicked) next.delete(c.id);
+                else next.add(c.id);
+            }
+            return next;
+        });
+    }
+
+    async function handleLink(e: React.FormEvent) {
+        e.preventDefault();
+        if (selectedId == null || picked.size === 0) return;
+        setSaving(true);
+        setError(null);
+        try {
+            await linkTripExpenses(selectedId, [...picked]);
+            await reloadSelected(selectedId);
+            resetForms();
+            onChanged?.();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to link transactions');
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    async function handleUnlink(expenseId: number) {
+        if (selectedId == null) return;
+        try {
+            await unlinkTripExpense(selectedId, expenseId);
+            await reloadSelected(selectedId);
+            onChanged?.();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to unlink');
+        }
     }
 
     async function handleCreateTrip(e: React.FormEvent) {
@@ -171,7 +303,7 @@ export default function TripsPanel({ variableCategories, formatAmount, onChanged
                 fxAmount: fx,
                 fxCurrency: summary?.trip.tripCurrency,
             });
-            await loadSummary(selectedId);
+            await reloadSelected(selectedId);
             resetForms();
             await refreshAccounts();
             onChanged?.();
@@ -203,7 +335,7 @@ export default function TripsPanel({ variableCategories, formatAmount, onChanged
                 payload.amount = parseFloat(myrAmount);
             }
             await createExpenseTransaction(payload);
-            await loadSummary(selectedId);
+            await reloadSelected(selectedId);
             resetForms();
             await refreshAccounts();
             onChanged?.();
@@ -215,11 +347,10 @@ export default function TripsPanel({ variableCategories, formatAmount, onChanged
     }
 
     async function handleDeleteExpense(id: number) {
-        if (!confirm('Delete this trip entry?')) return;
         if (selectedId == null) return;
         try {
             await deleteExpenseTransaction(id);
-            await loadSummary(selectedId);
+            await reloadSelected(selectedId);
             await refreshAccounts();
             onChanged?.();
         } catch (err) {
@@ -229,7 +360,6 @@ export default function TripsPanel({ variableCategories, formatAmount, onChanged
 
     async function handleDeleteTrip() {
         if (selectedId == null) return;
-        if (!confirm('Delete this trip? It must have no linked expenses.')) return;
         try {
             await deleteTrip(selectedId);
             setSelectedId(null);
@@ -240,6 +370,28 @@ export default function TripsPanel({ variableCategories, formatAmount, onChanged
             setError(err instanceof Error ? err.message : 'Failed to delete trip');
         }
     }
+
+    function handleConfirmDelete() {
+        const target = pendingDelete;
+        setPendingDelete(null);
+        if (!target) return;
+        if (target.kind === 'trip') void handleDeleteTrip();
+        else void handleDeleteExpense(target.id);
+    }
+
+    const confirmDialog = (
+        <ConfirmDialog
+            open={pendingDelete != null}
+            title={pendingDelete?.kind === 'trip' ? 'Delete trip' : 'Delete trip entry'}
+            message={
+                pendingDelete?.kind === 'trip'
+                    ? `Delete "${summary?.trip.name ?? 'this trip'}"? Linked transactions are kept and just removed from the trip. Exchange / fund / card entries must be deleted first.`
+                    : 'Delete this trip entry? This removes the transaction and updates account balances.'
+            }
+            onConfirm={handleConfirmDelete}
+            onCancel={() => setPendingDelete(null)}
+        />
+    );
 
     if (loading) {
         return (
@@ -315,11 +467,18 @@ export default function TripsPanel({ variableCategories, formatAmount, onChanged
                                 }
                                 onClick={() => {
                                     setSelectedId(trip.id);
+                                    setCategoryFilter(null);
                                     resetForms();
                                 }}
                             >
-                                <span className="trips-list-name">{trip.name}</span>
-                                <span className="muted">{trip.tripCurrency}</span>
+                                <span className="trips-list-main">
+                                    <span className="trips-list-name">{trip.name}</span>
+                                    <span className="trips-list-meta muted">
+                                        {trip.tripCurrency} · {trip.entryCount}{' '}
+                                        {trip.entryCount === 1 ? 'entry' : 'entries'}
+                                    </span>
+                                </span>
+                                <span className="trips-list-total">{formatAmount(trip.spentMyr)}</span>
                             </button>
                         </li>
                     ))}
@@ -367,8 +526,19 @@ export default function TripsPanel({ variableCategories, formatAmount, onChanged
                                 </button>
                                 <button
                                     type="button"
+                                    className="btn-secondary"
+                                    onClick={() => {
+                                        resetForms();
+                                        setFormMode('link');
+                                        void loadCandidates(summary.trip.id);
+                                    }}
+                                >
+                                    Link transactions
+                                </button>
+                                <button
+                                    type="button"
                                     className="btn-danger trips-delete-trip"
-                                    onClick={handleDeleteTrip}
+                                    onClick={() => setPendingDelete({ kind: 'trip' })}
                                 >
                                     Delete trip
                                 </button>
@@ -376,6 +546,18 @@ export default function TripsPanel({ variableCategories, formatAmount, onChanged
                         </div>
 
                         <div className="trips-summary-strip">
+                            <div className="trips-summary-item trips-summary-item--spent">
+                                <span className="trips-summary-label">Total spent</span>
+                                <span className="trips-summary-value">
+                                    {formatAmount(summary.spentMyr)}
+                                </span>
+                                {summary.days != null && summary.days > 0 && (
+                                    <span className="trips-summary-sub muted">
+                                        {formatAmount(summary.spentMyr / summary.days)} / day ·{' '}
+                                        {summary.days} {summary.days === 1 ? 'day' : 'days'}
+                                    </span>
+                                )}
+                            </div>
                             <div className="trips-summary-item">
                                 <span className="trips-summary-label">Exchanged</span>
                                 <span className="trips-summary-value">
@@ -400,13 +582,216 @@ export default function TripsPanel({ variableCategories, formatAmount, onChanged
                                     {formatAmount(summary.cardMyr)}
                                 </span>
                             </div>
+                            <div className="trips-summary-item">
+                                <span className="trips-summary-label">Linked</span>
+                                <span className="trips-summary-value">
+                                    {formatAmount(summary.linkedMyr)}
+                                </span>
+                            </div>
                             <div className="trips-summary-item trips-summary-item--total">
-                                <span className="trips-summary-label">Trip total</span>
+                                <span
+                                    className="trips-summary-label"
+                                    title="Exchanged + card + linked: MYR that left your accounts"
+                                >
+                                    Total cost
+                                </span>
                                 <span className="trips-summary-value">
                                     {formatAmount(summary.tripTotalMyr)}
                                 </span>
                             </div>
                         </div>
+
+                        {summary.byCategory.length > 0 && (
+                            <div className="trips-breakdown">
+                                <div className="trips-breakdown-head">
+                                    <span className="trips-summary-label">Spending by category</span>
+                                    {categoryFilter && (
+                                        <button
+                                            type="button"
+                                            className="btn-link"
+                                            onClick={() => setCategoryFilter(null)}
+                                        >
+                                            Show all
+                                        </button>
+                                    )}
+                                </div>
+                                <ul className="trips-breakdown-list">
+                                    {summary.byCategory.map((c) => {
+                                        const pct =
+                                            summary.spentMyr > 0
+                                                ? (c.amountMyr / summary.spentMyr) * 100
+                                                : 0;
+                                        const active = categoryFilter === c.category;
+                                        return (
+                                            <li key={c.category}>
+                                                <button
+                                                    type="button"
+                                                    className={
+                                                        active
+                                                            ? 'trips-breakdown-row active'
+                                                            : 'trips-breakdown-row'
+                                                    }
+                                                    aria-pressed={active}
+                                                    onClick={() =>
+                                                        setCategoryFilter(active ? null : c.category)
+                                                    }
+                                                >
+                                                    <span className="trips-breakdown-name">
+                                                        {c.category}
+                                                        <span className="muted"> · {c.count}</span>
+                                                    </span>
+                                                    <span className="trips-breakdown-bar">
+                                                        <span
+                                                            className="trips-breakdown-fill"
+                                                            style={{ width: `${Math.max(pct, 1)}%` }}
+                                                        />
+                                                    </span>
+                                                    <span className="trips-breakdown-amount">
+                                                        {formatAmount(c.amountMyr)}
+                                                        <span className="muted"> {pct.toFixed(0)}%</span>
+                                                    </span>
+                                                </button>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                            </div>
+                        )}
+
+                        {formMode === 'link' && (
+                            <form className="trips-link-form" onSubmit={handleLink}>
+                                <div className="trips-link-filters">
+                                    <label>
+                                        From
+                                        <input
+                                            type="date"
+                                            value={candStart}
+                                            onChange={(e) => setCandStart(e.target.value)}
+                                        />
+                                    </label>
+                                    <label>
+                                        To
+                                        <input
+                                            type="date"
+                                            value={candEnd}
+                                            onChange={(e) => setCandEnd(e.target.value)}
+                                        />
+                                    </label>
+                                    <button
+                                        type="button"
+                                        className="btn-secondary"
+                                        disabled={candLoading || !candStart || !candEnd}
+                                        onClick={() =>
+                                            loadCandidates(summary.trip.id, {
+                                                start: candStart,
+                                                end: candEnd,
+                                            })
+                                        }
+                                    >
+                                        Load
+                                    </button>
+                                    <label className="trips-link-search">
+                                        Search
+                                        <input
+                                            value={candSearch}
+                                            onChange={(e) => setCandSearch(e.target.value)}
+                                            placeholder="Description, category, account"
+                                        />
+                                    </label>
+                                </div>
+
+                                <div className="trips-table-wrap trips-link-table-wrap">
+                                    <table className="data-table trips-expenses-table">
+                                        <thead>
+                                            <tr>
+                                                <th className="trips-col-check">
+                                                    <input
+                                                        type="checkbox"
+                                                        aria-label="Select all shown"
+                                                        checked={
+                                                            filteredCandidates.length > 0 &&
+                                                            filteredCandidates.every((c) =>
+                                                                picked.has(c.id)
+                                                            )
+                                                        }
+                                                        onChange={toggleAllVisible}
+                                                        disabled={filteredCandidates.length === 0}
+                                                    />
+                                                </th>
+                                                <th>Date</th>
+                                                <th>Category</th>
+                                                <th>Description</th>
+                                                <th className="trips-col-num">MYR</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {candLoading && (
+                                                <tr>
+                                                    <td colSpan={5} className="trips-empty muted">
+                                                        Loading…
+                                                    </td>
+                                                </tr>
+                                            )}
+                                            {!candLoading && filteredCandidates.length === 0 && (
+                                                <tr>
+                                                    <td colSpan={5} className="trips-empty muted">
+                                                        No ungrouped transactions in this range
+                                                    </td>
+                                                </tr>
+                                            )}
+                                            {!candLoading &&
+                                                filteredCandidates.map((c) => (
+                                                    <tr
+                                                        key={c.id}
+                                                        className={picked.has(c.id) ? 'is-picked' : undefined}
+                                                        onClick={() => togglePicked(c.id)}
+                                                    >
+                                                        <td className="trips-col-check">
+                                                            <input
+                                                                type="checkbox"
+                                                                aria-label={`Select ${c.description}`}
+                                                                checked={picked.has(c.id)}
+                                                                onChange={() => togglePicked(c.id)}
+                                                                onClick={(e) => e.stopPropagation()}
+                                                            />
+                                                        </td>
+                                                        <td>{c.date}</td>
+                                                        <td>{c.category}</td>
+                                                        <td>
+                                                            {c.description}
+                                                            {c.paymentMethod ? (
+                                                                <span className="muted">
+                                                                    {' '}
+                                                                    · {c.paymentMethod}
+                                                                </span>
+                                                            ) : null}
+                                                        </td>
+                                                        <td className="trips-col-num">
+                                                            {formatAmount(c.amount)}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <div className="trips-form-actions">
+                                    <span className="muted trips-link-count">
+                                        {picked.size} selected · {formatAmount(pickedTotal)}
+                                    </span>
+                                    <button
+                                        type="submit"
+                                        className="btn-primary"
+                                        disabled={saving || picked.size === 0}
+                                    >
+                                        Add to trip
+                                    </button>
+                                    <button type="button" className="btn-secondary" onClick={resetForms}>
+                                        Cancel
+                                    </button>
+                                </div>
+                            </form>
+                        )}
 
                         {formMode === 'exchange' && (
                             <form className="trips-form" onSubmit={handleExchange}>
@@ -591,14 +976,16 @@ export default function TripsPanel({ variableCategories, formatAmount, onChanged
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {summary.expenses.length === 0 && (
+                                    {visibleExpenses.length === 0 && (
                                         <tr>
                                             <td colSpan={7} className="trips-empty muted">
-                                                No trip entries yet
+                                                {categoryFilter
+                                                    ? `No ${categoryFilter} entries`
+                                                    : 'No trip entries yet'}
                                             </td>
                                         </tr>
                                     )}
-                                    {summary.expenses.map((row) => (
+                                    {visibleExpenses.map((row) => (
                                         <tr key={row.id}>
                                             <td>{row.date}</td>
                                             <td>
@@ -628,18 +1015,38 @@ export default function TripsPanel({ variableCategories, formatAmount, onChanged
                                                     : '—'}
                                             </td>
                                             <td className="trips-col-num">
-                                                {row.tripLeg === 'fund'
-                                                    ? '—'
-                                                    : formatAmount(row.amount)}
+                                                {row.tripLeg === 'fund' ? (
+                                                    <span
+                                                        className="muted"
+                                                        title="MYR equivalent at the exchange rate (already counted in the exchange)"
+                                                    >
+                                                        ≈ {formatAmount(row.amount)}
+                                                    </span>
+                                                ) : (
+                                                    formatAmount(row.amount)
+                                                )}
                                             </td>
                                             <td className="actions-col">
-                                                <button
-                                                    type="button"
-                                                    className="btn-danger-link"
-                                                    onClick={() => handleDeleteExpense(row.id)}
-                                                >
-                                                    Delete
-                                                </button>
+                                                {row.tripLeg == null ? (
+                                                    <button
+                                                        type="button"
+                                                        className="btn-link"
+                                                        title="Remove from this trip (keeps the transaction)"
+                                                        onClick={() => handleUnlink(row.id)}
+                                                    >
+                                                        Unlink
+                                                    </button>
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        className="btn-danger-link"
+                                                        onClick={() =>
+                                                            setPendingDelete({ kind: 'entry', id: row.id })
+                                                        }
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                )}
                                             </td>
                                         </tr>
                                     ))}
@@ -649,6 +1056,7 @@ export default function TripsPanel({ variableCategories, formatAmount, onChanged
                     </div>
                 )}
             </div>
+            {confirmDialog}
         </div>
     );
 }

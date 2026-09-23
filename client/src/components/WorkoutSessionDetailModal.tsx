@@ -101,6 +101,7 @@ export default function WorkoutSessionDetailModal({
 }: Props) {
     const [editing, setEditing] = useState(false);
     const [label, setLabel] = useState(session.sessionLabel ?? '');
+    const [date, setDate] = useState(session.date);
     const [rows, setRows] = useState<EditRow[]>(() => session.exercises.map(entryToRow));
     const [saving, setSaving] = useState(false);
     const [deleting, setDeleting] = useState(false);
@@ -113,6 +114,7 @@ export default function WorkoutSessionDetailModal({
 
     const startEdit = () => {
         setLabel(session.sessionLabel ?? '');
+        setDate(session.date);
         setRows(session.exercises.map(entryToRow));
         setError(null);
         setConfirmDeleteSession(false);
@@ -133,6 +135,10 @@ export default function WorkoutSessionDetailModal({
         const trimmedLabel = label.trim();
         if (!trimmedLabel) {
             setError('Session label is required.');
+            return;
+        }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+            setError('Session date is required.');
             return;
         }
         if (rows.length === 0) {
@@ -168,7 +174,7 @@ export default function WorkoutSessionDetailModal({
                     const supersetGroup = parseSupersetGroup(row.supersetGroup) as number | null;
                     const weightsKg = row.weightsKg.trim() || null;
                     const fields = {
-                        date: session.date,
+                        date,
                         exercise: row.exercise.trim(),
                         sets: parseOptionalInt(row.sets),
                         reps: parseOptionalInt(row.reps),
@@ -231,6 +237,16 @@ export default function WorkoutSessionDetailModal({
                         type="text"
                         value={label}
                         onChange={(e) => setLabel(e.target.value)}
+                        disabled={saving || deleting}
+                    />
+                </div>
+                <div className="form-field">
+                    <label htmlFor="session-edit-date">Date</label>
+                    <input
+                        id="session-edit-date"
+                        type="date"
+                        value={date}
+                        onChange={(e) => setDate(e.target.value)}
                         disabled={saving || deleting}
                     />
                 </div>

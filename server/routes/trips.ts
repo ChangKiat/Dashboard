@@ -4,7 +4,10 @@ import {
     deleteTrip,
     getTripById,
     getTripSummary,
+    linkExpensesToTrip,
+    listLinkCandidates,
     listTrips,
+    unlinkExpenseFromTrip,
     updateTrip,
 } from '../../agent/services/tripService';
 import { isNonEmptyString, isValidDate, parseIdParam } from '../validation';
@@ -77,6 +80,65 @@ router.get('/:id/summary', async (req, res) => {
         res.json(summary);
     } catch (err) {
         console.error('GET /api/trips/:id/summary', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+    }
+});
+
+/** Ungrouped regular transactions in a date range (defaults to the trip dates, else last 30 days). */
+router.get('/:id/candidates', async (req, res) => {
+    try {
+        const id = parseIdParam(req.params.id);
+        if (!id) return res.status(400).json({ error: 'Invalid id' });
+        const trip = await getTripById(id);
+        if (!trip) return res.status(404).json({ error: 'Trip not found' });
+
+        const today = new Date().toISOString().slice(0, 10);
+        const monthAgo = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
+        const start = isValidDate(req.query.start) ? req.query.start : trip.startDate ?? monthAgo;
+        const end = isValidDate(req.query.end) ? req.query.end : trip.endDate ?? today;
+        if (start > end) return res.status(400).json({ error: 'Start must be before end' });
+
+        const entries = await listLinkCandidates(start, end);
+        res.json({ start, end, entries });
+    } catch (err) {
+        console.error('GET /api/trips/:id/candidates', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+    }
+});
+
+router.post('/:id/link', async (req, res) => {
+    try {
+        const id = parseIdParam(req.params.id);
+        if (!id) return res.status(400).json({ error: 'Invalid id' });
+        const ids: unknown = req.body?.expenseIds;
+        if (
+            !Array.isArray(ids) ||
+            ids.length === 0 ||
+            !ids.every((v) => typeof v === 'number' && Number.isInteger(v) && v > 0)
+        ) {
+            return res.status(400).json({ error: 'expenseIds must be a non-empty array of ids' });
+        }
+        const trip = await getTripById(id);
+        if (!trip) return res.status(404).json({ error: 'Trip not found' });
+
+        const linked = await linkExpensesToTrip(id, ids as number[]);
+        res.json({ ok: true, linked });
+    } catch (err) {
+        console.error('POST /api/trips/:id/link', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+    }
+});
+
+router.delete('/:id/link/:expenseId', async (req, res) => {
+    try {
+        const id = parseIdParam(req.params.id);
+        const expenseId = parseIdParam(req.params.expenseId);
+        if (!id || !expenseId) return res.status(400).json({ error: 'Invalid id' });
+        const ok = await unlinkExpenseFromTrip(id, expenseId);
+        if (!ok) return res.status(404).json({ error: 'Linked transaction not found on this trip' });
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('DELETE /api/trips/:id/link/:expenseId', err);
         res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
     }
 });

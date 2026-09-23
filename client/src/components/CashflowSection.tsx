@@ -49,6 +49,7 @@ export default function CashflowSection() {
     const [expenseSeries, setExpenseSeries] = useState<ExpenseDailyPoint[]>([]);
     const [incomeSeries, setIncomeSeries] = useState<IncomeDailyPoint[]>([]);
     const [fixedConfigs, setFixedConfigs] = useState<FixedExpenseConfig[]>([]);
+    const [tripsReloadKey, setTripsReloadKey] = useState(0);
     const fingerprintRef = useRef<string | null>(null);
 
     const loadData = useCallback(async (options?: { silent?: boolean }) => {
@@ -112,6 +113,7 @@ export default function CashflowSection() {
     }, [loadData]);
 
     const handleChanged = useCallback(() => {
+        setTripsReloadKey((k) => k + 1);
         loadData().catch((err) => {
             setError(err instanceof Error ? err.message : 'Failed to refresh');
         });
@@ -271,6 +273,7 @@ export default function CashflowSection() {
                     variableCategories={variableCategories}
                     formatAmount={formatMYR}
                     onChanged={handleChanged}
+                    reloadKey={tripsReloadKey}
                 />
             </div>
         </section>
