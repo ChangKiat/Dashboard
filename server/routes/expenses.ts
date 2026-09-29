@@ -237,6 +237,14 @@ function roundMoney(n: number): number {
     return Math.round(n * 100) / 100;
 }
 
+/**
+ * MYR per 1 foreign unit. Never round this like money: VND's ~0.00016 became 0.
+ * The fx_rate column keeps 6 decimals; readers derive exchange rates from the two amounts.
+ */
+function effectiveRate(myrAmount: number, fxAmount: number): number {
+    return myrAmount / fxAmount;
+}
+
 /** Optional trip grouping for a plain (non trip-leg) transaction. */
 async function parseGroupTripId(value: unknown): Promise<number | null | { error: string }> {
     if (value == null || value === '') return null;
@@ -291,7 +299,7 @@ async function resolveTripExpenseFields(body: Record<string, unknown>): Promise<
         }
         const amount = body.amount;
         const fxRate =
-            isPositiveNumber(body.fxRate) ? body.fxRate : roundMoney(amount / fxAmount);
+            isPositiveNumber(body.fxRate) ? body.fxRate : effectiveRate(amount, fxAmount);
         return {
             amount,
             paymentMethod: body.paymentMethod.trim(),
@@ -330,7 +338,7 @@ async function resolveTripExpenseFields(body: Record<string, unknown>): Promise<
     let fxRate: number;
     if (isPositiveNumber(body.amount)) {
         amount = body.amount;
-        fxRate = isPositiveNumber(body.fxRate) ? body.fxRate : roundMoney(amount / fxAmount);
+        fxRate = isPositiveNumber(body.fxRate) ? body.fxRate : effectiveRate(amount, fxAmount);
     } else if (isPositiveNumber(body.fxRate)) {
         fxRate = body.fxRate;
         amount = roundMoney(fxAmount * fxRate);
@@ -771,6 +779,7 @@ router.patch('/transactions/:id', async (req, res) => {
             description?: string;
             paymentMethod?: string | null;
             tripId?: number | null;
+            fxRate?: number;
         } = {};
 
         if (body.tripId !== undefined) {
@@ -834,6 +843,12 @@ router.patch('/transactions/:id', async (req, res) => {
                     .json({ error: 'Exchange / fund / card entries cannot be moved to another trip' });
             }
             delete fields.tripId;
+        }
+
+        // A trip-leg row's rate is MYR ÷ foreign amount; keep it in step with an edited MYR amount.
+        if (fields.amount !== undefined && beforeUpdate.tripLeg != null && beforeUpdate.fxAmount != null) {
+            const fx = parseFloat(beforeUpdate.fxAmount);
+            if (fx > 0) fields.fxRate = effectiveRate(fields.amount, fx);
         }
 
         if (Object.keys(fields).length > 0) {
