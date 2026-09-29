@@ -9,6 +9,7 @@ import {
     getInstrumentById,
     getPortfolioSummary,
     isValidInstrumentKind,
+    listInvestedExpenseIds,
     recordBuy,
     recordDividend,
     recordFundInvest,
@@ -38,11 +39,17 @@ async function loadCashBalance(accountId: number): Promise<number> {
     const account = await getPaymentAccountById(accountId);
     if (!account) throw new Error('Account not found');
     const db = requireDb();
-    const [expenseRows, incomeRows] = await Promise.all([
+    const [expenseRows, incomeRows, investedExpenseIds] = await Promise.all([
         db.select().from(expenses).orderBy(desc(expenses.date), desc(expenses.id)),
         db.select().from(incomes).orderBy(desc(incomes.date), desc(incomes.id)),
+        listInvestedExpenseIds(),
     ]);
-    const [withBalance] = computeAccountBalances([account], expenseRows, incomeRows);
+    const [withBalance] = computeAccountBalances(
+        [account],
+        expenseRows,
+        incomeRows,
+        investedExpenseIds
+    );
     return withBalance.balance ?? 0;
 }
 

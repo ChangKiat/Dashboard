@@ -15,7 +15,11 @@ import {
     normalizeRebateConfig,
     updatePaymentAccount,
 } from '../../agent/services/paymentAccountService';
-import { sumFdLockedByAccount, sumHoldingsByAccount } from '../../agent/services/investmentPortfolioService';
+import {
+    listInvestedExpenseIds,
+    sumFdLockedByAccount,
+    sumHoldingsByAccount,
+} from '../../agent/services/investmentPortfolioService';
 import {
     buildAccountActivity,
     computeAccountBalances,
@@ -51,11 +55,12 @@ function isNonNegativeNumber(value: unknown): value is number {
 
 async function loadAllTransactions() {
     const db = requireDb();
-    const [expenseRows, incomeRows] = await Promise.all([
+    const [expenseRows, incomeRows, investedExpenseIds] = await Promise.all([
         db.select().from(expenses).orderBy(desc(expenses.date), desc(expenses.id)),
         db.select().from(incomes).orderBy(desc(incomes.date), desc(incomes.id)),
+        listInvestedExpenseIds(),
     ]);
-    return { expenseRows, incomeRows };
+    return { expenseRows, incomeRows, investedExpenseIds };
 }
 
 router.get('/', async (_req, res) => {
@@ -67,14 +72,19 @@ router.get('/', async (_req, res) => {
             names: new Map<number, string[]>(),
             holdings: new Map<number, { id: number; name: string; kind: string }[]>(),
         };
-        const [accounts, { expenseRows, incomeRows }, holdings, fdLockedByAccount] =
+        const [accounts, { expenseRows, incomeRows, investedExpenseIds }, holdings, fdLockedByAccount] =
             await Promise.all([
                 listActivePaymentAccounts(),
                 loadAllTransactions(),
                 sumHoldingsByAccount().catch(() => emptyHoldings),
                 sumFdLockedByAccount().catch(() => new Map<number, number>()),
             ]);
-        const entries = computeAccountBalances(accounts, expenseRows, incomeRows).map((entry) => {
+        const entries = computeAccountBalances(
+            accounts,
+            expenseRows,
+            incomeRows,
+            investedExpenseIds
+        ).map((entry) => {
             if (entry.accountType === 'investment') {
                 const holdingsMarketValue = holdings.marketValue.get(entry.id) ?? 0;
                 const cash = entry.balance ?? 0;
@@ -149,9 +159,14 @@ router.get('/:id/activity', async (req, res) => {
         const account = await getPaymentAccountById(id);
         if (!account) return res.status(404).json({ error: 'Payment account not found' });
 
-        const { expenseRows, incomeRows } = await loadAllTransactions();
-        const [withBalance] = computeAccountBalances([account], expenseRows, incomeRows);
-        const entries = buildAccountActivity(account, expenseRows, incomeRows);
+        const { expenseRows, incomeRows, investedExpenseIds } = await loadAllTransactions();
+        const [withBalance] = computeAccountBalances(
+            [account],
+            expenseRows,
+            incomeRows,
+            investedExpenseIds
+        );
+        const entries = buildAccountActivity(account, expenseRows, incomeRows, investedExpenseIds);
         const fdLockedByAccount = await sumFdLockedByAccount().catch(
             () => new Map<number, number>()
         );

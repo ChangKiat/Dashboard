@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNotNull } from 'drizzle-orm';
 import { requireDb } from '../db/client';
 import {
     investmentEvents,
@@ -253,6 +253,16 @@ export async function sumFdLockedByAccount(): Promise<Map<number, number>> {
         );
     }
     return result;
+}
+
+/** Expenses that paid for a holding buy — their cash went into the holding. */
+export async function listInvestedExpenseIds(): Promise<Set<number>> {
+    const db = requireDb();
+    const rows = await db
+        .select({ expenseId: investmentEvents.linkedExpenseId })
+        .from(investmentEvents)
+        .where(and(eq(investmentEvents.eventType, 'buy'), isNotNull(investmentEvents.linkedExpenseId)));
+    return new Set(rows.map((row) => row.expenseId!));
 }
 
 export async function getInstrumentById(id: number): Promise<InvestmentInstrument | null> {

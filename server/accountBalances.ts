@@ -67,6 +67,31 @@ function parseTransferFee(value: string | null | undefined): number {
     return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
+/** Expense id → the account its linked Account transfer paid into. */
+function getFundingDestinations(incomes: IncomeRow[]): Map<number, string | null | undefined> {
+    const destinations = new Map<number, string | null | undefined>();
+    for (const income of incomes) {
+        if (income.category === 'Account transfer' && income.expenseId != null) {
+            destinations.set(income.expenseId, income.paymentMethod);
+        }
+    }
+    return destinations;
+}
+
+/**
+ * Account an expense's amount leaves. A linked Account transfer already moved the money out of the
+ * paying account, so the expense itself is skipped — unless a holding buy is linked to it: then the
+ * transferred cash went on from the destination account into the holding.
+ */
+function expenseDebitAccountName(
+    expense: ExpenseRow,
+    fundingDestinations: Map<number, string | null | undefined>,
+    investedExpenseIds: ReadonlySet<number>
+): string | null | undefined {
+    if (!fundingDestinations.has(expense.id)) return expense.paymentMethod;
+    return investedExpenseIds.has(expense.id) ? fundingDestinations.get(expense.id) : null;
+}
+
 function getBaselineDate(account: PaymentAccount): string {
     return account.balanceBaselineDate || '0000-00-00';
 }
@@ -79,7 +104,8 @@ function isOnOrAfterBaseline(date: string, account: PaymentAccount): boolean {
 export function computeAccountBalances(
     accounts: PaymentAccount[],
     expenses: ExpenseRow[],
-    incomes: IncomeRow[]
+    incomes: IncomeRow[],
+    investedExpenseIds: ReadonlySet<number> = new Set()
 ): PaymentAccountWithBalance[] {
     const deltas = new Map<number, { debitDelta: number; creditOwedDelta: number }>();
     for (const account of accounts) {
@@ -90,16 +116,7 @@ export function computeAccountBalances(
         accounts.map((account) => [account.name.toLowerCase(), account])
     );
 
-    /** Investment funding transfers already move money; skip the linked expense debit. */
-    const fundedExpenseIds = new Set<number>();
-    for (const income of incomes) {
-        if (
-            income.category === 'Account transfer' &&
-            income.expenseId != null
-        ) {
-            fundedExpenseIds.add(income.expenseId);
-        }
-    }
+    const fundingDestinations = getFundingDestinations(incomes);
 
     function getAccountByStoredName(stored: string | null | undefined): PaymentAccount | undefined {
         if (!stored) return undefined;
@@ -109,9 +126,10 @@ export function computeAccountBalances(
     }
 
     for (const expense of expenses) {
-        if (fundedExpenseIds.has(expense.id)) continue;
         if (expense.tripLeg === 'fund') continue;
-        const account = getAccountByStoredName(expense.paymentMethod);
+        const account = getAccountByStoredName(
+            expenseDebitAccountName(expense, fundingDestinations, investedExpenseIds)
+        );
         if (!account) continue;
         if (!isOnOrAfterBaseline(expense.date, account)) continue;
         const amount = parseAmount(expense.amount);
@@ -181,16 +199,12 @@ export function computeAccountBalances(
 export function buildAccountActivity(
     account: PaymentAccount,
     expenses: ExpenseRow[],
-    incomes: IncomeRow[]
+    incomes: IncomeRow[],
+    investedExpenseIds: ReadonlySet<number> = new Set()
 ): AccountActivityEntry[] {
     const entries: Omit<AccountActivityEntry, 'runningBalance' | 'runningOwed'>[] = [];
 
-    const fundedExpenseIds = new Set<number>();
-    for (const income of incomes) {
-        if (income.category === 'Account transfer' && income.expenseId != null) {
-            fundedExpenseIds.add(income.expenseId);
-        }
-    }
+    const fundingDestinations = getFundingDestinations(incomes);
 
     function pushEntry(
         partial: Omit<AccountActivityEntry, 'runningBalance' | 'runningOwed' | 'beforeBaseline'>
@@ -202,9 +216,9 @@ export function buildAccountActivity(
     }
 
     for (const expense of expenses) {
-        if (fundedExpenseIds.has(expense.id)) continue;
         if (expense.tripLeg === 'fund') continue;
-        if (!matchesAccount(expense.paymentMethod, account.name)) continue;
+        const debitAccount = expenseDebitAccountName(expense, fundingDestinations, investedExpenseIds);
+        if (!matchesAccount(debitAccount, account.name)) continue;
         pushEntry({
             id: expense.id,
             date: expense.date,
