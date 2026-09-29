@@ -3,7 +3,7 @@ import { requireDb } from '../db/client';
 import { expenses, investmentEvents, investmentInstruments } from '../db/schema';
 import { resolveCategory } from '../config/expenseCategories';
 import { getActiveFixedExpenses } from './expenseService';
-import { deleteInvestmentFundingTransfer } from './incomeService';
+import { upsertInvestmentFundingTransfer } from './incomeService';
 import { getInstrumentById, recordFundInvest } from './investmentPortfolioService';
 import { getPaymentAccountById } from './paymentAccountService';
 
@@ -124,7 +124,7 @@ export async function contributeFixedExpense(
         row.amount
     );
 
-    await recordFundInvest({
+    const { linkedExpenseId } = await recordFundInvest({
         instrumentId: resolved.instrumentId,
         date: contribDate,
         amount: row.amount,
@@ -132,9 +132,16 @@ export async function contributeFixedExpense(
         fromPaymentMethod: row.paymentMethod,
         linkedExpenseId: loggedExpenseId,
     });
-    if (loggedExpenseId != null) {
-        // The money now sits in the holding; a transfer would also count it as account cash.
-        await deleteInvestmentFundingTransfer(loggedExpenseId);
+    if (row.paymentMethod && row.toInvestmentAccount) {
+        // The bill's configured transfer, same as the cron logs, whichever path ran first.
+        await upsertInvestmentFundingTransfer({
+            expenseId: linkedExpenseId,
+            date: contribDate,
+            amount: row.amount,
+            description: row.description,
+            fromPaymentMethod: row.paymentMethod,
+            toInvestmentAccount: row.toInvestmentAccount,
+        });
     }
     return { ok: true, skipped: false };
 }

@@ -872,7 +872,7 @@ export async function recordFundInvest(fields: {
     fromPaymentMethod?: string | null;
     /** Reuse an expense already logged for this contribution instead of adding another. */
     linkedExpenseId?: number | null;
-}): Promise<{ eventId: number }> {
+}): Promise<{ eventId: number; linkedExpenseId: number }> {
     const instrument = await requireInstrument(fields.instrumentId);
     if (instrument.kind !== 'fund') throw new Error('Invest is only for unit trusts');
     if (!Number.isFinite(fields.amount) || fields.amount <= 0) {
@@ -916,7 +916,7 @@ export async function recordFundInvest(fields: {
             linkedExpenseId,
         })
         .returning({ id: investmentEvents.id });
-    return { eventId: eventRow.id };
+    return { eventId: eventRow.id, linkedExpenseId };
 }
 
 export async function recordFundWithdraw(fields: {
