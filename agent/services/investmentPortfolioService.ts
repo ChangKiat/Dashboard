@@ -870,6 +870,8 @@ export async function recordFundInvest(fields: {
     amount: number;
     notes?: string | null;
     fromPaymentMethod?: string | null;
+    /** Reuse an expense already logged for this contribution instead of adding another. */
+    linkedExpenseId?: number | null;
 }): Promise<{ eventId: number }> {
     const instrument = await requireInstrument(fields.instrumentId);
     if (instrument.kind !== 'fund') throw new Error('Invest is only for unit trusts');
@@ -882,14 +884,16 @@ export async function recordFundInvest(fields: {
     const account = await requireInvestmentAccount(instrument.paymentAccountId);
     const debitFrom = fields.fromPaymentMethod?.trim() || account.name;
 
-    const linkedExpenseId = await appendExpense(
-        fields.date,
-        amount,
-        instrument.currency || 'MYR',
-        'Investment',
-        fields.notes?.trim() || `Invest ${instrument.name}`,
-        debitFrom
-    );
+    const linkedExpenseId =
+        fields.linkedExpenseId ??
+        (await appendExpense(
+            fields.date,
+            amount,
+            instrument.currency || 'MYR',
+            'Investment',
+            fields.notes?.trim() || `Invest ${instrument.name}`,
+            debitFrom
+        ));
 
     const db = requireDb();
     await db

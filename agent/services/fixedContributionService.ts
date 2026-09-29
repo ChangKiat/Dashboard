@@ -1,8 +1,9 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { requireDb } from '../db/client';
-import { investmentEvents, investmentInstruments } from '../db/schema';
+import { expenses, investmentEvents, investmentInstruments } from '../db/schema';
 import { resolveCategory } from '../config/expenseCategories';
 import { getActiveFixedExpenses } from './expenseService';
+import { deleteInvestmentFundingTransfer } from './incomeService';
 import { getInstrumentById, recordFundInvest } from './investmentPortfolioService';
 import { getPaymentAccountById } from './paymentAccountService';
 
@@ -60,6 +61,39 @@ async function hasMatchingBuy(instrumentId: number, date: string, amount: number
     return rows.some((row) => roundMoney(parseFloat(row.amount ?? '0')) === target);
 }
 
+/**
+ * The expense the Telegram bot's 9am fixed-bill cron already logged for this bill,
+ * when no holding buy has claimed it yet.
+ */
+async function findUnclaimedBillExpense(
+    date: string,
+    category: string,
+    description: string,
+    amount: number
+): Promise<number | null> {
+    const db = requireDb();
+    const rows = await db
+        .select({
+            id: expenses.id,
+            amount: expenses.amount,
+            buyEventId: investmentEvents.id,
+        })
+        .from(expenses)
+        .leftJoin(investmentEvents, eq(investmentEvents.linkedExpenseId, expenses.id))
+        .where(
+            and(
+                eq(expenses.date, date),
+                eq(expenses.category, category),
+                eq(expenses.description, description)
+            )
+        );
+    const target = roundMoney(amount);
+    const match = rows.find(
+        (row) => row.buyEventId == null && roundMoney(parseFloat(row.amount)) === target
+    );
+    return match?.id ?? null;
+}
+
 export async function contributeFixedExpense(
     id: number,
     date?: string
@@ -83,13 +117,25 @@ export async function contributeFixedExpense(
         return { ok: true, skipped: true };
     }
 
+    const loggedExpenseId = await findUnclaimedBillExpense(
+        contribDate,
+        row.category,
+        row.description,
+        row.amount
+    );
+
     await recordFundInvest({
         instrumentId: resolved.instrumentId,
         date: contribDate,
         amount: row.amount,
         notes: row.description,
         fromPaymentMethod: row.paymentMethod,
+        linkedExpenseId: loggedExpenseId,
     });
+    if (loggedExpenseId != null) {
+        // The money now sits in the holding; a transfer would also count it as account cash.
+        await deleteInvestmentFundingTransfer(loggedExpenseId);
+    }
     return { ok: true, skipped: false };
 }
 
