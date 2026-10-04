@@ -7,7 +7,7 @@ export interface ExpenseCategory {
     monthlyBudget: number;
 }
 
-/** Default seed — keep in sync with scripts/init-db.sql */
+/** Default seed — keep in sync with AI Agent/scripts/init-db.sql and migrate-transfer-fee.sql */
 export const DEFAULT_EXPENSE_CATEGORIES: ExpenseCategory[] = [
     { category: 'Drink', monthlyBudget: 200 },
     { category: 'Entertainment', monthlyBudget: 300 },

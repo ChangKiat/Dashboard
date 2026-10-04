@@ -106,7 +106,7 @@ Open [http://localhost:5173](http://localhost:5173)
 
 Date params use `YYYY-MM-DD`. Defaults to the last 30 days (Asia/Kuala_Lumpur).
 
-Older databases need Agent migration scripts when new tables/columns are added (e.g. `migrate-workout-sessions.sql`, `migrate-investment-portfolio.sql`).
+The bot and the Dashboard share one database, and its schema and every migration live in [`AI Agent/scripts/`](../AI%20Agent/scripts). A new database runs `init-db.sql`; an existing one runs the missing `migrate-*.sql` files in the order listed in the AI Agent README (step 3, "Upgrading an existing database"). The Car tab requires `AI Agent/scripts/migrate-car-service.sql`. [`scripts/seed-car-service-visits.sql`](scripts/seed-car-service-visits.sql) is an optional seed of past car service visits: run it once, after that migration (a re-run skips visits that already exist).
 
 ## Expenses tab layout
 

@@ -21,7 +21,13 @@ import {
 } from '../../agent/services/investmentPortfolioService';
 import { getPaymentAccountById } from '../../agent/services/paymentAccountService';
 import { computeAccountBalances } from '../accountBalances';
-import { isNonEmptyString, isPositiveNumber, isValidDate, parseIdParam } from '../validation';
+import {
+    isNonEmptyString,
+    isPositiveNumber,
+    isValidDate,
+    parseIdParam,
+    unknownAccountError,
+} from '../validation';
 
 const router = Router();
 
@@ -211,6 +217,10 @@ router.post('/events/buy', async (req, res) => {
             return res.status(400).json({ error: 'fee must be a non-negative number' });
         }
 
+        // The service would store an account that does not resolve as no account; refuse it first.
+        const accountError = unknownAccountError(body.fromPaymentMethod);
+        if (accountError) return res.status(400).json({ error: accountError });
+
         const result = await recordBuy({
             instrumentId,
             date: body.date,
@@ -252,6 +262,11 @@ router.post('/events/sell', async (req, res) => {
             return res.status(400).json({ error: 'fee must be a non-negative number' });
         }
 
+        // The service would store an account that does not resolve as no account; refuse it first
+        // (recordSell reduces the lots before it writes the income).
+        const accountError = unknownAccountError(body.toPaymentMethod);
+        if (accountError) return res.status(400).json({ error: accountError });
+
         const result = await recordSell({
             instrumentId,
             date: body.date,
@@ -290,6 +305,10 @@ router.post('/events/fund-invest', async (req, res) => {
             return res.status(400).json({ error: 'amount must be positive' });
         }
 
+        // The service would store an account that does not resolve as no account; refuse it first.
+        const accountError = unknownAccountError(body.fromPaymentMethod);
+        if (accountError) return res.status(400).json({ error: accountError });
+
         const result = await recordFundInvest({
             instrumentId,
             date: body.date,
@@ -325,6 +344,10 @@ router.post('/events/fund-withdraw', async (req, res) => {
         if (!isPositiveNumber(body.amount)) {
             return res.status(400).json({ error: 'amount must be positive' });
         }
+
+        // The service would store an account that does not resolve as no account; refuse it first.
+        const accountError = unknownAccountError(body.toPaymentMethod);
+        if (accountError) return res.status(400).json({ error: accountError });
 
         const result = await recordFundWithdraw({
             instrumentId,
@@ -363,6 +386,10 @@ router.post('/events/dividend', async (req, res) => {
             return res.status(400).json({ error: 'amount must be positive' });
         }
 
+        // The service would store an account that does not resolve as no account; refuse it first.
+        const accountError = unknownAccountError(body.toPaymentMethod);
+        if (accountError) return res.status(400).json({ error: accountError });
+
         const eventId = await recordDividend({
             instrumentId,
             date: body.date,
@@ -392,6 +419,10 @@ router.post('/events/interest', async (req, res) => {
         if (!isPositiveNumber(body.amount)) {
             return res.status(400).json({ error: 'amount must be positive' });
         }
+
+        // The service would store an account that does not resolve as no account; refuse it first.
+        const accountError = unknownAccountError(body.toPaymentMethod);
+        if (accountError) return res.status(400).json({ error: accountError });
 
         const eventId = await recordInterest({
             instrumentId,
@@ -447,6 +478,8 @@ router.post('/instruments/:id/accrue-fd', async (req, res) => {
         const body = req.body ?? {};
         const toDate = isValidDate(body.toDate) ? body.toDate : null;
         if (!toDate) return res.status(400).json({ error: 'toDate is required (YYYY-MM-DD)' });
+        const accountError = unknownAccountError(body.toPaymentMethod);
+        if (accountError) return res.status(400).json({ error: accountError });
 
         const instrument = await getInstrumentById(id);
         if (!instrument) return res.status(404).json({ error: 'Instrument not found' });

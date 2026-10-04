@@ -2,7 +2,7 @@ import { and, desc, eq, gte, inArray, isNotNull, isNull, lte } from 'drizzle-orm
 import { requireDb } from '../db/client';
 import { expenses, trips } from '../db/schema';
 import { resolveCategory } from '../config/expenseCategories';
-import { resolvePaymentMethod } from '../config/paymentMethods';
+import { displayPaymentMethod } from '../config/paymentMethods';
 import type { TripLeg } from './expenseService';
 
 export type Trip = {
@@ -86,7 +86,7 @@ function mapTripExpense(row: typeof expenses.$inferSelect): TripExpense {
         amount: parseFloat(row.amount),
         category: resolveCategory(row.category),
         description: row.description,
-        paymentMethod: row.paymentMethod ? resolvePaymentMethod(row.paymentMethod) : null,
+        paymentMethod: displayPaymentMethod(row.paymentMethod),
         tripLeg: (row.tripLeg as TripLeg | null) ?? null,
         fxAmount: row.fxAmount != null ? parseFloat(row.fxAmount) : null,
         fxCurrency: row.fxCurrency ?? null,
@@ -180,20 +180,39 @@ export async function updateTrip(
     return getTripById(id);
 }
 
+const TRIP_HAS_LEG_ENTRIES = 'Cannot delete trip with exchange / fund / card entries - delete those first';
+
+/** Postgres foreign_key_violation; Drizzle wraps driver errors, so check `cause` too. */
+function isForeignKeyViolation(err: unknown): boolean {
+    const e = err as { code?: unknown; cause?: { code?: unknown } } | null;
+    return e?.cause?.code === '23503' || e?.code === '23503';
+}
+
 export async function deleteTrip(id: number): Promise<boolean> {
-    const db = requireDb();
-    const legEntries = await db
-        .select({ id: expenses.id })
-        .from(expenses)
-        .where(and(eq(expenses.tripId, id), isNotNull(expenses.tripLeg)))
-        .limit(1);
-    if (legEntries.length > 0) {
-        throw new Error('Cannot delete trip with exchange / fund / card entries - delete those first');
+    try {
+        return await requireDb().transaction(async (tx) => {
+            const legEntries = await tx
+                .select({ id: expenses.id })
+                .from(expenses)
+                .where(and(eq(expenses.tripId, id), isNotNull(expenses.tripLeg)))
+                .limit(1);
+            if (legEntries.length > 0) {
+                throw new Error(TRIP_HAS_LEG_ENTRIES);
+            }
+            // Plain grouped transactions stay as normal expenses; just ungroup them.
+            await tx
+                .update(expenses)
+                .set({ tripId: null })
+                .where(and(eq(expenses.tripId, id), isNull(expenses.tripLeg)));
+            const result = await tx.delete(trips).where(eq(trips.id, id));
+            return (result.count ?? 0) > 0;
+        });
+    } catch (err) {
+        // A leg entry logged after the check (e.g. from Telegram) still references the trip,
+        // so the delete hits the expenses.trip_id foreign key and the ungroup is rolled back.
+        if (isForeignKeyViolation(err)) throw new Error(TRIP_HAS_LEG_ENTRIES);
+        throw err;
     }
-    // Plain grouped transactions stay as normal expenses; just ungroup them.
-    await db.update(expenses).set({ tripId: null }).where(eq(expenses.tripId, id));
-    const result = await db.delete(trips).where(eq(trips.id, id));
-    return (result.count ?? 0) > 0;
 }
 
 export async function listTripExpenses(tripId: number): Promise<TripExpense[]> {
@@ -207,8 +226,9 @@ export async function listTripExpenses(tripId: number): Promise<TripExpense[]> {
 }
 
 /**
- * MYR per 1 foreign unit for an exchange. Derived from the two amounts first: fx_rate only
- * keeps 6 decimals (0.000163265 → 0.000163 for VND) and older rows saved it rounded to 0.
+ * MYR per 1 foreign unit for an exchange. Derived from the two amounts first: fx_rate kept only
+ * 6 decimals before migrate-fx-rate-precision.sql (0.000163265 → 0.000163 for VND), and older
+ * rows saved it rounded to 0.
  */
 export function exchangeRateOf(row: {
     amount: number;
@@ -250,7 +270,7 @@ export async function listLinkCandidates(start: string, end: string): Promise<Tr
         amount: parseFloat(row.amount),
         category: resolveCategory(row.category),
         description: row.description,
-        paymentMethod: row.paymentMethod ? resolvePaymentMethod(row.paymentMethod) : null,
+        paymentMethod: displayPaymentMethod(row.paymentMethod),
     }));
 }
 

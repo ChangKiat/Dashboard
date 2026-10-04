@@ -1,12 +1,16 @@
 import { and, asc, desc, eq, gt, inArray, isNotNull } from 'drizzle-orm';
 import { requireDb } from '../db/client';
 import {
+    expenses,
+    fixedExpenses,
     investmentEvents,
     investmentInstruments,
     investmentLots,
 } from '../db/schema';
+import { resolveCategory } from '../config/expenseCategories';
+import { resolvePaymentMethod } from '../config/paymentMethods';
 import { appendExpense } from './expenseService';
-import { appendIncome } from './incomeService';
+import { appendIncome, type DbExecutor } from './incomeService';
 import { getPaymentAccountById } from './paymentAccountService';
 
 export type InstrumentKind = 'equity' | 'fund' | 'fd' | 'other';
@@ -449,6 +453,19 @@ export async function updateInstrument(
     }
 
     if (Object.keys(patch).length === 0) return;
+    if (patch.active === false) {
+        // Deactivating a holding also unlinks the fixed bills that contribute to it (as the FK's
+        // ON DELETE SET NULL would), so they fall back to plain Investment bills in both apps
+        // instead of failing every contribution run.
+        await db.transaction(async (tx) => {
+            await tx.update(investmentInstruments).set(patch).where(eq(investmentInstruments.id, id));
+            await tx
+                .update(fixedExpenses)
+                .set({ instrumentId: null })
+                .where(eq(fixedExpenses.instrumentId, id));
+        });
+        return;
+    }
     await db.update(investmentInstruments).set(patch).where(eq(investmentInstruments.id, id));
 }
 
@@ -472,7 +489,7 @@ async function listOpenLots(instrumentId: number): Promise<InvestmentLot[]> {
 }
 
 function positionFromLots(
-    instrument: InvestmentInstrument,
+    _instrument: InvestmentInstrument,
     lots: InvestmentLot[]
 ): { quantity: number; costBasis: number } {
     let quantity = 0;
@@ -874,15 +891,46 @@ export async function recordSell(fields: {
     return { eventId: eventRow.id, realizedGain };
 }
 
-export async function recordFundInvest(fields: {
-    instrumentId: number;
-    date: string;
-    amount: number;
-    notes?: string | null;
-    fromPaymentMethod?: string | null;
-    /** Reuse an expense already logged for this contribution instead of adding another. */
-    linkedExpenseId?: number | null;
-}): Promise<{ eventId: number; linkedExpenseId: number }> {
+/**
+ * The Investment expense a unit trust invest debits, inserted on `executor` so it joins the
+ * buy's transaction. Same columns as appendExpense (expenseService, which takes no executor);
+ * keep the two in step.
+ */
+async function insertInvestExpense(
+    executor: DbExecutor,
+    fields: { date: string; amount: number; currency: string; description: string; paymentMethod: string }
+): Promise<number> {
+    const [row] = await executor
+        .insert(expenses)
+        .values({
+            date: fields.date,
+            amount: String(fields.amount),
+            currency: fields.currency || 'MYR',
+            category: resolveCategory('Investment'),
+            description: fields.description,
+            paymentMethod: resolvePaymentMethod(fields.paymentMethod),
+        })
+        .returning({ id: expenses.id });
+    return row.id;
+}
+
+/**
+ * Writes the expense (unless `linkedExpenseId` reuses one), the principal update and the buy
+ * together: on `executor` when the caller passes its transaction (a fixed-bill contribution adds
+ * its funding transfer to it), otherwise in a transaction of its own.
+ */
+export async function recordFundInvest(
+    fields: {
+        instrumentId: number;
+        date: string;
+        amount: number;
+        notes?: string | null;
+        fromPaymentMethod?: string | null;
+        /** Reuse an expense already logged for this contribution instead of adding another. */
+        linkedExpenseId?: number | null;
+    },
+    executor?: DbExecutor
+): Promise<{ eventId: number; linkedExpenseId: number }> {
     const instrument = await requireInstrument(fields.instrumentId);
     if (instrument.kind !== 'fund') throw new Error('Invest is only for unit trusts');
     if (!Number.isFinite(fields.amount) || fields.amount <= 0) {
@@ -894,39 +942,40 @@ export async function recordFundInvest(fields: {
     const account = await requireInvestmentAccount(instrument.paymentAccountId);
     const debitFrom = fields.fromPaymentMethod?.trim() || account.name;
 
-    const linkedExpenseId =
-        fields.linkedExpenseId ??
-        (await appendExpense(
-            fields.date,
-            amount,
-            instrument.currency || 'MYR',
-            'Investment',
-            fields.notes?.trim() || `Invest ${instrument.name}`,
-            debitFrom
-        ));
+    const write = async (db: DbExecutor) => {
+        const linkedExpenseId =
+            fields.linkedExpenseId ??
+            (await insertInvestExpense(db, {
+                date: fields.date,
+                amount,
+                currency: instrument.currency || 'MYR',
+                description: fields.notes?.trim() || `Invest ${instrument.name}`,
+                paymentMethod: debitFrom,
+            }));
 
-    const db = requireDb();
-    await db
-        .update(investmentInstruments)
-        .set({
-            principal: String(principal),
-            lastPrice: String(lastPrice),
-            lastPriceAt: fields.date,
-        })
-        .where(eq(investmentInstruments.id, instrument.id));
+        await db
+            .update(investmentInstruments)
+            .set({
+                principal: String(principal),
+                lastPrice: String(lastPrice),
+                lastPriceAt: fields.date,
+            })
+            .where(eq(investmentInstruments.id, instrument.id));
 
-    const [eventRow] = await db
-        .insert(investmentEvents)
-        .values({
-            instrumentId: instrument.id,
-            eventType: 'buy',
-            date: fields.date,
-            amount: String(amount),
-            notes: fields.notes?.trim() || null,
-            linkedExpenseId,
-        })
-        .returning({ id: investmentEvents.id });
-    return { eventId: eventRow.id, linkedExpenseId };
+        const [eventRow] = await db
+            .insert(investmentEvents)
+            .values({
+                instrumentId: instrument.id,
+                eventType: 'buy',
+                date: fields.date,
+                amount: String(amount),
+                notes: fields.notes?.trim() || null,
+                linkedExpenseId,
+            })
+            .returning({ id: investmentEvents.id });
+        return { eventId: eventRow.id, linkedExpenseId };
+    };
+    return executor ? write(executor) : requireDb().transaction(write);
 }
 
 export async function recordFundWithdraw(fields: {
