@@ -84,6 +84,31 @@ export function monthsBetween(first: string, last: string) {
     return Math.max(1, (ly - fy) * 12 + (lm - fm) + 1);
 }
 
+/** "All" ends at this month; the other periods end at the month picked. */
+export function periodEndMonthFor(period: Period, pickedMonth: string, currentMonth: string) {
+    return period === 'all' ? currentMonth : pickedMonth;
+}
+
+/**
+ * How many months of budget a period gets (monthly budgets are multiplied by this).
+ * "All" counts only months with entries, so long gaps between old records don't add budget.
+ */
+export function budgetMonthsFor(period: Period, endMonth: string, monthsWithEntries: number) {
+    const months = periodMonths(period, endMonth);
+    return months ? monthsBetween(months.first, months.last) : Math.max(1, monthsWithEntries);
+}
+
+/**
+ * Months the cash flow chart shows: the period's own months for 3M / 6M / YTD / Year,
+ * the 12 months up to the picked month for Month, and everything for All.
+ */
+export function chartMonthsFor(period: Period, endMonth: string): { end: string; count: number } {
+    if (period === 'month') return { end: endMonth, count: 12 };
+    if (period === 'all') return { end: endMonth, count: 120 };
+    const { first, last } = periodMonths(period, endMonth)!;
+    return { end: last, count: monthsBetween(first, last) };
+}
+
 function shortMonth(month: string, withYear: boolean) {
     const [yearStr, monthStr] = month.split('-');
     return new Date(parseInt(yearStr, 10), parseInt(monthStr, 10) - 1, 1).toLocaleDateString('en-US', {

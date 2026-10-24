@@ -20,11 +20,13 @@ interface Props {
     formatAxis: (value: number) => string;
 }
 
-function shortMonth(month: string) {
+/** "Oct", or "Oct 26" when the chart spans more than one year. */
+function shortMonth(month: string, withYear: boolean) {
     const [yearStr, monthStr] = month.split('-');
-    return new Date(parseInt(yearStr, 10), parseInt(monthStr, 10) - 1, 1).toLocaleDateString('en-US', {
+    const name = new Date(parseInt(yearStr, 10), parseInt(monthStr, 10) - 1, 1).toLocaleDateString('en-US', {
         month: 'short',
     });
+    return withYear ? `${name} ${yearStr.slice(2)}` : name;
 }
 
 /** Round tick values (steps of 1, 2, 2.5 or 5 × 10ⁿ) covering zero and every value. */
@@ -45,9 +47,10 @@ function niceTicks(values: number[], targetCount = 5): number[] {
 }
 
 export default function CashflowTrendChart({ data, formatValue, formatAxis }: Props) {
+    const spansYears = data.length > 0 && data[0].month.slice(0, 4) !== data[data.length - 1].month.slice(0, 4);
     const chartData = data.map((point) => ({
         ...point,
-        label: shortMonth(point.month),
+        label: shortMonth(point.month, spansYears),
         fullLabel: formatMonthLabel(point.month),
     }));
     const ticks = niceTicks(data.flatMap((p) => [p.income, p.spending, p.net]));

@@ -2,6 +2,8 @@ import { useCallback, useState } from 'react';
 
 export type TabId =
     | 'cashflow'
+    | 'calendar'
+    | 'variable'
     | 'health'
     | 'car'
     | 'tax'
@@ -17,7 +19,7 @@ const STORAGE_KEY = 'dashboard-active-tab';
 
 /** Sidebar groups, top to bottom. A null label means no heading. */
 export const TAB_GROUPS: { label: string | null; tabs: TabId[] }[] = [
-    { label: null, tabs: ['cashflow', 'health', 'car', 'tax'] },
+    { label: null, tabs: ['cashflow', 'calendar', 'variable', 'health', 'car', 'tax'] },
     { label: 'Planning', tabs: ['budgets', 'recurring', 'loans', 'interest', 'mealGoals'] },
     { label: 'Organize', tabs: ['accounts', 'trips'] },
 ];
@@ -47,6 +49,8 @@ function readStoredTab(): TabId {
 
 export const TAB_LABELS: Record<TabId, string> = {
     cashflow: 'Cashflow',
+    calendar: 'Calendar',
+    variable: 'Variable expenses',
     health: 'Health',
     car: 'Car',
     tax: 'Tax Relief',
@@ -61,6 +65,8 @@ export const TAB_LABELS: Record<TabId, string> = {
 
 export const TAB_SUBTITLES: Record<TabId, string> = {
     cashflow: 'Where your money went',
+    calendar: 'Income and spending day by day',
+    variable: 'Spending in each category against its budget',
     health: 'Workouts, meals and body weight',
     car: 'Service visits and maintenance costs',
     tax: 'Claims toward this year’s tax relief',

@@ -158,6 +158,23 @@ export function ClockIcon(props: IconProps) {
     );
 }
 
+export function CalendarIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <rect x="3" y="5" width="18" height="16" rx="2" />
+            <path d="M3 10h18M8 3v4M16 3v4" />
+        </Icon>
+    );
+}
+
+export function BarsIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="M4 6h10M4 12h16M4 18h7" />
+        </Icon>
+    );
+}
+
 export function TrashIcon(props: IconProps) {
     return (
         <Icon {...props}>

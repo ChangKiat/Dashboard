@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { fetchHealth, getAuthMe, logoutAuth } from './api';
 import AppHeader from './components/AppHeader';
 import BudgetsSection from './components/BudgetsSection';
+import CalendarSection from './components/CalendarSection';
 import CashflowSection from './components/CashflowSection';
 import HealthSection from './components/HealthSection';
 import CarServiceSection from './components/CarServiceSection';
@@ -10,6 +11,7 @@ import SetupSection from './components/SetupSection';
 import Sidebar from './components/Sidebar';
 import TaxReliefSection from './components/TaxReliefSection';
 import TripsSection from './components/TripsSection';
+import VariableExpensesSection from './components/VariableExpensesSection';
 import { AmountVisibilityProvider } from './hooks/useAmountVisibility';
 import { PaymentAccountsProvider } from './hooks/usePaymentAccounts';
 import { RefreshProvider } from './hooks/useRefreshSignal';
@@ -94,6 +96,8 @@ export default function App() {
 
                             <main className="main">
                                 {activeTab === 'cashflow' && <CashflowSection />}
+                                {activeTab === 'calendar' && <CalendarSection />}
+                                {activeTab === 'variable' && <VariableExpensesSection />}
                                 {activeTab === 'health' && <HealthSection />}
                                 {activeTab === 'car' && <CarServiceSection />}
                                 {activeTab === 'tax' && <TaxReliefSection />}

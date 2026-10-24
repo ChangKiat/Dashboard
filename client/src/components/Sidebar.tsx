@@ -2,6 +2,8 @@ import { useEffect, type ReactNode } from 'react';
 import { TAB_GROUPS, TAB_LABELS, type TabId } from '../hooks/useSectionTab';
 import {
     ActivityIcon,
+    BarsIcon,
+    CalendarIcon,
     CardIcon,
     CarIcon,
     CloseIcon,
@@ -17,6 +19,8 @@ import {
 
 const TAB_ICONS: Record<TabId, ReactNode> = {
     cashflow: <WalletIcon />,
+    calendar: <CalendarIcon />,
+    variable: <BarsIcon />,
     health: <ActivityIcon />,
     car: <CarIcon />,
     tax: <ReceiptIcon />,
