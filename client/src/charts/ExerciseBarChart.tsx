@@ -39,7 +39,7 @@ export default function ExerciseBarChart({ data }: Props) {
                         borderRadius: 8,
                     }}
                 />
-                <Bar dataKey="count" fill="#a78bfa" radius={[0, 4, 4, 0]} name="Sessions" />
+                <Bar dataKey="count" fill="var(--series-purple)" radius={[0, 4, 4, 0]} name="Sessions" />
             </BarChart>
         </ResponsiveContainer>
     );

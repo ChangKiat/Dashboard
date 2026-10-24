@@ -50,8 +50,8 @@ export default function WorkoutVolumeChart({ data }: Props) {
                     labelFormatter={(_, payload) => payload?.[0]?.payload?.date ?? ''}
                 />
                 <Legend wrapperStyle={{ fontSize: 12, color: 'var(--text-muted)' }} />
-                <Bar dataKey="sessions" fill="#a78bfa" radius={[4, 4, 0, 0]} name="Sessions" />
-                <Bar dataKey="sets" fill="#60a5fa" radius={[4, 4, 0, 0]} name="Sets" />
+                <Bar dataKey="sessions" fill="var(--series-purple)" radius={[4, 4, 0, 0]} name="Sessions" />
+                <Bar dataKey="sets" fill="var(--series-blue)" radius={[4, 4, 0, 0]} name="Sets" />
             </BarChart>
         </ResponsiveContainer>
     );

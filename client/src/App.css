@@ -1,31 +1,35 @@
 .app {
   max-width: 1600px;
   margin: 0 auto;
-  padding: 20px 20px 48px;
+  padding: 28px clamp(16px, 3vw, 32px) 56px;
 }
 
 .header {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
 }
 
 .header-left {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 20px;
+  align-items: flex-start;
+  gap: 16px;
+  min-width: 0;
+}
+
+.header-titles {
+  min-width: 0;
 }
 
 .header h1 {
   margin: 0;
-  font-size: 1.15rem;
-  font-weight: 600;
+  font-size: 2.25rem;
+  line-height: 1.1;
+  font-weight: 800;
+  letter-spacing: -0.02em;
   color: var(--text-heading);
 }
 
@@ -35,10 +39,225 @@
   font-size: 0.95rem;
 }
 
+.header .subtitle {
+  margin-top: 6px;
+}
+
 .header-controls {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Round icon-only button (menu, hide amounts, theme). */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(60, 40, 20, 0.05);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.icon-btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-hover);
+}
+
+.icon-btn[aria-pressed='true'] {
+  background: var(--surface);
+  border-color: var(--border-hover);
+}
+
+.pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+
+.pill-btn:hover:not(:disabled) {
+  filter: brightness(0.96);
+}
+
+.pill-btn:disabled {
+  cursor: progress;
+  opacity: 0.85;
+}
+
+.pill-btn--lock {
+  background: var(--lock-bg);
+  border-color: var(--lock-border);
+  color: var(--lock-text);
+}
+
+.pill-btn--primary {
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.pill-btn--primary:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}
+
+.icon-btn:focus-visible,
+.pill-btn:focus-visible,
+.pill-group-btn:focus-visible,
+.section-menu-item:focus-visible,
+.month-nav:focus-visible,
+.month-picker-current:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Section menu (the ☰ button in the header) */
+.section-menu {
+  position: relative;
+  flex: none;
+}
+
+.section-menu-toggle {
+  width: 48px;
+  height: 48px;
+}
+
+.section-menu-list {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 50;
+  width: 220px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--menu-shadow);
+}
+
+.section-menu-item {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.section-menu-item:hover {
+  background: var(--surface-hover);
+}
+
+.section-menu-item.active {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+/* Period pills + month picker row at the top of a section */
+.page-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 20px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.page-toolbar-group {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pill-group {
+  display: inline-flex;
+  gap: 2px;
+  max-width: 100%;
+  padding: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+}
+
+.pill-group-btn {
+  height: 40px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pill-group-btn:hover:not(:disabled):not(.active) {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.pill-group-btn.active {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
+}
+
+.pill-group-btn:disabled {
+  color: var(--text-dim);
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 480px) {
+  .pill-group-btn {
+    padding: 0 10px;
+  }
 }
 
 .section-tabs {
@@ -101,7 +320,7 @@
 .preset.active {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .custom-range {
@@ -137,25 +356,57 @@
 }
 
 .month-nav {
-  padding: 6px 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: transparent;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
   color: var(--text-muted);
   cursor: pointer;
 }
 
 .month-nav:hover {
   border-color: var(--border-hover);
+  background: var(--surface-hover);
   color: var(--text);
 }
 
-.month-picker input[type="month"] {
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text);
+.month-picker-label {
+  position: relative;
+  display: inline-flex;
+}
+
+.month-picker-current {
+  min-width: 132px;
+  height: 40px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-heading);
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.month-picker-current:hover {
+  background: var(--surface-hover);
+}
+
+/* Native month input kept only to open the browser's picker under the label. */
+.month-picker-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .expenses-layout {
@@ -343,9 +594,110 @@
 
 .card h3 {
   margin: 0 0 12px;
-  font-size: 0.95rem;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--text-heading);
+}
+
+.cashflow-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.cashflow-summary-grid .summary-card {
+  padding: 22px 24px;
+  gap: 18px;
+}
+
+.cashflow-summary-grid .summary-label {
+  font-size: 0.875rem;
+}
+
+.cashflow-summary-grid .summary-value {
+  font-size: 1.9rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+
+.cashflow-summary-grid .summary-sub {
+  font-size: 0.875rem;
   font-weight: 500;
   color: var(--text-muted);
+}
+
+@media (max-width: 760px) {
+  .cashflow-summary-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.variable-expenses-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.variable-expenses-header h3 {
+  margin: 0;
+}
+
+.variable-expenses-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.mini-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 170px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.mini-stat-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.mini-stat-value {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text-heading);
+}
+
+.mini-stat-value.negative {
+  color: var(--danger);
+}
+
+.mini-stat-sub {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+@media (max-width: 560px) {
+  .variable-expenses-stats {
+    width: 100%;
+  }
+
+  .mini-stat {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .mini-stat-value {
+    font-size: 1.05rem;
+    white-space: nowrap;
+  }
 }
 
 .payment-accounts-panel h3 {
@@ -435,7 +787,7 @@
 }
 
 .payment-account-card-main:hover {
-  background: rgba(255, 255, 255, 0.02);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
 }
 
 div.payment-account-card-main {
@@ -551,7 +903,7 @@ div.payment-account-card-main:hover {
   display: inline-block;
   padding: 2px 8px;
   border-radius: 999px;
-  background: rgba(96, 165, 250, 0.2);
+  background: var(--accent-soft);
   color: var(--accent-text);
   font-size: 0.75rem;
   font-weight: 600;
@@ -562,7 +914,7 @@ div.payment-account-card-main:hover {
   margin-left: 6px;
   padding: 1px 6px;
   border-radius: 999px;
-  background: rgba(156, 163, 175, 0.25);
+  background: color-mix(in srgb, var(--text-muted) 18%, transparent);
   color: var(--text-muted);
   font-size: 0.65rem;
   font-weight: 600;
@@ -587,7 +939,7 @@ div.payment-account-card-main:hover {
 }
 
 .rebate-requirement-row-unmet {
-  background: rgba(248, 113, 113, 0.08);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
 }
 
 .rebate-tier-editor,
@@ -626,7 +978,7 @@ div.payment-account-card-main:hover {
   margin-bottom: 8px;
   padding: 8px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.03);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
 }
 
 .rebate-category-def-row {
@@ -665,7 +1017,7 @@ div.payment-account-card-main:hover {
   margin: 0 0 12px;
   padding: 10px 12px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
 }
 
 .rebate-summary-header {
@@ -708,7 +1060,7 @@ div.payment-account-card-main:hover {
 }
 
 .rebate-not-maxed {
-  background: rgba(251, 191, 36, 0.08);
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
 }
 
 .rebate-status-maxed {
@@ -806,7 +1158,7 @@ div.payment-account-card-main:hover {
   margin: 0 0 12px;
   padding: 10px 12px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
   font-size: 0.875rem;
   color: var(--text-muted);
 }
@@ -1102,13 +1454,13 @@ div.payment-account-card-main:hover {
 }
 
 .data-table td.over-budget {
-  background: rgba(248, 113, 113, 0.15);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
   color: var(--danger);
   font-weight: 500;
 }
 
 .data-table td.near-budget {
-  background: rgba(251, 191, 36, 0.12);
+  background: var(--warn-soft);
   color: var(--warn);
   font-weight: 500;
 }
@@ -1149,12 +1501,12 @@ div.payment-account-card-main:hover {
 }
 
 .budget-badge--warning {
-  background: rgba(251, 191, 36, 0.2);
+  background: var(--warn-soft);
   color: var(--warn);
 }
 
 .budget-badge--over {
-  background: rgba(248, 113, 113, 0.2);
+  background: color-mix(in srgb, var(--danger) 15%, transparent);
   color: var(--danger);
 }
 
@@ -1211,16 +1563,29 @@ div.payment-account-card-main:hover {
 }
 
 .banner {
-  padding: 12px 16px;
-  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: 16px;
   margin-bottom: 20px;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
+}
+
+.banner svg {
+  flex: none;
 }
 
 .banner.warning {
-  background: color-mix(in srgb, var(--warn) 12%, transparent);
-  border: 1px solid var(--warn);
+  background: var(--warn-soft);
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
   color: var(--warn);
+}
+
+.banner--info {
+  background: var(--info-bg);
+  border: 1px solid var(--info-border);
+  color: var(--info-text);
 }
 
 .main {
@@ -1242,20 +1607,70 @@ div.payment-account-card-main:hover {
   border-radius: var(--radius);
   padding: 12px 14px;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: flex-start;
+  gap: 14px;
+  min-width: 0;
   box-shadow: var(--card-shadow);
 }
 
+/* Coloured strip along the top of a card */
+.summary-card--tone-spend {
+  border-top: 5px solid var(--accent);
+}
+
+.summary-card--tone-income {
+  border-top: 5px solid var(--ok);
+}
+
+.summary-card--tone-net {
+  border-top: 5px solid var(--series-amber);
+}
+
+.summary-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--text-muted);
+}
+
+.summary-card--tone-spend .summary-icon {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.summary-card--tone-income .summary-icon {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.summary-card--tone-net .summary-icon {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.summary-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
 .summary-label {
-  font-size: 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
   color: var(--text-muted);
 }
 
 .summary-value {
   font-size: 1.2rem;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-heading);
+  overflow-wrap: anywhere;
 }
 
 .summary-sub {
@@ -1386,10 +1801,13 @@ div.payment-account-card-main:hover {
     width: 100%;
   }
 
-  .header-left,
   .header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .header h1 {
+    font-size: 1.75rem;
   }
 
   .section-tabs {
@@ -1432,7 +1850,7 @@ div.payment-account-card-main:hover {
 
 .btn-primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border-color: var(--accent);
 }
 
@@ -1499,7 +1917,7 @@ div.payment-account-card-main:hover {
 .record-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--backdrop);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1608,7 +2026,7 @@ div.payment-account-card-main:hover {
   margin-top: 4px;
   padding: 10px 12px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
 }
 
 .record-modal.account-activity-modal {
@@ -1718,7 +2136,7 @@ div.payment-account-card-main:hover {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--menu-shadow);
 }
 
 .portfolio-events-heading {
@@ -2215,11 +2633,11 @@ div.payment-account-card-main:hover {
 }
 
 .macro-adherence-fill--protein {
-  background: #60a5fa;
+  background: var(--series-blue);
 }
 
 .macro-adherence-fill--calories {
-  background: #34d399;
+  background: var(--series-green);
 }
 
 .macro-adherence-note {
@@ -2474,12 +2892,12 @@ div.payment-account-card-main:hover {
 }
 
 .activity-badge.workout {
-  background: rgba(167, 139, 250, 0.25);
+  background: color-mix(in srgb, var(--workout) 18%, transparent);
   color: var(--workout);
 }
 
 .activity-badge.meal {
-  background: rgba(52, 211, 153, 0.25);
+  background: var(--ok-soft);
   color: var(--ok);
 }
 
@@ -2498,7 +2916,7 @@ div.payment-account-card-main:hover {
 }
 
 .activity-badge.income {
-  background: rgba(52, 211, 153, 0.25);
+  background: var(--ok-soft);
   color: var(--ok);
   font-size: 0.6rem;
   padding: 2px 3px;
@@ -3017,7 +3435,7 @@ div.payment-account-card-main:hover {
 }
 
 .day-entry-main--clickable:hover .day-entry-title {
-  color: #fff;
+  color: var(--text-heading);
 }
 
 .day-entry-title {
@@ -3052,8 +3470,8 @@ div.payment-account-card-main:hover {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.02em;
-  color: #1a1a1a;
-  background: var(--warn);
+  color: var(--warn);
+  background: var(--warn-soft);
   vertical-align: middle;
 }
 

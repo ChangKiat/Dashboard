@@ -70,9 +70,9 @@ export default function WeightTrendChart({ weightTrend }: Props) {
                     <Line
                         type="monotone"
                         dataKey="weightKg"
-                        stroke="#f472b6"
+                        stroke="var(--series-pink)"
                         strokeWidth={2}
-                        dot={{ r: 3, fill: '#f472b6' }}
+                        dot={{ r: 3, fill: 'var(--series-pink)' }}
                         name="Weight (kg)"
                     />
                 </LineChart>

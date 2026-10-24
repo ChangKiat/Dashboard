@@ -51,22 +51,22 @@ export default function NutritionLineChart({ series }: Props) {
                     <>
                         <ReferenceLine
                             y={targets.calories}
-                            stroke="#f87171"
+                            stroke="var(--series-red)"
                             strokeDasharray="4 4"
-                            label={{ value: 'Cal target', fill: '#f87171', fontSize: 10 }}
+                            label={{ value: 'Cal target', fill: 'var(--series-red)', fontSize: 10 }}
                         />
                         <ReferenceLine
                             y={targets.protein}
-                            stroke="#60a5fa"
+                            stroke="var(--series-blue)"
                             strokeDasharray="4 4"
-                            label={{ value: 'Protein target', fill: '#60a5fa', fontSize: 10 }}
+                            label={{ value: 'Protein target', fill: 'var(--series-blue)', fontSize: 10 }}
                         />
                     </>
                 )}
                 <Line
                     type="monotone"
                     dataKey="calories"
-                    stroke="#f87171"
+                    stroke="var(--series-red)"
                     strokeWidth={2}
                     dot={false}
                     name="Calories"
@@ -74,7 +74,7 @@ export default function NutritionLineChart({ series }: Props) {
                 <Line
                     type="monotone"
                     dataKey="protein"
-                    stroke="#60a5fa"
+                    stroke="var(--series-blue)"
                     strokeWidth={2}
                     dot={false}
                     name="Protein (g)"
@@ -82,7 +82,7 @@ export default function NutritionLineChart({ series }: Props) {
                 <Line
                     type="monotone"
                     dataKey="carbs"
-                    stroke="#fbbf24"
+                    stroke="var(--series-amber)"
                     strokeWidth={2}
                     dot={false}
                     name="Carbs (g)"
@@ -90,7 +90,7 @@ export default function NutritionLineChart({ series }: Props) {
                 <Line
                     type="monotone"
                     dataKey="fat"
-                    stroke="#34d399"
+                    stroke="var(--series-green)"
                     strokeWidth={2}
                     dot={false}
                     name="Fat (g)"

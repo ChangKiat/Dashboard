@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import type { ExpenseDailyPoint, ExpenseTransaction, IncomeDailyPoint } from '../api';
+import { useAmountVisibility } from '../hooks/useAmountVisibility';
 import { getCalendarCells, todayInKL } from '../utils/dateRange';
 import { normalizeDescription } from '../utils/fixedExpenses';
 import MonthPicker from './MonthPicker';
@@ -34,6 +35,8 @@ export default function CashflowCalendar({
     onSelectDate,
     formatAmount,
 }: Props) {
+    const { hidden } = useAmountVisibility();
+    const amountLabel = (total: number) => (hidden ? '••' : compactAmountLabel(total));
     const cells = useMemo(() => getCalendarCells(month), [month]);
     const today = todayInKL();
 
@@ -137,7 +140,7 @@ export default function CashflowCalendar({
                                         className="activity-badge income"
                                         title={formatAmount(income)}
                                     >
-                                        {compactAmountLabel(income)}
+                                        {amountLabel(income)}
                                     </span>
                                 )}
                                 {fixedSpend > 0 && (
@@ -145,7 +148,7 @@ export default function CashflowCalendar({
                                         className="activity-badge fixed"
                                         title={`Fixed ${formatAmount(fixedSpend)}`}
                                     >
-                                        {compactAmountLabel(fixedSpend)}
+                                        {amountLabel(fixedSpend)}
                                     </span>
                                 )}
                                 {variableSpend > 0 && (
@@ -153,7 +156,7 @@ export default function CashflowCalendar({
                                         className="activity-badge expense"
                                         title={`Variable ${formatAmount(variableSpend)}`}
                                     >
-                                        {compactAmountLabel(variableSpend)}
+                                        {amountLabel(variableSpend)}
                                     </span>
                                 )}
                             </span>

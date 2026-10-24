@@ -8,6 +8,8 @@ import {
     updateCarServiceVisit,
     upsertCarServiceItem,
 } from '../api';
+import { useAmountVisibility, useFormatMYR } from '../hooks/useAmountVisibility';
+import { useRefreshSignal } from '../hooks/useRefreshSignal';
 
 const CATEGORIES: CarServiceCategory[] = ['Material', 'Lubricants', 'Labour', 'Other'];
 
@@ -20,10 +22,6 @@ type PendingItem = {
 type VisitDraft = { date: string; odometerKm: string };
 
 const EMPTY_ITEM: PendingItem = { category: 'Material', description: '', amount: '' };
-
-function formatMYR(amount: number) {
-    return `RM ${amount.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
 
 function formatDate(iso: string) {
     const [y, m, d] = iso.split('-');
@@ -117,6 +115,7 @@ function buildEditDrafts(visits: CarServiceVisit[], catalog: { category: CarServ
 }
 
 export default function CarServiceSection() {
+    const formatMYR = useFormatMYR();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [data, setData] = useState<CarServiceOverview | null>(null);
@@ -135,6 +134,10 @@ export default function CarServiceSection() {
     const loadData = useCallback(async () => {
         setData(await fetchCarServiceOverview());
     }, []);
+
+    useRefreshSignal(() =>
+        loadData().catch((err) => setError(err instanceof Error ? err.message : 'Failed to refresh'))
+    );
 
     useEffect(() => {
         let cancelled = false;
@@ -761,6 +764,9 @@ function CategoryRows({
     draftCells: Record<string, string>;
     onDraftCellChange: (key: string, value: string) => void;
 }) {
+    const formatMYR = useFormatMYR();
+    const { hidden } = useAmountVisibility();
+
     return (
         <>
             <tr className="car-service-category-row">
@@ -798,7 +804,9 @@ function CategoryRows({
                                             onChange={(e) => onDraftCellChange(key, e.target.value)}
                                         />
                                     ) : amount != null ? (
-                                        <span className="car-service-cell-value">{amount.toFixed(2)}</span>
+                                        <span className="car-service-cell-value">
+                                            {hidden ? '••' : amount.toFixed(2)}
+                                        </span>
                                     ) : (
                                         <span className="car-service-cell-value car-service-cell-value--empty">—</span>
                                     )}

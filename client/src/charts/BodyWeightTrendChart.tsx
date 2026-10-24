@@ -54,9 +54,9 @@ export default function BodyWeightTrendChart({ data }: Props) {
                 <Line
                     type="monotone"
                     dataKey="weightKg"
-                    stroke="#34d399"
+                    stroke="var(--series-green)"
                     strokeWidth={2}
-                    dot={{ r: 3, fill: '#34d399' }}
+                    dot={{ r: 3, fill: 'var(--series-green)' }}
                     name="Body weight (kg)"
                 />
             </LineChart>

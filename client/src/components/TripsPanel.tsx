@@ -12,6 +12,7 @@ import {
     linkTripExpenses,
     unlinkTripExpense,
 } from '../api';
+import { useAmountVisibility } from '../hooks/useAmountVisibility';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
 import ConfirmDialog from './ConfirmDialog';
 import ExpenseCategorySelect from './ExpenseCategorySelect';
@@ -27,7 +28,7 @@ interface Props {
 
 type FormMode = 'none' | 'create-trip' | 'exchange' | 'expense' | 'link';
 
-function formatFx(amount: number, currency: string) {
+function formatFxAmount(amount: number, currency: string) {
     return `${currency} ${amount.toLocaleString('en-MY', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
@@ -50,6 +51,9 @@ function todayKL(): string {
 }
 
 export default function TripsPanel({ variableCategories, formatAmount, onChanged, reloadKey = 0 }: Props) {
+    const { hidden } = useAmountVisibility();
+    const formatFx = (amount: number, currency: string) =>
+        hidden ? `${currency} ••••••` : formatFxAmount(amount, currency);
     const { refresh: refreshAccounts } = usePaymentAccounts();
     const [trips, setTrips] = useState<TripWithTotals[]>([]);
     const [selectedId, setSelectedId] = useState<number | null>(null);

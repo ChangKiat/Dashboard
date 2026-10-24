@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { fetchHealth, getAuthMe, logoutAuth } from './api';
+import AppHeader from './components/AppHeader';
 import CashflowSection from './components/CashflowSection';
 import HealthSection from './components/HealthSection';
 import CarServiceSection from './components/CarServiceSection';
 import LoginGate from './components/LoginGate';
-import SectionTabs from './components/SectionTabs';
 import SetupSection from './components/SetupSection';
+import { AmountVisibilityProvider } from './hooks/useAmountVisibility';
 import { PaymentAccountsProvider } from './hooks/usePaymentAccounts';
+import { RefreshProvider } from './hooks/useRefreshSignal';
 import { useSectionTab } from './hooks/useSectionTab';
 import './App.css';
 
@@ -56,34 +58,28 @@ export default function App() {
     }
 
     return (
-        <PaymentAccountsProvider>
-            <div className="app">
-                <header className="header">
-                    <div className="header-left">
-                        <h1>Personal Dashboard</h1>
-                        <SectionTabs active={activeTab} onChange={setActiveTab} />
-                    </div>
-                    <div className="header-controls">
-                        <button type="button" className="logout-btn" onClick={onLogout}>
-                            Lock
-                        </button>
-                    </div>
-                </header>
+        <AmountVisibilityProvider>
+            <RefreshProvider>
+                <PaymentAccountsProvider>
+                    <div className="app">
+                        <AppHeader activeTab={activeTab} onTabChange={setActiveTab} onLock={onLogout} />
 
-                {configWarning && (
-                    <div className="banner warning">
-                        API config issue: {health?.database}
-                        {health?.telegramUser.includes('missing') && ' · Set TELEGRAM_USER_ID in .env'}
-                    </div>
-                )}
+                        {configWarning && (
+                            <div className="banner warning">
+                                API config issue: {health?.database}
+                                {health?.telegramUser.includes('missing') && ' · Set TELEGRAM_USER_ID in .env'}
+                            </div>
+                        )}
 
-                <main className="main">
-                    {activeTab === 'cashflow' && <CashflowSection />}
-                    {activeTab === 'health' && <HealthSection />}
-                    {activeTab === 'car' && <CarServiceSection />}
-                    {activeTab === 'setup' && <SetupSection />}
-                </main>
-            </div>
-        </PaymentAccountsProvider>
+                        <main className="main">
+                            {activeTab === 'cashflow' && <CashflowSection />}
+                            {activeTab === 'health' && <HealthSection />}
+                            {activeTab === 'car' && <CarServiceSection />}
+                            {activeTab === 'setup' && <SetupSection />}
+                        </main>
+                    </div>
+                </PaymentAccountsProvider>
+            </RefreshProvider>
+        </AmountVisibilityProvider>
     );
 }

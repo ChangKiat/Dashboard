@@ -51,7 +51,7 @@ export default function BurnTrendChart({ data }: Props) {
                 />
                 <Bar
                     dataKey="caloriesBurned"
-                    fill="#fb923c"
+                    fill="var(--series-orange)"
                     radius={[4, 4, 0, 0]}
                     name="Calories burned"
                 />

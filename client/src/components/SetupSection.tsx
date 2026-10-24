@@ -3,8 +3,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FixedExpenseConfig, InterestScheduleConfig } from '../api';
 import { fetchExpenseOverview, fetchFixedExpenses, fetchInterestSchedules, applyDueFixedContributions } from '../api';
 import { isLoanFixedExpense } from '../utils/expenseCategories';
+import { useFormatMYR } from '../hooks/useAmountVisibility';
 import { currentMonthInKL } from '../hooks/useMonth';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
+import { useRefreshSignal } from '../hooks/useRefreshSignal';
 
 import FixedExpensesTable from './FixedExpensesTable';
 import InterestSchedulesTable from './InterestSchedulesTable';
@@ -12,11 +14,8 @@ import LoansPanel from './LoansPanel';
 import MealsSetupPanel from './MealsSetupPanel';
 import PaymentAccountsPanel from './PaymentAccountsPanel';
 
-function formatMYR(amount: number) {
-    return `RM ${amount.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
 export default function SetupSection() {
+    const formatMYR = useFormatMYR();
     const month = currentMonthInKL();
     const { refresh: refreshAccounts } = usePaymentAccounts();
     const [loading, setLoading] = useState(true);
@@ -58,6 +57,12 @@ export default function SetupSection() {
         });
         void refreshAccounts();
     }, [loadData, refreshAccounts]);
+
+    useRefreshSignal(() =>
+        Promise.all([loadData(), refreshAccounts()]).catch((err) =>
+            setError(err instanceof Error ? err.message : 'Failed to refresh')
+        )
+    );
 
     useEffect(() => {
         applyDueFixedContributions()

@@ -27,11 +27,11 @@ function shortDate(date: string) {
 }
 
 function colorForNet(net: number, target: number) {
-    if (target <= 0) return '#60a5fa';
+    if (target <= 0) return 'var(--series-blue)';
     const ratio = net / target;
-    if (ratio > 1.1) return '#f87171';
-    if (ratio < 0.9) return '#60a5fa';
-    return '#34d399';
+    if (ratio > 1.1) return 'var(--series-red)';
+    if (ratio < 0.9) return 'var(--series-blue)';
+    return 'var(--series-green)';
 }
 
 export default function NetCalorieChart({ data }: Props) {
@@ -67,9 +67,9 @@ export default function NetCalorieChart({ data }: Props) {
                 {target != null && (
                     <ReferenceLine
                         y={target}
-                        stroke="#f87171"
+                        stroke="var(--series-red)"
                         strokeDasharray="4 4"
-                        label={{ value: 'Target', fill: '#f87171', fontSize: 10 }}
+                        label={{ value: 'Target', fill: 'var(--series-red)', fontSize: 10 }}
                     />
                 )}
                 <Bar dataKey="net" name="Net" radius={[4, 4, 0, 0]}>

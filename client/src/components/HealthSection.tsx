@@ -22,6 +22,7 @@ import {
     fetchWorkoutPRs,
 } from '../api';
 import { useMonth } from '../hooks/useMonth';
+import { useRefreshSignal } from '../hooks/useRefreshSignal';
 import { useSmartRefresh } from '../hooks/useSmartRefresh';
 import { caloriesFromSteps, computeBMR } from '../utils/calorieEstimate';
 import { monthToDateRange, pickDefaultSelectedDate } from '../utils/dateRange';
@@ -195,6 +196,8 @@ export default function HealthSection() {
         fingerprintRef,
         onStale: handleStale,
     });
+
+    useRefreshSignal(handleStale);
 
     const bmr = useMemo(
         () =>

@@ -18,8 +18,10 @@ import {
     fetchIncomeTransactions,
     fetchSyncStatus,
 } from '../api';
+import { useFormatMYR } from '../hooks/useAmountVisibility';
 import { shiftMonth, useMonth } from '../hooks/useMonth';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
+import { useRefreshSignal } from '../hooks/useRefreshSignal';
 import { useSmartRefresh } from '../hooks/useSmartRefresh';
 import { getBudgetStatus } from '../utils/budgetStatus';
 import { monthToDateRange, pickDefaultCashflowDate } from '../utils/dateRange';
@@ -27,18 +29,20 @@ import { sumIncomeDailyTotals } from '../utils/incomeAggregates';
 
 import CashflowCalendar from './CashflowCalendar';
 import CashflowDayDetailPanel from './CashflowDayDetailPanel';
+import { BankIcon, IncomeIcon, TrendUpIcon, WalletIcon } from './icons';
+import MonthPicker from './MonthPicker';
 import PaymentAccountsPanel from './PaymentAccountsPanel';
+import PeriodPills from './PeriodPills';
 import SummaryCard from './SummaryCard';
+import SyncBanner from './SyncBanner';
 import TripsPanel from './TripsPanel';
 import VariableExpensesTable from './VariableExpensesTable';
 
-function formatMYR(amount: number) {
-    return `RM ${amount.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
 export default function CashflowSection() {
     const { month, setMonth } = useMonth();
-    const { refresh: refreshAccounts } = usePaymentAccounts();
+    const formatMYR = useFormatMYR();
+    const { accounts, loading: accountsLoading, refresh: refreshAccounts } = usePaymentAccounts();
+    const [lastEntryAt, setLastEntryAt] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [selectedDate, setSelectedDate] = useState<string>('');
@@ -90,6 +94,7 @@ export default function CashflowSection() {
 
         const status = await fetchSyncStatus(month, 'expenses');
         fingerprintRef.current = status.fingerprint;
+        setLastEntryAt(status.lastEntryAt);
     }, [month]);
 
     useEffect(() => {
@@ -146,6 +151,8 @@ export default function CashflowSection() {
         onStale: handleStale,
     });
 
+    useRefreshSignal(handleStale);
+
     const actualSpendVariant = useMemo(() => {
         if (!data) return 'default' as const;
         const { budget, actualSpend } = data.totals;
@@ -158,6 +165,19 @@ export default function CashflowSection() {
     const monthIncome = useMemo(() => sumIncomeDailyTotals(incomeSeries), [incomeSeries]);
 
     const budgetLeft = data ? data.totals.budget - data.totals.actualSpend : 0;
+
+    const netWorth = useMemo(() => {
+        let total = 0;
+        let count = 0;
+        for (const account of accounts) {
+            if (!account.active) continue;
+            count += 1;
+            if (account.accountType === 'credit') total -= account.amountOwed ?? 0;
+            else if (account.accountType === 'investment') total += account.nav ?? account.balance ?? 0;
+            else total += account.balance ?? 0;
+        }
+        return { total, count };
+    }, [accounts]);
 
     const variableCategories = useMemo(
         () => data?.variable.map((v) => v.category) ?? [],
@@ -192,33 +212,72 @@ export default function CashflowSection() {
         [incomeSeries, selectedDate]
     );
 
-    if (loading) return <section className="panel"><p className="muted">Loading cashflow…</p></section>;
-    if (error) return <section className="panel"><p className="error">{error}</p></section>;
+    const toolbar = (
+        <>
+            <div className="page-toolbar">
+                <div className="page-toolbar-group">
+                    <PeriodPills />
+                    <MonthPicker month={month} onChange={setMonth} />
+                </div>
+            </div>
+            <SyncBanner lastEntryAt={lastEntryAt} />
+        </>
+    );
+
+    if (loading) {
+        return (
+            <section className="panel">
+                {toolbar}
+                <p className="muted">Loading cashflow…</p>
+            </section>
+        );
+    }
+    if (error) {
+        return (
+            <section className="panel">
+                {toolbar}
+                <p className="error">{error}</p>
+            </section>
+        );
+    }
     if (!data) return null;
+
+    const netCashflow = data.totals.netCashflow;
 
     return (
         <section className="panel">
+            {toolbar}
             <div className="expenses-layout">
-                <div className="expenses-hero-row cashflow-hero-row">
+                <div className="cashflow-summary-grid">
                     <SummaryCard
-                        label="Total income"
-                        value={formatMYR(monthIncome)}
-                        variant="highlight"
-                    />
-                    <SummaryCard
+                        tone="spend"
+                        icon={<WalletIcon size={26} />}
                         label="Actual spend"
                         value={formatMYR(data.totals.actualSpend)}
                         variant={actualSpendVariant}
+                        sub={`of ${formatMYR(data.totals.budget)} budget`}
                     />
                     <SummaryCard
+                        tone="income"
+                        icon={<IncomeIcon size={26} />}
+                        label="Total income"
+                        value={formatMYR(monthIncome)}
+                        sub={`Salary after tax ${formatMYR(data.salaryAfterTax)}`}
+                    />
+                    <SummaryCard
+                        tone="net"
+                        icon={<TrendUpIcon size={26} />}
                         label="Net cashflow"
-                        value={formatMYR(data.totals.netCashflow)}
+                        value={formatMYR(netCashflow)}
+                        variant={netCashflow < 0 ? 'danger' : 'default'}
+                        sub={netCashflow < 0 ? 'Spent more than came in' : 'Left over after spending'}
                     />
-                    <SummaryCard label="Amount can use" value={formatMYR(data.totals.amountCanUse)} />
                     <SummaryCard
-                        label="Budget left"
-                        value={formatMYR(budgetLeft)}
-                        sub={`Budget ${formatMYR(data.totals.budget)}`}
+                        tone="net"
+                        icon={<BankIcon size={26} />}
+                        label="Net worth"
+                        value={accountsLoading ? '…' : formatMYR(netWorth.total)}
+                        sub={`Accounts + investments − credit cards · ${netWorth.count} accounts`}
                     />
                 </div>
 
@@ -227,6 +286,9 @@ export default function CashflowSection() {
                     transactions={transactions}
                     incomes={incomes}
                     formatAmount={formatMYR}
+                    amountCanUse={data.totals.amountCanUse}
+                    budget={data.totals.budget}
+                    budgetLeft={budgetLeft}
                 />
 
                 <div className="expenses-calendar-row">

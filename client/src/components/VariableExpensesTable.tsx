@@ -21,9 +21,21 @@ interface Props {
     transactions: ExpenseTransaction[];
     incomes?: IncomeTransaction[];
     formatAmount: (amount: number) => string;
+    /** Salary after tax minus fixed expenses. */
+    amountCanUse?: number;
+    budget?: number;
+    budgetLeft?: number;
 }
 
-export default function VariableExpensesTable({ rows, transactions, incomes = [], formatAmount }: Props) {
+export default function VariableExpensesTable({
+    rows,
+    transactions,
+    incomes = [],
+    formatAmount,
+    amountCanUse,
+    budget,
+    budgetLeft,
+}: Props) {
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
     const selectedRow = useMemo(
@@ -57,7 +69,29 @@ export default function VariableExpensesTable({ rows, transactions, incomes = []
 
     return (
         <div className="card expenses-variable-table">
-            <h3>Variable expenses</h3>
+            <div className="variable-expenses-header">
+                <h3>Variable expenses</h3>
+                <div className="variable-expenses-stats">
+                    {amountCanUse != null && (
+                        <div className="mini-stat">
+                            <span className="mini-stat-label">Amount can use</span>
+                            <span className="mini-stat-value">{formatAmount(amountCanUse)}</span>
+                            <span className="mini-stat-sub">Salary after tax − fixed expenses</span>
+                        </div>
+                    )}
+                    {budgetLeft != null && (
+                        <div className="mini-stat">
+                            <span className="mini-stat-label">Budget left</span>
+                            <span className={budgetLeft < 0 ? 'mini-stat-value negative' : 'mini-stat-value'}>
+                                {formatAmount(budgetLeft)}
+                            </span>
+                            {budget != null && (
+                                <span className="mini-stat-sub">Budget {formatAmount(budget)}</span>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
             {alertCategories.length > 0 && (
                 <div className="budget-alert-banner">
                     {alertCategories.join(' · ')}
