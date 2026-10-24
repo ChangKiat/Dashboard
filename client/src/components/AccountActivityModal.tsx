@@ -10,6 +10,7 @@ import {
     fetchPortfolio,
 } from '../api';
 import { usePagination } from '../hooks/usePagination';
+import { monthToDateRange } from '../utils/dateRange';
 import {
     accountPeriodToDateRange,
     formatPeriodLabel,
@@ -156,8 +157,13 @@ export default function AccountActivityModal({
 
     const periodEntries = useMemo(() => {
         if (!periodRange) return entries;
-        return entries.filter((entry) => isDateInRange(entry.date, periodRange));
-    }, [entries, periodRange]);
+        // Card payments land in the calendar month they were paid, not the statement cycle.
+        const paymentRange =
+            periodAccount?.accountType === 'credit' ? monthToDateRange(month) : periodRange;
+        return entries.filter((entry) =>
+            isDateInRange(entry.date, entry.type === 'transfer_in' ? paymentRange : periodRange)
+        );
+    }, [entries, periodRange, periodAccount, month]);
 
     const periodTotals = useMemo(() => {
         let totalOut = 0;
@@ -265,7 +271,7 @@ export default function AccountActivityModal({
     const openPayOff = () => {
         const periodOwed = periodTotals.afterCashback;
         setPayForm({
-            date: periodRange?.end ?? today(),
+            date: today(),
             fromPaymentMethod: '',
             amount: periodOwed > 0 ? periodOwed.toFixed(2) : '',
         });
@@ -738,7 +744,12 @@ export default function AccountActivityModal({
                 >
                     <div className="form-field">
                         <label htmlFor="payoff-date">Date</label>
-                        <input id="payoff-date" type="date" value={payForm.date} disabled />
+                        <input
+                            id="payoff-date"
+                            type="date"
+                            value={payForm.date}
+                            onChange={(e) => setPayForm((f) => ({ ...f, date: e.target.value }))}
+                        />
                     </div>
                     <div className="form-field">
                         <label htmlFor="payoff-from-account">From account</label>
