@@ -908,6 +908,23 @@
   margin: 0;
 }
 
+.variable-expenses-sub {
+  margin: 4px 0 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+/* "Since May 2026" beside the period pills when All is picked */
+.period-label {
+  display: inline-flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 4px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-heading);
+}
+
 .variable-expenses-stats {
   display: flex;
   flex-wrap: wrap;

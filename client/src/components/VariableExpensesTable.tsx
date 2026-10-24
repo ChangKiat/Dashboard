@@ -25,6 +25,10 @@ interface Props {
     amountCanUse?: number;
     budget?: number;
     budgetLeft?: number;
+    /** Shown under the title, e.g. which months a multi-month period covers. */
+    subtitle?: string;
+    /** Name of a multi-month period ("Aug – Oct 2026") for the category details. */
+    periodLabel?: string;
 }
 
 export default function VariableExpensesTable({
@@ -35,6 +39,8 @@ export default function VariableExpensesTable({
     amountCanUse,
     budget,
     budgetLeft,
+    subtitle,
+    periodLabel,
 }: Props) {
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
@@ -70,7 +76,10 @@ export default function VariableExpensesTable({
     return (
         <div className="card expenses-variable-table">
             <div className="variable-expenses-header">
-                <h3>Variable expenses</h3>
+                <div>
+                    <h3>Variable expenses</h3>
+                    {subtitle && <p className="variable-expenses-sub">{subtitle}</p>}
+                </div>
                 <div className="variable-expenses-stats">
                     {amountCanUse != null && (
                         <div className="mini-stat">
@@ -168,6 +177,7 @@ export default function VariableExpensesTable({
                     transactions={selectedTransactions}
                     formatAmount={formatAmount}
                     onClose={() => setSelectedCategory(null)}
+                    periodLabel={periodLabel}
                 />
             )}
         </div>

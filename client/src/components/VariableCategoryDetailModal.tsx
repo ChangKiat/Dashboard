@@ -19,6 +19,8 @@ interface Props {
     transactions: ExpenseTransaction[];
     formatAmount: (amount: number) => string;
     onClose: () => void;
+    /** e.g. "Aug – Oct 2026" when a multi-month period is showing; otherwise "this month". */
+    periodLabel?: string;
 }
 
 function DetailField({ label, value }: { label: string; value: string }) {
@@ -37,8 +39,10 @@ export default function VariableCategoryDetailModal({
     transactions,
     formatAmount,
     onClose,
+    periodLabel,
 }: Props) {
     const [searchQuery, setSearchQuery] = useState('');
+    const periodText = periodLabel ? `in ${periodLabel}` : 'this month';
 
     useEffect(() => {
         setSearchQuery('');
@@ -81,7 +85,7 @@ export default function VariableCategoryDetailModal({
                     <span className={`budget-badge budget-badge--${status}`}>{statusLabel}</span>
                 )}
             </div>
-            <h5 className="category-detail-transactions-heading">Transactions this month</h5>
+            <h5 className="category-detail-transactions-heading">Transactions {periodText}</h5>
             {transactions.length > 0 && (
                 <div className="category-detail-search">
                     <input
@@ -94,7 +98,7 @@ export default function VariableCategoryDetailModal({
                 </div>
             )}
             {transactions.length === 0 ? (
-                <p className="muted">No transactions this month.</p>
+                <p className="muted">No transactions {periodText}.</p>
             ) : filteredTransactions.length === 0 ? (
                 <p className="muted">No transactions match your search.</p>
             ) : (

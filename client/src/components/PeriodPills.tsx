@@ -1,33 +1,24 @@
-const PERIODS = [
-    { id: 'month', label: 'Month' },
-    { id: '3m', label: '3M' },
-    { id: '6m', label: '6M' },
-    { id: 'ytd', label: 'YTD' },
-    { id: 'year', label: 'Year' },
-    { id: 'all', label: 'All' },
-];
+import { PERIODS, type Period } from '../hooks/usePeriod';
 
-/** Only Month works today; the multi-month ranges need range support in /api/expenses/overview. */
-export default function PeriodPills() {
+interface Props {
+    value: Period;
+    onChange: (period: Period) => void;
+}
+
+export default function PeriodPills({ value, onChange }: Props) {
     return (
         <div className="pill-group" role="group" aria-label="Period">
-            {PERIODS.map((period) =>
-                period.id === 'month' ? (
-                    <button key={period.id} type="button" className="pill-group-btn active" aria-pressed="true">
-                        {period.label}
-                    </button>
-                ) : (
-                    <button
-                        key={period.id}
-                        type="button"
-                        className="pill-group-btn"
-                        disabled
-                        title="Coming soon"
-                    >
-                        {period.label}
-                    </button>
-                )
-            )}
+            {PERIODS.map((period) => (
+                <button
+                    key={period.id}
+                    type="button"
+                    className={value === period.id ? 'pill-group-btn active' : 'pill-group-btn'}
+                    aria-pressed={value === period.id}
+                    onClick={() => onChange(period.id)}
+                >
+                    {period.label}
+                </button>
+            ))}
         </div>
     );
 }

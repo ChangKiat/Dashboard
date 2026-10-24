@@ -7,7 +7,7 @@ import {
     updateIncome,
     validateIncomePaymentAccounts,
 } from '../../agent/services/incomeService';
-import { enumerateDates, parseDateRange, parseMonth } from '../dateUtils';
+import { enumerateDates, parseDateRange, parseMonthOrRange } from '../dateUtils';
 import { formatIncomeTransactions, groupIncomesByDate } from '../aggregators';
 import {
     isNonEmptyString,
@@ -35,7 +35,11 @@ function parseTransferFeeField(value: unknown): number | null | undefined | 'inv
 
 router.get('/transactions', async (req, res) => {
     try {
-        const { month, start, end } = parseMonth(req.query.month as string | undefined);
+        const { month, start, end } = parseMonthOrRange(
+            req.query.month as string | undefined,
+            req.query.start as string | undefined,
+            req.query.end as string | undefined
+        );
         const rows = await listIncomes(start, end);
 
         res.json({

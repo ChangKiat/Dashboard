@@ -24,7 +24,7 @@ import {
     getReimbursementsByExpenseIds,
     upsertInvestmentFundingTransfer,
 } from '../../agent/services/incomeService';
-import { enumerateDates, parseDateRange, parseMonth } from '../dateUtils';
+import { enumerateDates, parseDateRange, parseMonth, parseMonthOrRange } from '../dateUtils';
 import { getMonthlyCashflow, monthsEndingAt } from '../monthlyCashflow';
 import {
     enrichExpenseTransactions,
@@ -386,7 +386,11 @@ function parseReimbursements(
 
 router.get('/overview', async (req, res) => {
     try {
-        const { month, start, end } = parseMonth(req.query.month as string | undefined);
+        const { month, start, end } = parseMonthOrRange(
+            req.query.month as string | undefined,
+            req.query.start as string | undefined,
+            req.query.end as string | undefined
+        );
         const [categories, salaryAfterTax] = await Promise.all([
             loadExpenseCategories(),
             getSalaryAfterTax(getTelegramUserId()),
@@ -416,6 +420,8 @@ router.get('/overview', async (req, res) => {
 
         res.json({
             month,
+            start,
+            end,
             salaryAfterTax,
             variable,
             fixed,
@@ -439,7 +445,7 @@ router.get('/monthly', async (req, res) => {
     try {
         const { month } = parseMonth(req.query.month as string | undefined);
         const requested = parseInt(String(req.query.months ?? '12'), 10);
-        const count = Number.isFinite(requested) ? Math.min(Math.max(requested, 1), 36) : 12;
+        const count = Number.isFinite(requested) ? Math.min(Math.max(requested, 1), 120) : 12;
         const series = await getMonthlyCashflow(monthsEndingAt(month, count));
         res.json({ month, series });
     } catch (err) {
@@ -479,7 +485,11 @@ router.get('/daily', async (req, res) => {
 
 router.get('/transactions', async (req, res) => {
     try {
-        const { month, start, end } = parseMonth(req.query.month as string | undefined);
+        const { month, start, end } = parseMonthOrRange(
+            req.query.month as string | undefined,
+            req.query.start as string | undefined,
+            req.query.end as string | undefined
+        );
 
         const db = requireDb();
         const rows = await db

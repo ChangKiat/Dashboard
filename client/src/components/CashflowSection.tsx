@@ -23,8 +23,9 @@ import {
 import CashflowTrendChart from '../charts/CashflowTrendChart';
 import { formatHours, hourlyRate, monthlyWorkHours, useAmountUnit } from '../hooks/useAmountUnit';
 import { useAmountVisibility, useFormatMYR } from '../hooks/useAmountVisibility';
-import { formatMonthLabel, shiftMonth, useMonth } from '../hooks/useMonth';
+import { currentMonthInKL, formatMonthLabel, shiftMonth, useMonth } from '../hooks/useMonth';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
+import { monthsBetween, periodLabel, periodMonths, periodRange, usePeriod } from '../hooks/usePeriod';
 import { useRefreshSignal } from '../hooks/useRefreshSignal';
 import { useSmartRefresh } from '../hooks/useSmartRefresh';
 import { getBudgetStatus } from '../utils/budgetStatus';
@@ -43,11 +44,17 @@ import VariableExpensesTable from './VariableExpensesTable';
 
 export default function CashflowSection() {
     const { month, setMonth } = useMonth();
+    const { period, setPeriod } = usePeriod();
+    // "All" always runs to this month; the other periods end at the month picked.
+    const periodEndMonth = period === 'all' ? currentMonthInKL() : month;
     const formatMYR = useFormatMYR();
     const { hidden } = useAmountVisibility();
     const { unit, setUnit, hoursPerWeek, setHoursPerWeek } = useAmountUnit();
     const { accounts, loading: accountsLoading, refresh: refreshAccounts } = usePaymentAccounts();
     const [monthlySeries, setMonthlySeries] = useState<MonthlyCashflowPoint[]>([]);
+    // Transactions across a multi-month period, for the Variable expenses details; null for Month.
+    const [periodExpenses, setPeriodExpenses] = useState<ExpenseTransaction[] | null>(null);
+    const [periodIncomes, setPeriodIncomes] = useState<IncomeTransaction[] | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [selectedDate, setSelectedDate] = useState<string>('');
@@ -61,8 +68,11 @@ export default function CashflowSection() {
     const fingerprintRef = useRef<string | null>(null);
 
     const loadData = useCallback(async (options?: { silent?: boolean }) => {
+        // The calendar and day panel always show `month`; the cards, budgets and chart follow the period.
         const range = monthToDateRange(month);
         const prevMonth = shiftMonth(month, -1);
+        const dates = period === 'month' ? undefined : periodRange(period, periodEndMonth);
+        const chartEnd = periodMonths(period, periodEndMonth)?.last ?? periodEndMonth;
         const [
             overviewRes,
             expensesRes,
@@ -72,18 +82,24 @@ export default function CashflowSection() {
             incomeDaily,
             fixedRes,
             monthlyRes,
+            periodExpensesRes,
+            periodIncomesRes,
         ] = await Promise.all([
-            fetchExpenseOverview(month),
+            fetchExpenseOverview(periodEndMonth, dates),
             fetchExpenseTransactions(month),
             fetchExpenseTransactions(prevMonth),
             fetchIncomeTransactions(month),
             fetchExpenseDaily(range),
             fetchIncomeDaily(range),
             fetchFixedExpenses(),
-            fetchMonthlyCashflow(month),
+            fetchMonthlyCashflow(chartEnd, period === 'all' ? 120 : 12),
+            dates ? fetchExpenseTransactions(periodEndMonth, dates) : null,
+            dates ? fetchIncomeTransactions(periodEndMonth, dates) : null,
         ]);
         setData(overviewRes);
         setMonthlySeries(monthlyRes.series);
+        setPeriodExpenses(periodExpensesRes?.entries ?? null);
+        setPeriodIncomes(periodIncomesRes?.entries ?? null);
         setFixedConfigs(fixedRes.entries);
         setTransactions(expensesRes.entries);
         setIncomes(incomesRes.entries);
@@ -108,14 +124,15 @@ export default function CashflowSection() {
 
         const status = await fetchSyncStatus(month, 'expenses');
         fingerprintRef.current = status.fingerprint;
-    }, [month]);
+    }, [month, period, periodEndMonth]);
 
     useEffect(() => {
         let cancelled = false;
         fingerprintRef.current = null;
         setLoading(true);
         setError(null);
-        setSelectedDate('');
+        // Keep the picked day when only the period changes.
+        setSelectedDate((prev) => (prev.startsWith(`${month}-`) ? prev : ''));
 
         loadData()
             .catch((err) => {
@@ -165,16 +182,29 @@ export default function CashflowSection() {
 
     useRefreshSignal(handleStale);
 
+    /** First month with any income or spending (the "All" period starts there). */
+    const firstDataMonth = useMemo(
+        () => monthlySeries.find((p) => p.income !== 0 || p.spending !== 0)?.month ?? null,
+        [monthlySeries]
+    );
+    const coveredMonths = periodMonths(period, periodEndMonth);
+    /**
+     * Monthly budgets are multiplied by this so a 3-month period gets 3 months of budget.
+     * "All" counts only months that have entries, so long gaps between old records don't add budget.
+     */
+    const budgetMonths = coveredMonths
+        ? monthsBetween(coveredMonths.first, coveredMonths.last)
+        : Math.max(1, monthlySeries.filter((p) => p.income !== 0 || p.spending !== 0).length);
+
     const actualSpendVariant = useMemo(() => {
         if (!data) return 'default' as const;
-        const { budget, actualSpend } = data.totals;
-        const status = getBudgetStatus(actualSpend, budget);
+        const status = getBudgetStatus(data.totals.actualSpend, data.totals.budget * budgetMonths);
         if (status === 'over') return 'danger' as const;
         if (status === 'warning') return 'warning' as const;
         return 'default' as const;
-    }, [data]);
+    }, [data, budgetMonths]);
 
-    const budgetLeft = data ? data.totals.budget - data.totals.actualSpend : 0;
+    const budgetLeft = data ? data.totals.budget * budgetMonths - data.totals.actualSpend : 0;
 
     const netWorth = useMemo(() => {
         let total = 0;
@@ -239,8 +269,17 @@ export default function CashflowSection() {
         <>
             <div className="page-toolbar">
                 <div className="page-toolbar-group">
-                    <PeriodPills />
-                    <MonthPicker month={month} onChange={setMonth} />
+                    <PeriodPills value={period} onChange={setPeriod} />
+                    {period === 'all' ? (
+                        <span className="period-label">{periodLabel('all', periodEndMonth, firstDataMonth)}</span>
+                    ) : (
+                        <MonthPicker
+                            month={month}
+                            onChange={setMonth}
+                            label={period === 'month' ? undefined : periodLabel(period, month, null)}
+                            step={period === 'year' ? 12 : 1}
+                        />
+                    )}
                 </div>
                 <div className="page-toolbar-group">
                     <AmountUnitToggle
@@ -282,7 +321,17 @@ export default function CashflowSection() {
     if (!data) return null;
 
     // Income leaves out reimbursements (they reduce spending instead), so income − spend = net.
-    const { actualSpend, budget, totalIncome, netCashflow } = data.totals;
+    const { actualSpend, totalIncome, netCashflow } = data.totals;
+    const budget = data.totals.budget * budgetMonths;
+    const isMultiMonth = period !== 'month';
+    const variableRows =
+        budgetMonths === 1
+            ? data.variable
+            : data.variable.map((row) => {
+                  const periodBudget = row.monthlyBudget * budgetMonths;
+                  return { ...row, monthlyBudget: periodBudget, overBudget: row.spending > periodBudget };
+              });
+    const chartEnd = coveredMonths?.last ?? periodEndMonth;
 
     const chartData = showHours
         ? trendSeries.map((p) => ({ ...p, income: p.income / rate!, spending: p.spending / rate!, net: p.net / rate! }))
@@ -295,9 +344,9 @@ export default function CashflowSection() {
         return formatCompactMYR(value);
     };
     const trendRange =
-        trendSeries.length === monthlySeries.length
-            ? `The 12 months up to ${formatMonthLabel(month)}`
-            : `${formatMonthLabel(trendSeries[0]?.month ?? month)} to ${formatMonthLabel(month)}`;
+        trendSeries.length === monthlySeries.length && period !== 'all'
+            ? `The 12 months up to ${formatMonthLabel(chartEnd)}`
+            : `${formatMonthLabel(trendSeries[0]?.month ?? chartEnd)} to ${formatMonthLabel(chartEnd)}`;
 
     return (
         <section className="panel">
@@ -324,7 +373,7 @@ export default function CashflowSection() {
                         sub={
                             showHours
                                 ? formatMYR(totalIncome)
-                                : `Salary after tax ${formatMYR(data.salaryAfterTax)}`
+                                : `Salary after tax ${formatMYR(data.salaryAfterTax)}${isMultiMonth ? ' a month' : ''}`
                         }
                     />
                     <SummaryCard
@@ -394,13 +443,21 @@ export default function CashflowSection() {
                 </section>
 
                 <VariableExpensesTable
-                    rows={data.variable}
-                    transactions={transactions}
-                    incomes={incomes}
+                    rows={variableRows}
+                    transactions={periodExpenses ?? transactions}
+                    incomes={periodIncomes ?? incomes}
                     formatAmount={formatMYR}
-                    amountCanUse={data.totals.amountCanUse}
-                    budget={data.totals.budget}
+                    amountCanUse={data.totals.amountCanUse * budgetMonths}
+                    budget={budget}
                     budgetLeft={budgetLeft}
+                    periodLabel={isMultiMonth ? periodLabel(period, periodEndMonth, firstDataMonth) : undefined}
+                    subtitle={
+                        isMultiMonth
+                            ? `${periodLabel(period, periodEndMonth, firstDataMonth)} · budgets cover ${budgetMonths} ${
+                                  budgetMonths === 1 ? 'month' : 'months'
+                              }${period === 'all' ? ' with entries' : ''}`
+                            : undefined
+                    }
                 />
 
                 <div className="expenses-calendar-row">

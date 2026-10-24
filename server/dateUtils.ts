@@ -48,6 +48,24 @@ export function parseMonth(month?: string): { month: string; start: string; end:
     };
 }
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * A month's first and last day, or an explicit start/end when both are valid dates
+ * (used for the 3M / 6M / YTD / Year / All periods). `month` stays the anchor month.
+ */
+export function parseMonthOrRange(
+    month?: string,
+    start?: string,
+    end?: string
+): { month: string; start: string; end: string } {
+    const parsed = parseMonth(month);
+    if (start && end && ISO_DATE.test(start) && ISO_DATE.test(end) && start <= end) {
+        return { month: parsed.month, start, end };
+    }
+    return parsed;
+}
+
 export function enumerateDates(start: string, end: string): string[] {
     const dates: string[] = [];
     const current = new Date(`${start}T12:00:00`);

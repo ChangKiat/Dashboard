@@ -29,6 +29,9 @@ export interface ExpenseOverviewFixed {
 
 export interface ExpenseOverviewResponse {
     month: string;
+    /** The dates the totals cover: the month, or the requested range. */
+    start: string;
+    end: string;
     salaryAfterTax: number;
     variable: ExpenseOverviewVariable[];
     fixed: ExpenseOverviewFixed[];
@@ -542,8 +545,13 @@ export function fetchMonthlyCashflow(month: string, months = 12) {
     );
 }
 
-export function fetchExpenseOverview(month: string) {
-    return fetchJson<ExpenseOverviewResponse>(`/api/expenses/overview?month=${month}`);
+/** `?month=…`, plus explicit dates when a multi-month period is showing. */
+function monthQuery(month: string, range?: DateRange) {
+    return range ? `month=${month}&${qs(range)}` : `month=${month}`;
+}
+
+export function fetchExpenseOverview(month: string, range?: DateRange) {
+    return fetchJson<ExpenseOverviewResponse>(`/api/expenses/overview?${monthQuery(month, range)}`);
 }
 
 export function updateCategoryBudget(category: string, monthlyBudget: number) {
@@ -553,8 +561,8 @@ export function updateCategoryBudget(category: string, monthlyBudget: number) {
     );
 }
 
-export function fetchExpenseTransactions(month: string) {
-    return fetchJson<ExpenseTransactionsResponse>(`/api/expenses/transactions?month=${month}`);
+export function fetchExpenseTransactions(month: string, range?: DateRange) {
+    return fetchJson<ExpenseTransactionsResponse>(`/api/expenses/transactions?${monthQuery(month, range)}`);
 }
 
 export function fetchFixedExpenses() {
@@ -783,8 +791,8 @@ export function syncAccountRebate(id: number, month: string) {
     );
 }
 
-export function fetchIncomeTransactions(month: string) {
-    return fetchJson<IncomeTransactionsResponse>(`/api/incomes/transactions?month=${month}`);
+export function fetchIncomeTransactions(month: string, range?: DateRange) {
+    return fetchJson<IncomeTransactionsResponse>(`/api/incomes/transactions?${monthQuery(month, range)}`);
 }
 
 export function fetchIncomeDaily(range: DateRange) {
