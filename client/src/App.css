@@ -260,6 +260,154 @@
   }
 }
 
+/* RM / Hours switch and the hourly-rate popover */
+.amount-unit {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.rate-chip {
+  height: 40px;
+  padding: 0 14px;
+  border: 1px dashed var(--border-hover);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rate-chip:hover,
+.rate-chip[aria-expanded='true'] {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.rate-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.rate-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  width: min(280px, calc(100vw - 32px));
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--menu-shadow);
+}
+
+.rate-popover label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.rate-popover input {
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.rate-popover input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.rate-popover-note {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.rate-popover-note--error {
+  color: var(--danger);
+}
+
+/* The toolbar wraps on phones, so the switch sits on the left there. */
+@media (max-width: 640px) {
+  .rate-popover {
+    left: 0;
+    right: auto;
+  }
+}
+
+/* Cash flow chart card */
+.cashflow-trend-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.cashflow-trend-header h3 {
+  margin: 0;
+}
+
+.cashflow-trend-sub {
+  margin: 4px 0 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.chart-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+
+.legend-dot--income {
+  background: var(--ok);
+}
+
+.legend-dot--spending {
+  background: var(--accent);
+}
+
+.legend-line {
+  width: 16px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--series-amber);
+}
+
+.cashflow-trend-note {
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
 .section-tabs {
   display: flex;
   gap: 2px;

@@ -7,6 +7,7 @@ import type {
     FixedExpenseConfig,
     IncomeDailyPoint,
     IncomeTransaction,
+    MonthlyCashflowPoint,
 } from '../api';
 import {
     applyDueFixedContributions,
@@ -16,17 +17,22 @@ import {
     fetchFixedExpenses,
     fetchIncomeDaily,
     fetchIncomeTransactions,
+    fetchMonthlyCashflow,
     fetchSyncStatus,
 } from '../api';
-import { useFormatMYR } from '../hooks/useAmountVisibility';
-import { shiftMonth, useMonth } from '../hooks/useMonth';
+import CashflowTrendChart from '../charts/CashflowTrendChart';
+import { formatHours, hourlyRate, monthlyWorkHours, useAmountUnit } from '../hooks/useAmountUnit';
+import { useAmountVisibility, useFormatMYR } from '../hooks/useAmountVisibility';
+import { formatMonthLabel, shiftMonth, useMonth } from '../hooks/useMonth';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
 import { useRefreshSignal } from '../hooks/useRefreshSignal';
 import { useSmartRefresh } from '../hooks/useSmartRefresh';
 import { getBudgetStatus } from '../utils/budgetStatus';
 import { monthToDateRange, pickDefaultCashflowDate } from '../utils/dateRange';
 import { sumIncomeDailyTotals } from '../utils/incomeAggregates';
+import { formatCompactMYR } from '../utils/money';
 
+import AmountUnitToggle from './AmountUnitToggle';
 import CashflowCalendar from './CashflowCalendar';
 import CashflowDayDetailPanel from './CashflowDayDetailPanel';
 import { BankIcon, IncomeIcon, TrendUpIcon, WalletIcon } from './icons';
@@ -41,8 +47,11 @@ import VariableExpensesTable from './VariableExpensesTable';
 export default function CashflowSection() {
     const { month, setMonth } = useMonth();
     const formatMYR = useFormatMYR();
+    const { hidden } = useAmountVisibility();
+    const { unit, setUnit, hoursPerWeek, setHoursPerWeek } = useAmountUnit();
     const { accounts, loading: accountsLoading, refresh: refreshAccounts } = usePaymentAccounts();
     const [lastEntryAt, setLastEntryAt] = useState<string | null>(null);
+    const [monthlySeries, setMonthlySeries] = useState<MonthlyCashflowPoint[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [selectedDate, setSelectedDate] = useState<string>('');
@@ -59,17 +68,27 @@ export default function CashflowSection() {
     const loadData = useCallback(async (options?: { silent?: boolean }) => {
         const range = monthToDateRange(month);
         const prevMonth = shiftMonth(month, -1);
-        const [overviewRes, expensesRes, prevExpensesRes, incomesRes, expenseDaily, incomeDaily, fixedRes] =
-            await Promise.all([
-                fetchExpenseOverview(month),
-                fetchExpenseTransactions(month),
-                fetchExpenseTransactions(prevMonth),
-                fetchIncomeTransactions(month),
-                fetchExpenseDaily(range),
-                fetchIncomeDaily(range),
-                fetchFixedExpenses(),
-            ]);
+        const [
+            overviewRes,
+            expensesRes,
+            prevExpensesRes,
+            incomesRes,
+            expenseDaily,
+            incomeDaily,
+            fixedRes,
+            monthlyRes,
+        ] = await Promise.all([
+            fetchExpenseOverview(month),
+            fetchExpenseTransactions(month),
+            fetchExpenseTransactions(prevMonth),
+            fetchIncomeTransactions(month),
+            fetchExpenseDaily(range),
+            fetchIncomeDaily(range),
+            fetchFixedExpenses(),
+            fetchMonthlyCashflow(month),
+        ]);
         setData(overviewRes);
+        setMonthlySeries(monthlyRes.series);
         setFixedConfigs(fixedRes.entries);
         setTransactions(expensesRes.entries);
         setIncomes(incomesRes.entries);
@@ -212,12 +231,42 @@ export default function CashflowSection() {
         [incomeSeries, selectedDate]
     );
 
+    // Leading months with no entries at all are left off the chart.
+    const trendSeries = useMemo(() => {
+        const first = monthlySeries.findIndex((p) => p.income !== 0 || p.spending !== 0);
+        return first === -1 ? [] : monthlySeries.slice(first);
+    }, [monthlySeries]);
+
+    const rate = data ? hourlyRate(data.salaryAfterTax, hoursPerWeek) : null;
+    const effectiveUnit = data && rate == null ? 'rm' : unit;
+    const showHours = effectiveUnit === 'hours' && rate != null;
+    const toHours = (amount: number) => (hidden ? '•• h' : formatHours(amount / rate!));
+    /** A card's main figure: RM, or hours of work when Hours is on. */
+    const formatFigure = (amount: number) => (showHours ? toHours(amount) : formatMYR(amount));
+
     const toolbar = (
         <>
             <div className="page-toolbar">
                 <div className="page-toolbar-group">
                     <PeriodPills />
                     <MonthPicker month={month} onChange={setMonth} />
+                </div>
+                <div className="page-toolbar-group">
+                    <AmountUnitToggle
+                        unit={effectiveUnit}
+                        onUnitChange={setUnit}
+                        hoursPerWeek={hoursPerWeek}
+                        onHoursPerWeekChange={setHoursPerWeek}
+                        rateLabel={rate == null ? null : `${formatMYR(rate)}/h`}
+                        rateExplanation={
+                            data
+                                ? `${formatMYR(data.salaryAfterTax)} take-home ÷ ${Math.round(
+                                      monthlyWorkHours(hoursPerWeek)
+                                  )} h a month`
+                                : null
+                        }
+                        hoursDisabledReason={data && rate == null ? 'Needs your salary after tax' : undefined}
+                    />
                 </div>
             </div>
             <SyncBanner lastEntryAt={lastEntryAt} />
@@ -243,6 +292,22 @@ export default function CashflowSection() {
     if (!data) return null;
 
     const netCashflow = data.totals.netCashflow;
+    const { actualSpend, budget } = data.totals;
+
+    const chartData = showHours
+        ? trendSeries.map((p) => ({ ...p, income: p.income / rate!, spending: p.spending / rate!, net: p.net / rate! }))
+        : trendSeries;
+    const formatChartValue = (value: number) =>
+        showHours ? (hidden ? '•• h' : formatHours(value)) : formatMYR(value);
+    const formatChartAxis = (value: number) => {
+        if (hidden) return '••';
+        if (showHours) return `${Math.round(value).toLocaleString('en-MY')} h`;
+        return formatCompactMYR(value);
+    };
+    const trendRange =
+        trendSeries.length === monthlySeries.length
+            ? `The 12 months up to ${formatMonthLabel(month)}`
+            : `${formatMonthLabel(trendSeries[0]?.month ?? month)} to ${formatMonthLabel(month)}`;
 
     return (
         <section className="panel">
@@ -253,33 +318,90 @@ export default function CashflowSection() {
                         tone="spend"
                         icon={<WalletIcon size={26} />}
                         label="Actual spend"
-                        value={formatMYR(data.totals.actualSpend)}
+                        value={formatFigure(actualSpend)}
                         variant={actualSpendVariant}
-                        sub={`of ${formatMYR(data.totals.budget)} budget`}
+                        sub={
+                            showHours
+                                ? `${formatMYR(actualSpend)} · budget ${toHours(budget)}`
+                                : `of ${formatMYR(budget)} budget`
+                        }
                     />
                     <SummaryCard
                         tone="income"
                         icon={<IncomeIcon size={26} />}
                         label="Total income"
-                        value={formatMYR(monthIncome)}
-                        sub={`Salary after tax ${formatMYR(data.salaryAfterTax)}`}
+                        value={formatFigure(monthIncome)}
+                        sub={
+                            showHours
+                                ? formatMYR(monthIncome)
+                                : `Salary after tax ${formatMYR(data.salaryAfterTax)}`
+                        }
                     />
                     <SummaryCard
                         tone="net"
                         icon={<TrendUpIcon size={26} />}
                         label="Net cashflow"
-                        value={formatMYR(netCashflow)}
+                        value={formatFigure(netCashflow)}
                         variant={netCashflow < 0 ? 'danger' : 'default'}
-                        sub={netCashflow < 0 ? 'Spent more than came in' : 'Left over after spending'}
+                        sub={
+                            showHours
+                                ? formatMYR(netCashflow)
+                                : netCashflow < 0
+                                  ? 'Spent more than came in'
+                                  : 'Left over after spending'
+                        }
                     />
                     <SummaryCard
                         tone="net"
                         icon={<BankIcon size={26} />}
                         label="Net worth"
-                        value={accountsLoading ? '…' : formatMYR(netWorth.total)}
-                        sub={`Accounts + investments − credit cards · ${netWorth.count} accounts`}
+                        value={accountsLoading ? '…' : formatFigure(netWorth.total)}
+                        sub={
+                            showHours && !accountsLoading
+                                ? formatMYR(netWorth.total)
+                                : `Accounts + investments − credit cards · ${netWorth.count} accounts`
+                        }
                     />
                 </div>
+
+                <section className="card cashflow-trend" aria-labelledby="cashflow-trend-title">
+                    <div className="cashflow-trend-header">
+                        <div>
+                            <h3 id="cashflow-trend-title">Cash flow</h3>
+                            <p className="cashflow-trend-sub">
+                                {trendRange}
+                                {showHours && ' · in hours of work'}
+                            </p>
+                        </div>
+                        <div className="chart-legend" aria-hidden="true">
+                            <span>
+                                <span className="legend-dot legend-dot--income" />
+                                Income
+                            </span>
+                            <span>
+                                <span className="legend-dot legend-dot--spending" />
+                                Spending
+                            </span>
+                            <span>
+                                <span className="legend-line" />
+                                Net
+                            </span>
+                        </div>
+                    </div>
+                    {chartData.length > 0 ? (
+                        <CashflowTrendChart
+                            data={chartData}
+                            formatValue={formatChartValue}
+                            formatAxis={formatChartAxis}
+                        />
+                    ) : (
+                        <p className="empty-chart">No income or spending in the last 12 months.</p>
+                    )}
+                    <p className="cashflow-trend-note">
+                        Income leaves out reimbursements and transfers between your own accounts; spending
+                        is after reimbursements.
+                    </p>
+                </section>
 
                 <VariableExpensesTable
                     rows={data.variable}

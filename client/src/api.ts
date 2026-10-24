@@ -528,6 +528,20 @@ export function fetchExpenseDaily(range: DateRange) {
     return fetchJson<ExpenseDailyResponse>(`/api/expenses/daily?${qs(range)}`);
 }
 
+export interface MonthlyCashflowPoint {
+    month: string;
+    income: number;
+    spending: number;
+    net: number;
+}
+
+/** Income, spending and net for the `months` months ending at `month`, oldest first. */
+export function fetchMonthlyCashflow(month: string, months = 12) {
+    return fetchJson<{ month: string; series: MonthlyCashflowPoint[] }>(
+        `/api/expenses/monthly?month=${month}&months=${months}`
+    );
+}
+
 export function fetchExpenseOverview(month: string) {
     return fetchJson<ExpenseOverviewResponse>(`/api/expenses/overview?month=${month}`);
 }

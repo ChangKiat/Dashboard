@@ -25,6 +25,7 @@ import {
     upsertInvestmentFundingTransfer,
 } from '../../agent/services/incomeService';
 import { enumerateDates, parseDateRange, parseMonth } from '../dateUtils';
+import { getMonthlyCashflow, monthsEndingAt } from '../monthlyCashflow';
 import {
     enrichExpenseTransactions,
     groupExpensesByDateNet,
@@ -430,6 +431,19 @@ router.get('/overview', async (req, res) => {
         });
     } catch (err) {
         console.error('GET /api/expenses/overview', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+    }
+});
+
+router.get('/monthly', async (req, res) => {
+    try {
+        const { month } = parseMonth(req.query.month as string | undefined);
+        const requested = parseInt(String(req.query.months ?? '12'), 10);
+        const count = Number.isFinite(requested) ? Math.min(Math.max(requested, 1), 36) : 12;
+        const series = await getMonthlyCashflow(monthsEndingAt(month, count));
+        res.json({ month, series });
+    } catch (err) {
+        console.error('GET /api/expenses/monthly', err);
         res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
     }
 });
