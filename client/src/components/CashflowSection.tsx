@@ -29,7 +29,6 @@ import { useRefreshSignal } from '../hooks/useRefreshSignal';
 import { useSmartRefresh } from '../hooks/useSmartRefresh';
 import { getBudgetStatus } from '../utils/budgetStatus';
 import { monthToDateRange, pickDefaultCashflowDate } from '../utils/dateRange';
-import { sumIncomeDailyTotals } from '../utils/incomeAggregates';
 import { formatCompactMYR } from '../utils/money';
 
 import AmountUnitToggle from './AmountUnitToggle';
@@ -181,8 +180,6 @@ export default function CashflowSection() {
         return 'default' as const;
     }, [data]);
 
-    const monthIncome = useMemo(() => sumIncomeDailyTotals(incomeSeries), [incomeSeries]);
-
     const budgetLeft = data ? data.totals.budget - data.totals.actualSpend : 0;
 
     const netWorth = useMemo(() => {
@@ -291,8 +288,8 @@ export default function CashflowSection() {
     }
     if (!data) return null;
 
-    const netCashflow = data.totals.netCashflow;
-    const { actualSpend, budget } = data.totals;
+    // Income leaves out reimbursements (they reduce spending instead), so income − spend = net.
+    const { actualSpend, budget, totalIncome, netCashflow } = data.totals;
 
     const chartData = showHours
         ? trendSeries.map((p) => ({ ...p, income: p.income / rate!, spending: p.spending / rate!, net: p.net / rate! }))
@@ -330,10 +327,10 @@ export default function CashflowSection() {
                         tone="income"
                         icon={<IncomeIcon size={26} />}
                         label="Total income"
-                        value={formatFigure(monthIncome)}
+                        value={formatFigure(totalIncome)}
                         sub={
                             showHours
-                                ? formatMYR(monthIncome)
+                                ? formatMYR(totalIncome)
                                 : `Salary after tax ${formatMYR(data.salaryAfterTax)}`
                         }
                     />
