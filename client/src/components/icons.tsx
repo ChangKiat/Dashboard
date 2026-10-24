@@ -167,6 +167,23 @@ export function CalendarIcon(props: IconProps) {
     );
 }
 
+export function CalendarCheckIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <rect x="3" y="5" width="18" height="16" rx="2" />
+            <path d="M3 10h18M8 3v4M16 3v4M9 15l2 2 4-4" />
+        </Icon>
+    );
+}
+
+export function FlameIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="M12 22c4 0 7-2.7 7-6.8 0-3.4-2.2-5.6-3.8-7.6-.5 1.6-1.4 2.6-2.6 3.1C12.9 7.6 11.6 4.6 9 2c.3 3.1-1.2 5.2-2.7 7C4.9 10.6 5 12.4 5 15.2 5 19.3 8 22 12 22z" />
+        </Icon>
+    );
+}
+
 export function BarsIcon(props: IconProps) {
     return (
         <Icon {...props}>

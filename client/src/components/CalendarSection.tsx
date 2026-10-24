@@ -16,20 +16,52 @@ import {
     fetchIncomeTransactions,
     fetchSyncStatus,
 } from '../api';
-import { useFormatMYR } from '../hooks/useAmountVisibility';
+import SpendingHeatmap from '../charts/SpendingHeatmap';
+import { formatHours, hourlyRate, useAmountUnit } from '../hooks/useAmountUnit';
+import { useAmountVisibility, useFormatMYR } from '../hooks/useAmountVisibility';
 import { shiftMonth, useMonth } from '../hooks/useMonth';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
 import { useRefreshSignal } from '../hooks/useRefreshSignal';
 import { useSmartRefresh } from '../hooks/useSmartRefresh';
-import { monthToDateRange, pickDefaultCashflowDate } from '../utils/dateRange';
+import { monthToDateRange, pickDefaultCashflowDate, todayInKL } from '../utils/dateRange';
+import { longestNoSpendRun, monthSpendStats } from '../utils/spendingStats';
 import CashflowCalendar from './CashflowCalendar';
 import CashflowDayDetailPanel from './CashflowDayDetailPanel';
+import { CalendarCheckIcon, CalendarIcon, FlameIcon, TrendUpIcon } from './icons';
+import SummaryCard from './SummaryCard';
+
+function shiftDate(iso: string, days: number) {
+    const d = new Date(`${iso}T12:00:00`);
+    d.setDate(d.getDate() + days);
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${m}-${day}`;
+}
+
+function formatDay(iso: string, withYear: boolean) {
+    return new Date(`${iso}T12:00:00`).toLocaleDateString('en-MY', {
+        ...(withYear ? { weekday: 'long', year: 'numeric' } : {}),
+        day: 'numeric',
+        month: withYear ? 'long' : 'short',
+    });
+}
+
+/** The heatmap's last day: today in the current month, else the month's last day. */
+function heatmapEnd(month: string, today: string) {
+    const monthEnd = monthToDateRange(month).end;
+    return today.startsWith(month) ? today : monthEnd;
+}
 
 /** Month calendar of income and spending, with the picked day's entries beside it. */
 export default function CalendarSection() {
     const { month, setMonth } = useMonth();
     const formatMYR = useFormatMYR();
+    const { hidden } = useAmountVisibility();
+    const { hoursPerWeek } = useAmountUnit();
     const { refresh: refreshAccounts } = usePaymentAccounts();
+    const [salaryAfterTax, setSalaryAfterTax] = useState(0);
+    // A year of daily spending ending at the month shown, for the heatmap and the no-spend run.
+    const [yearSeries, setYearSeries] = useState<ExpenseDailyPoint[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [selectedDate, setSelectedDate] = useState<string>('');
@@ -45,17 +77,29 @@ export default function CalendarSection() {
     const loadData = useCallback(
         async (options?: { silent?: boolean }) => {
             const range = monthToDateRange(month);
-            const [overviewRes, expensesRes, prevExpensesRes, incomesRes, expenseDaily, incomeDaily, fixedRes] =
-                await Promise.all([
-                    fetchExpenseOverview(month),
-                    fetchExpenseTransactions(month),
-                    fetchExpenseTransactions(shiftMonth(month, -1)),
-                    fetchIncomeTransactions(month),
-                    fetchExpenseDaily(range),
-                    fetchIncomeDaily(range),
-                    fetchFixedExpenses(),
-                ]);
+            const yearEnd = heatmapEnd(month, todayInKL());
+            const [
+                overviewRes,
+                expensesRes,
+                prevExpensesRes,
+                incomesRes,
+                expenseDaily,
+                incomeDaily,
+                fixedRes,
+                yearDaily,
+            ] = await Promise.all([
+                fetchExpenseOverview(month),
+                fetchExpenseTransactions(month),
+                fetchExpenseTransactions(shiftMonth(month, -1)),
+                fetchIncomeTransactions(month),
+                fetchExpenseDaily(range),
+                fetchIncomeDaily(range),
+                fetchFixedExpenses(),
+                fetchExpenseDaily({ start: shiftDate(yearEnd, -364), end: yearEnd }),
+            ]);
             setVariableCategories(overviewRes.variable.map((v) => v.category));
+            setSalaryAfterTax(overviewRes.salaryAfterTax);
+            setYearSeries(yearDaily.series);
             setFixedConfigs(fixedRes.entries);
             setTransactions(expensesRes.entries);
             setIncomes(incomesRes.entries);
@@ -144,11 +188,67 @@ export default function CalendarSection() {
         [incomeSeries, selectedDate]
     );
 
+    const today = todayInKL();
+    const stats = useMemo(() => monthSpendStats(expenseSeries, today), [expenseSeries, today]);
+    const run = useMemo(() => longestNoSpendRun(yearSeries), [yearSeries]);
+
     if (loading) return <section className="panel"><p className="muted">Loading calendar…</p></section>;
     if (error) return <section className="panel"><p className="error">{error}</p></section>;
 
+    const isCurrentMonth = today.startsWith(month);
+    const rate = hourlyRate(salaryAfterTax, hoursPerWeek);
+    const yearStart = yearSeries[0]?.date;
+    const yearEnd = yearSeries[yearSeries.length - 1]?.date;
+    const spendDays = yearSeries.filter((d) => d.total > 0).length;
+    const heatmapSummary = yearStart
+        ? `Daily spending from ${formatDay(yearStart, true)} to ${formatDay(yearEnd, true)}: money spent on ${spendDays} of ${yearSeries.length} days.`
+        : 'No daily spending to show.';
+
     return (
         <section className="panel">
+            <div className="calendar-summary-grid">
+                <SummaryCard
+                    tone="spend"
+                    icon={<CalendarIcon size={26} />}
+                    label="Average per day"
+                    value={formatMYR(stats.averagePerDay)}
+                    sub={
+                        rate != null && stats.averagePerDay > 0
+                            ? `≈ ${hidden ? '•• h' : formatHours(stats.averagePerDay / rate)} of work a day`
+                            : `Across ${stats.daysSoFar} days`
+                    }
+                />
+                <SummaryCard
+                    tone="income"
+                    icon={<CalendarCheckIcon size={26} />}
+                    label="No-spend days"
+                    value={String(stats.noSpendDays)}
+                    sub={`Of ${stats.daysSoFar} days${isCurrentMonth ? ' so far' : ''}`}
+                />
+                <SummaryCard
+                    tone="net"
+                    icon={<FlameIcon size={26} />}
+                    label="Longest no-spend run"
+                    value={`${run.days} ${run.days === 1 ? 'day' : 'days'}`}
+                    sub={
+                        run.from && run.to
+                            ? `${
+                                  run.from === run.to
+                                      ? formatDay(run.from, false)
+                                      : `${formatDay(run.from, false)} – ${formatDay(run.to, false)}`
+                              } · last 12 months`
+                            : 'In the last 12 months'
+                    }
+                />
+                <SummaryCard
+                    tone="net"
+                    icon={<TrendUpIcon size={26} />}
+                    label="Biggest day"
+                    value={stats.biggest ? formatMYR(stats.biggest.total) : '—'}
+                    sub={stats.biggest ? formatDay(stats.biggest.date, true) : 'Nothing spent yet'}
+                />
+            </div>
+
             <div className="expenses-calendar-row">
                 <div className="expenses-calendar">
                     <CashflowCalendar
@@ -181,6 +281,20 @@ export default function CalendarSection() {
                     </div>
                 )}
             </div>
+
+            <section className="card heatmap-card" aria-labelledby="heatmap-title">
+                <h3 id="heatmap-title">
+                    {isCurrentMonth || !yearEnd
+                        ? 'The last 12 months'
+                        : `The 12 months to ${new Date(`${yearEnd}T12:00:00`).toLocaleDateString('en-MY', {
+                              day: 'numeric',
+                              month: 'long',
+                              year: 'numeric',
+                          })}`}
+                </h3>
+                <p className="heatmap-sub">Each square is a day; darker means more spent</p>
+                <SpendingHeatmap series={yearSeries} formatAmount={formatMYR} summary={heatmapSummary} />
+            </section>
         </section>
     );
 }
