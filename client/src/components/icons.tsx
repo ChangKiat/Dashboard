@@ -158,6 +158,22 @@ export function ClockIcon(props: IconProps) {
     );
 }
 
+export function TrashIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" />
+        </Icon>
+    );
+}
+
+export function UnlinkIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="M9 17H7a5 5 0 0 1 0-10h2M15 7h2a5 5 0 0 1 3.5 8.5M8 12h3M3 3l18 18" />
+        </Icon>
+    );
+}
+
 export function CloseIcon(props: IconProps) {
     return (
         <Icon {...props}>

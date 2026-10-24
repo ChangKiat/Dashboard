@@ -5004,9 +5004,9 @@ div.payment-account-card-main:hover {
 .trip-category-row {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   width: 100%;
-  padding: 12px;
+  padding: 8px 10px;
   border: 0;
   border-radius: 12px;
   background: transparent;
@@ -5042,7 +5042,7 @@ div.payment-account-card-main:hover {
 }
 
 .trip-category-bar {
-  height: 8px;
+  height: 6px;
   overflow: hidden;
   border-radius: 999px;
   background: var(--border);
@@ -5055,28 +5055,38 @@ div.payment-account-card-main:hover {
   background: var(--accent);
 }
 
+.trip-section-count {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
 .trip-day + .trip-day {
-  margin-top: 12px;
+  margin-top: 6px;
 }
 
 .trip-day-heading {
   margin: 0;
-  padding: 8px 12px;
-  border-radius: 8px;
+  padding: 4px 10px;
+  border-radius: 6px;
   background: var(--surface);
-  font-size: 0.75rem;
+  font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-muted);
 }
 
+/* One line per transaction: what and where | amount | action */
 .trip-txn {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 2px 6px 10px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -5086,42 +5096,119 @@ div.payment-account-card-main:hover {
 
 .trip-txn-main {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: baseline;
+  gap: 10px;
   min-width: 0;
 }
 
+.trip-txn-title,
+.trip-txn-meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .trip-txn-title {
+  flex: 0 1 auto;
+  font-size: 0.92rem;
   font-weight: 700;
   color: var(--text-heading);
-  overflow-wrap: anywhere;
 }
 
 .trip-txn-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.82rem;
+  flex: 0 2 auto;
+  font-size: 0.8rem;
   color: var(--text-muted);
 }
 
-.trip-txn-side {
+.trip-txn-meta .trip-leg-badge {
+  margin-left: 6px;
+}
+
+.trip-txn-figures {
   display: flex;
-  flex: none;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-  text-align: right;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
 }
 
 .trip-txn-amount {
+  font-size: 0.92rem;
   font-weight: 700;
   color: var(--text-heading);
 }
 
 .trip-txn-fx {
   font-family: var(--font-mono);
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
+}
+
+.trip-txn-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.trip-txn-action:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.trip-txn-action--danger:hover {
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+}
+
+.trip-txn-action:focus-visible,
+.trip-txn-more:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.trip-txn-more {
+  width: 100%;
+  height: 38px;
+  margin-top: 8px;
+  border: 1px dashed var(--border-hover);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.trip-txn-more:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+/* Phones: title above its details, foreign amount under the RM amount */
+@media (max-width: 600px) {
+  .trip-txn-main {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1px;
+  }
+
+  .trip-txn-figures {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0;
+  }
+
+  .trip-txn-action {
+    width: 36px;
+    height: 36px;
+  }
 }

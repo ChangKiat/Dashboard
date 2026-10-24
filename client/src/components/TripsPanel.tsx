@@ -16,7 +16,7 @@ import { useAmountVisibility } from '../hooks/useAmountVisibility';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
 import ConfirmDialog from './ConfirmDialog';
 import ExpenseCategorySelect from './ExpenseCategorySelect';
-import { ClockIcon, PlaneIcon, PlusIcon, WalletIcon } from './icons';
+import { ClockIcon, PlaneIcon, PlusIcon, TrashIcon, UnlinkIcon, WalletIcon } from './icons';
 import PaymentMethodSelect from './PaymentMethodSelect';
 import SummaryCard from './SummaryCard';
 
@@ -31,6 +31,8 @@ interface Props {
 }
 
 type FormMode = 'none' | 'create-trip' | 'exchange' | 'expense' | 'link';
+
+const EXPENSE_PREVIEW_COUNT = 10;
 
 function formatFxAmount(amount: number, currency: string) {
     return `${currency} ${amount.toLocaleString('en-MY', {
@@ -184,18 +186,28 @@ export default function TripsPanel({
     }, [summary, categoryFilter]);
 
     /** Newest day first; entries within a day newest first. */
+    const sortedExpenses = useMemo(
+        () =>
+            [...visibleExpenses].sort((a, b) =>
+                a.date !== b.date ? b.date.localeCompare(a.date) : b.id - a.id
+            ),
+        [visibleExpenses]
+    );
+
+    // Long trips start with the newest few; "Show all" opens the rest.
+    const [showAllExpenses, setShowAllExpenses] = useState(false);
+    useEffect(() => setShowAllExpenses(false), [selectedId, categoryFilter]);
+
     const expensesByDay = useMemo(() => {
+        const shown = showAllExpenses ? sortedExpenses : sortedExpenses.slice(0, EXPENSE_PREVIEW_COUNT);
         const days: { date: string; rows: TripExpense[] }[] = [];
-        const sorted = [...visibleExpenses].sort((a, b) =>
-            a.date !== b.date ? b.date.localeCompare(a.date) : b.id - a.id
-        );
-        for (const row of sorted) {
+        for (const row of shown) {
             const last = days[days.length - 1];
             if (last && last.date === row.date) last.rows.push(row);
             else days.push({ date: row.date, rows: [row] });
         }
         return days;
-    }, [visibleExpenses]);
+    }, [sortedExpenses, showAllExpenses]);
 
     useEffect(() => {
         let cancelled = false;
@@ -1022,6 +1034,7 @@ export default function TripsPanel({
                                 <h3 id="trip-transactions-title">
                                     Transactions{categoryFilter ? ` · ${categoryFilter}` : ''}
                                 </h3>
+                                <span className="trip-section-count">{sortedExpenses.length}</span>
                             </div>
                             {expensesByDay.length === 0 ? (
                                 <p className="muted">
@@ -1035,16 +1048,25 @@ export default function TripsPanel({
                                             {day.rows.map((row) => (
                                                 <li key={row.id} className="trip-txn">
                                                     <span className="trip-txn-main">
-                                                        <span className="trip-txn-title">{row.description}</span>
+                                                        <span className="trip-txn-title" title={row.description}>
+                                                            {row.description}
+                                                        </span>
                                                         <span className="trip-txn-meta">
                                                             {row.category}
-                                                            <span className={`trip-leg-badge trip-leg-${row.tripLeg ?? 'none'}`}>
-                                                                {legLabel(row.tripLeg)}
-                                                            </span>
-                                                            {row.paymentMethod && <span>{row.paymentMethod}</span>}
+                                                            {row.paymentMethod && ` · ${row.paymentMethod}`}
+                                                            {row.tripLeg && (
+                                                                <span className={`trip-leg-badge trip-leg-${row.tripLeg}`}>
+                                                                    {legLabel(row.tripLeg)}
+                                                                </span>
+                                                            )}
                                                         </span>
                                                     </span>
-                                                    <span className="trip-txn-side">
+                                                    <span className="trip-txn-figures">
+                                                        {row.fxAmount != null && (
+                                                            <span className="trip-txn-fx">
+                                                                {formatFx(row.fxAmount, row.fxCurrency || summary.trip.tripCurrency)}
+                                                            </span>
+                                                        )}
                                                         <span
                                                             className="trip-txn-amount"
                                                             title={
@@ -1056,35 +1078,45 @@ export default function TripsPanel({
                                                             {row.tripLeg === 'fund' ? '≈ ' : ''}
                                                             {formatAmount(row.amount)}
                                                         </span>
-                                                        {row.fxAmount != null && (
-                                                            <span className="trip-txn-fx">
-                                                                {formatFx(row.fxAmount, row.fxCurrency || summary.trip.tripCurrency)}
-                                                            </span>
-                                                        )}
-                                                        {row.tripLeg == null ? (
-                                                            <button
-                                                                type="button"
-                                                                className="btn-link"
-                                                                title="Remove from this trip (keeps the transaction)"
-                                                                onClick={() => handleUnlink(row.id)}
-                                                            >
-                                                                Unlink
-                                                            </button>
-                                                        ) : (
-                                                            <button
-                                                                type="button"
-                                                                className="btn-danger-link"
-                                                                onClick={() => setPendingDelete({ kind: 'entry', id: row.id })}
-                                                            >
-                                                                Delete
-                                                            </button>
-                                                        )}
                                                     </span>
+                                                    {row.tripLeg == null ? (
+                                                        <button
+                                                            type="button"
+                                                            className="trip-txn-action"
+                                                            aria-label={`Unlink ${row.description} from this trip`}
+                                                            title="Remove from this trip (keeps the transaction)"
+                                                            onClick={() => handleUnlink(row.id)}
+                                                        >
+                                                            <UnlinkIcon size={16} />
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            type="button"
+                                                            className="trip-txn-action trip-txn-action--danger"
+                                                            aria-label={`Delete ${row.description}`}
+                                                            title="Delete this trip entry"
+                                                            onClick={() => setPendingDelete({ kind: 'entry', id: row.id })}
+                                                        >
+                                                            <TrashIcon size={16} />
+                                                        </button>
+                                                    )}
                                                 </li>
                                             ))}
                                         </ul>
                                     </div>
                                 ))
+                            )}
+                            {sortedExpenses.length > EXPENSE_PREVIEW_COUNT && (
+                                <button
+                                    type="button"
+                                    className="trip-txn-more"
+                                    aria-expanded={showAllExpenses}
+                                    onClick={() => setShowAllExpenses((s) => !s)}
+                                >
+                                    {showAllExpenses
+                                        ? 'Show fewer'
+                                        : `Show all ${sortedExpenses.length} transactions`}
+                                </button>
                             )}
                         </section>
                     </div>
