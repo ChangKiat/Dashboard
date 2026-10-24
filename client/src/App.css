@@ -981,9 +981,6 @@
 
 .payment-accounts-panel h3 {
   margin: 0 0 16px;
-  font-size: 0.95rem;
-  font-weight: 500;
-  color: var(--text-muted);
 }
 
 .payment-accounts-split {
@@ -5541,4 +5538,10 @@ div.payment-account-card-main:hover {
     flex: 1 1 0;
     min-width: 0;
   }
+}
+
+.payment-accounts-hint {
+  margin: -10px 0 16px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
 }

@@ -27,7 +27,6 @@ import { formatCompactMYR } from '../utils/money';
 
 import AmountUnitToggle from './AmountUnitToggle';
 import { BankIcon, IncomeIcon, TrendUpIcon, WalletIcon } from './icons';
-import PaymentAccountsPanel from './PaymentAccountsPanel';
 import PeriodControls from './PeriodControls';
 import SummaryCard from './SummaryCard';
 
@@ -324,12 +323,6 @@ export default function CashflowSection() {
                     </p>
                 </section>
 
-                <PaymentAccountsPanel
-                    mode="balances"
-                    month={periodEndMonth}
-                    formatAmount={formatMYR}
-                    onChanged={handleChanged}
-                />
             </div>
         </section>
     );

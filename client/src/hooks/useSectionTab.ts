@@ -75,7 +75,7 @@ export const TAB_SUBTITLES: Record<TabId, string> = {
     loans: 'Loan repayments and their interest',
     interest: 'Interest your accounts pay you',
     mealGoals: 'Daily nutrition targets and body stats',
-    accounts: 'Bank accounts, cards and investments',
+    accounts: 'Balances and activity for your accounts, cards and investments',
     trips: 'What each trip cost, in money and workdays',
 };
 

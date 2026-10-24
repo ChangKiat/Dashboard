@@ -35,12 +35,10 @@ const DEFAULT_EXPENSE_CATEGORIES = [
 ];
 
 type ModalMode = 'closed' | 'create' | 'edit';
-export type PaymentAccountsPanelMode = 'manage' | 'balances';
 
 interface Props {
-    mode?: PaymentAccountsPanelMode;
-    /** Required for balances mode (activity). Optional for manage (credit category list). */
-    month?: string;
+    /** Month an account's activity opens on; also loads the categories for credit card rebates. */
+    month: string;
     onChanged?: () => void;
     formatAmount: (amount: number) => string;
 }
@@ -131,7 +129,6 @@ interface ColumnProps {
     accountType: PaymentAccountType;
     accounts: PaymentAccount[];
     formatAmount: (amount: number) => string;
-    mode: PaymentAccountsPanelMode;
     onAdd: (accountType: PaymentAccountType) => void;
     onEdit: (account: PaymentAccount) => void;
     onDelete: (account: PaymentAccount) => void;
@@ -143,23 +140,18 @@ function PaymentAccountColumn({
     accountType,
     accounts,
     formatAmount,
-    mode,
     onAdd,
     onEdit,
     onDelete,
     onView,
 }: ColumnProps) {
-    const isBalances = mode === 'balances';
-
     return (
         <div className="payment-accounts-column">
             <div className="payment-accounts-column-header">
                 <h4>{title}</h4>
-                {!isBalances && (
-                    <button type="button" className="btn-add" onClick={() => onAdd(accountType)}>
-                        + Add
-                    </button>
-                )}
+                <button type="button" className="btn-add" onClick={() => onAdd(accountType)}>
+                    + Add
+                </button>
             </div>
             {accounts.length === 0 ? (
                 <p className="muted">No accounts yet.</p>
@@ -167,46 +159,27 @@ function PaymentAccountColumn({
                 <ul className="payment-accounts-list">
                     {accounts.map((account) => (
                         <li key={account.id} className="payment-account-card">
-                            {isBalances ? (
-                                <button
-                                    type="button"
-                                    className="payment-account-card-main"
-                                    onClick={() => onView(account)}
-                                >
-                                    <span className="payment-account-title">
-                                        <AccountIcon
-                                            name={account.name}
-                                            accountType={account.accountType}
-                                        />
-                                        <span className="payment-account-name">{account.name}</span>
-                                    </span>
-                                    <AccountBalanceStats
-                                        account={account}
-                                        formatAmount={formatAmount}
-                                    />
-                                </button>
-                            ) : (
-                                <div className="payment-account-card-main">
-                                    <span className="payment-account-title">
-                                        <AccountIcon
-                                            name={account.name}
-                                            accountType={account.accountType}
-                                        />
-                                        <span className="payment-account-name">{account.name}</span>
-                                    </span>
-                                    <AccountBalanceStats
-                                        account={account}
-                                        formatAmount={formatAmount}
-                                    />
-                                </div>
-                            )}
-                            {!isBalances && (
-                                <RowActions
-                                    onEdit={() => onEdit(account)}
-                                    onDelete={() => onDelete(account)}
-                                    deleteLabel={`"${account.name}"`}
-                                />
-                            )}
+                            <button
+                                type="button"
+                                className="payment-account-card-main"
+                                onClick={() => onView(account)}
+                                title={
+                                    account.accountType === 'investment'
+                                        ? 'Open the portfolio'
+                                        : 'Open this account’s activity'
+                                }
+                            >
+                                <span className="payment-account-title">
+                                    <AccountIcon name={account.name} accountType={account.accountType} />
+                                    <span className="payment-account-name">{account.name}</span>
+                                </span>
+                                <AccountBalanceStats account={account} formatAmount={formatAmount} />
+                            </button>
+                            <RowActions
+                                onEdit={() => onEdit(account)}
+                                onDelete={() => onDelete(account)}
+                                deleteLabel={`"${account.name}"`}
+                            />
                         </li>
                     ))}
                 </ul>
@@ -215,12 +188,8 @@ function PaymentAccountColumn({
     );
 }
 
-export default function PaymentAccountsPanel({
-    mode = 'manage',
-    month,
-    onChanged,
-    formatAmount,
-}: Props) {
+/** Every account with its balance: open one for its activity (or portfolio), or add, edit and delete. */
+export default function PaymentAccountsPanel({ month, onChanged, formatAmount }: Props) {
     const { accounts, refresh } = usePaymentAccounts();
     const [modalMode, setModalMode] = useState<ModalMode>('closed');
     const [viewingAccount, setViewingAccount] = useState<PaymentAccount | null>(null);
@@ -243,7 +212,6 @@ export default function PaymentAccountsPanel({
     const [expenseCategories, setExpenseCategories] = useState<string[]>(DEFAULT_EXPENSE_CATEGORIES);
 
     useEffect(() => {
-        if (mode !== 'manage' || !month) return;
         fetchExpenseOverview(month)
             .then((res) => {
                 const cats = res.variable.map((v) => v.category);
@@ -252,7 +220,7 @@ export default function PaymentAccountsPanel({
             .catch(() => {
                 /* keep defaults */
             });
-    }, [mode, month]);
+    }, [month]);
 
     const debitAccounts = useMemo(
         () => sortByName(accounts.filter((a) => a.accountType === 'account')),
@@ -416,11 +384,10 @@ export default function PaymentAccountsPanel({
         }
     };
 
-    const panelTitle = mode === 'balances' ? 'Account balances' : 'Payment accounts';
-
     return (
         <div className="card payment-accounts-panel">
-            <h3>{panelTitle}</h3>
+            <h3>Account balances</h3>
+            <p className="payment-accounts-hint">Choose an account to see its activity, or an investment for its portfolio.</p>
             {actionError && <p className="error">{actionError}</p>}
             <div className="payment-accounts-split">
                 <PaymentAccountColumn
@@ -428,7 +395,6 @@ export default function PaymentAccountsPanel({
                     accountType="account"
                     accounts={debitAccounts}
                     formatAmount={formatAmount}
-                    mode={mode}
                     onAdd={openCreate}
                     onEdit={openEdit}
                     onDelete={handleDelete}
@@ -439,7 +405,6 @@ export default function PaymentAccountsPanel({
                     accountType="credit"
                     accounts={creditAccounts}
                     formatAmount={formatAmount}
-                    mode={mode}
                     onAdd={openCreate}
                     onEdit={openEdit}
                     onDelete={handleDelete}
@@ -450,113 +415,106 @@ export default function PaymentAccountsPanel({
                     accountType="investment"
                     accounts={investmentAccounts}
                     formatAmount={formatAmount}
-                    mode={mode}
                     onAdd={openCreate}
                     onEdit={openEdit}
                     onDelete={handleDelete}
                     onView={(account) => setPortfolioAccount(account)}
                 />
             </div>
-            {mode === 'manage' && (
-                <RecordModal
-                    title={modalMode === 'create' ? 'Add payment account' : 'Edit payment account'}
-                    open={modalMode !== 'closed'}
-                    saving={saving}
-                    error={modalError}
-                    onClose={closeModal}
-                    onSave={handleSave}
-                    className={form.accountType === 'credit' ? 'payment-account-modal' : undefined}
-                >
-                    {form.accountType === 'credit' ? (
-                        <CreditAccountForm
-                            form={form}
-                            setForm={setForm}
-                            rebateForm={rebateForm}
-                            setRebateForm={setRebateForm}
-                            creditTab={creditTab}
-                            setCreditTab={setCreditTab}
-                            expenseCategories={expenseCategories}
-                            modalMode={modalMode === 'edit' ? 'edit' : 'create'}
-                        />
-                    ) : (
-                        <>
-                            <div className="form-field">
-                                <label htmlFor="pa-name">Name</label>
-                                <input
-                                    id="pa-name"
-                                    type="text"
-                                    placeholder={
-                                        form.accountType === 'investment'
-                                            ? 'e.g. Rakuten, EPF'
-                                            : 'e.g. TnG, CIMB Visa'
-                                    }
-                                    value={form.name}
-                                    onChange={(e) =>
-                                        setForm((f) => ({ ...f, name: e.target.value }))
-                                    }
-                                />
-                            </div>
-                            <div className="form-field">
-                                <label htmlFor="pa-initial">Current balance (RM)</label>
-                                <input
-                                    id="pa-initial"
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    placeholder="0.00"
-                                    value={form.initialBalance}
-                                    onChange={(e) =>
-                                        setForm((f) => ({ ...f, initialBalance: e.target.value }))
-                                    }
-                                />
-                                <span className="muted form-hint">
-                                    Saving this value resets the account balance baseline to today.
-                                </span>
-                            </div>
-                            {modalMode === 'edit' && (
-                                <div className="form-field">
-                                    <label htmlFor="pa-type">Type</label>
-                                    <select
-                                        id="pa-type"
-                                        value={form.accountType}
-                                        onChange={(e) =>
-                                            setForm((f) => ({
-                                                ...f,
-                                                accountType: e.target.value as PaymentAccountType,
-                                            }))
-                                        }
-                                    >
-                                        <option value="account">Account</option>
-                                        <option value="credit">Credit</option>
-                                        <option value="investment">Investment</option>
-                                    </select>
-                                </div>
-                            )}
-                        </>
-                    )}
-                </RecordModal>
-            )}
-            {mode === 'balances' && month && (
-                <>
-                    <PortfolioModal
-                        account={portfolioAccount}
-                        formatAmount={formatAmount}
-                        onClose={() => setPortfolioAccount(null)}
-                        onChanged={handleChanged}
-                        onOpenCashActivity={(acc) => {
-                            setPortfolioAccount(null);
-                            setViewingAccount(acc);
-                        }}
+            <RecordModal
+                title={modalMode === 'create' ? 'Add payment account' : 'Edit payment account'}
+                open={modalMode !== 'closed'}
+                saving={saving}
+                error={modalError}
+                onClose={closeModal}
+                onSave={handleSave}
+                className={form.accountType === 'credit' ? 'payment-account-modal' : undefined}
+            >
+                {form.accountType === 'credit' ? (
+                    <CreditAccountForm
+                        form={form}
+                        setForm={setForm}
+                        rebateForm={rebateForm}
+                        setRebateForm={setRebateForm}
+                        creditTab={creditTab}
+                        setCreditTab={setCreditTab}
+                        expenseCategories={expenseCategories}
+                        modalMode={modalMode === 'edit' ? 'edit' : 'create'}
                     />
-                    <AccountActivityModal
-                        account={viewingAccount}
-                        month={month}
-                        formatAmount={formatAmount}
-                        onClose={() => setViewingAccount(null)}
-                        onChanged={handleChanged}
-                    />
-                </>
-            )}
+                ) : (
+                    <>
+                        <div className="form-field">
+                            <label htmlFor="pa-name">Name</label>
+                            <input
+                                id="pa-name"
+                                type="text"
+                                placeholder={
+                                    form.accountType === 'investment'
+                                        ? 'e.g. Rakuten, EPF'
+                                        : 'e.g. TnG, CIMB Visa'
+                                }
+                                value={form.name}
+                                onChange={(e) =>
+                                    setForm((f) => ({ ...f, name: e.target.value }))
+                                }
+                            />
+                        </div>
+                        <div className="form-field">
+                            <label htmlFor="pa-initial">Current balance (RM)</label>
+                            <input
+                                id="pa-initial"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                placeholder="0.00"
+                                value={form.initialBalance}
+                                onChange={(e) =>
+                                    setForm((f) => ({ ...f, initialBalance: e.target.value }))
+                                }
+                            />
+                            <span className="muted form-hint">
+                                Saving this value resets the account balance baseline to today.
+                            </span>
+                        </div>
+                        {modalMode === 'edit' && (
+                            <div className="form-field">
+                                <label htmlFor="pa-type">Type</label>
+                                <select
+                                    id="pa-type"
+                                    value={form.accountType}
+                                    onChange={(e) =>
+                                        setForm((f) => ({
+                                            ...f,
+                                            accountType: e.target.value as PaymentAccountType,
+                                        }))
+                                    }
+                                >
+                                    <option value="account">Account</option>
+                                    <option value="credit">Credit</option>
+                                    <option value="investment">Investment</option>
+                                </select>
+                            </div>
+                        )}
+                    </>
+                )}
+            </RecordModal>
+            <PortfolioModal
+                account={portfolioAccount}
+                formatAmount={formatAmount}
+                onClose={() => setPortfolioAccount(null)}
+                onChanged={handleChanged}
+                onOpenCashActivity={(acc) => {
+                    setPortfolioAccount(null);
+                    setViewingAccount(acc);
+                }}
+            />
+            <AccountActivityModal
+                account={viewingAccount}
+                month={month}
+                formatAmount={formatAmount}
+                onClose={() => setViewingAccount(null)}
+                onChanged={handleChanged}
+            />
         </div>
     );
 }

@@ -122,7 +122,7 @@ export default function SetupSection({ view }: { view: SetupView }) {
                     />
                 )}
                 {view === 'accounts' && (
-                    <PaymentAccountsPanel mode="manage" formatAmount={formatMYR} onChanged={handleChanged} />
+                    <PaymentAccountsPanel month={month} formatAmount={formatMYR} onChanged={handleChanged} />
                 )}
             </div>
         </section>
