@@ -538,6 +538,20 @@ export interface MonthlyCashflowPoint {
     net: number;
 }
 
+export interface DailyCashflowPoint {
+    date: string;
+    income: number;
+    spending: number;
+    net: number;
+}
+
+/** Income, spending and net for each day of `month`, on the same rules as the monthly series. */
+export function fetchDailyCashflow(month: string) {
+    return fetchJson<{ month: string; series: DailyCashflowPoint[] }>(
+        `/api/expenses/daily-cashflow?month=${month}`
+    );
+}
+
 /** Income, spending and net for the `months` months ending at `month`, oldest first. */
 export function fetchMonthlyCashflow(month: string, months = 12) {
     return fetchJson<{ month: string; series: MonthlyCashflowPoint[] }>(

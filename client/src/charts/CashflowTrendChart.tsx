@@ -9,15 +9,30 @@ import {
     XAxis,
     YAxis,
 } from 'recharts';
-import type { MonthlyCashflowPoint } from '../api';
+import type { DailyCashflowPoint, MonthlyCashflowPoint } from '../api';
 import { formatMonthLabel } from '../hooks/useMonth';
 
+/** One group of bars: a month or a day. */
+export interface TrendPoint {
+    key: string;
+    /** X-axis text. */
+    label: string;
+    /** Tooltip heading. */
+    fullLabel: string;
+    income: number;
+    spending: number;
+    /** null leaves a gap, e.g. for days that haven't happened yet. */
+    net: number | null;
+}
+
 interface Props {
-    data: MonthlyCashflowPoint[];
+    data: TrendPoint[];
     /** Tooltip values. */
     formatValue: (value: number) => string;
     /** Y-axis ticks. */
     formatAxis: (value: number) => string;
+    /** What the line shows, e.g. "Net" or "Net so far". */
+    netName: string;
 }
 
 /** "Oct", or "Oct 26" when the chart spans more than one year. */
@@ -27,6 +42,40 @@ function shortMonth(month: string, withYear: boolean) {
         month: 'short',
     });
     return withYear ? `${name} ${yearStr.slice(2)}` : name;
+}
+
+export function monthTrendPoints(series: MonthlyCashflowPoint[]): TrendPoint[] {
+    const spansYears =
+        series.length > 0 && series[0].month.slice(0, 4) !== series[series.length - 1].month.slice(0, 4);
+    return series.map((p) => ({
+        key: p.month,
+        label: shortMonth(p.month, spansYears),
+        fullLabel: formatMonthLabel(p.month),
+        income: p.income,
+        spending: p.spending,
+        net: p.net,
+    }));
+}
+
+/** Days of a month, with the line as the running net since the 1st, stopping after `lastDay`. */
+export function dayTrendPoints(series: DailyCashflowPoint[], lastDay: string): TrendPoint[] {
+    let runningNet = 0;
+    return series.map((p) => {
+        runningNet += p.net;
+        return {
+            key: p.date,
+            label: String(parseInt(p.date.slice(8, 10), 10)),
+            fullLabel: new Date(`${p.date}T12:00:00`).toLocaleDateString('en-MY', {
+                weekday: 'short',
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+            }),
+            income: p.income,
+            spending: p.spending,
+            net: p.date <= lastDay ? runningNet : null,
+        };
+    });
 }
 
 /** Round tick values (steps of 1, 2, 2.5 or 5 × 10ⁿ) covering zero and every value. */
@@ -46,20 +95,16 @@ function niceTicks(values: number[], targetCount = 5): number[] {
     return ticks;
 }
 
-export default function CashflowTrendChart({ data, formatValue, formatAxis }: Props) {
-    const spansYears = data.length > 0 && data[0].month.slice(0, 4) !== data[data.length - 1].month.slice(0, 4);
-    const chartData = data.map((point) => ({
-        ...point,
-        label: shortMonth(point.month, spansYears),
-        fullLabel: formatMonthLabel(point.month),
-    }));
-    const ticks = niceTicks(data.flatMap((p) => [p.income, p.spending, p.net]));
+export default function CashflowTrendChart({ data, formatValue, formatAxis, netName }: Props) {
+    const ticks = niceTicks(data.flatMap((p) => (p.net == null ? [p.income, p.spending] : [p.income, p.spending, p.net])));
     // Non-breaking space so "RM 10k" stays on one line.
     const axisLabel = (value: number) => formatAxis(value).replace(/ /g, ' ');
+    // Many points (a month of days): smaller dots so the line stays readable.
+    const dense = data.length > 16;
 
     return (
         <ResponsiveContainer width="100%" height={300}>
-            <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barGap={4}>
+            <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barGap={dense ? 1 : 4}>
                 <CartesianGrid vertical={false} stroke="var(--border)" />
                 <XAxis
                     dataKey="label"
@@ -92,11 +137,15 @@ export default function CashflowTrendChart({ data, formatValue, formatAxis }: Pr
                 <Bar dataKey="spending" name="Spending" fill="var(--accent)" radius={[4, 4, 0, 0]} maxBarSize={28} />
                 <Line
                     dataKey="net"
-                    name="Net"
+                    name={netName}
                     type="linear"
                     stroke="var(--series-amber)"
                     strokeWidth={2.5}
-                    dot={{ r: 4, fill: 'var(--surface-2)', stroke: 'var(--series-amber)', strokeWidth: 2 }}
+                    dot={
+                        dense
+                            ? false
+                            : { r: 4, fill: 'var(--surface-2)', stroke: 'var(--series-amber)', strokeWidth: 2 }
+                    }
                     activeDot={{ r: 5 }}
                 />
             </ComposedChart>

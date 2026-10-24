@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import type { ExpenseOverviewResponse, MonthlyCashflowPoint } from '../api';
+import type { DailyCashflowPoint, ExpenseOverviewResponse, MonthlyCashflowPoint } from '../api';
 import {
     applyDueFixedContributions,
+    fetchDailyCashflow,
     fetchExpenseOverview,
     fetchMonthlyCashflow,
     fetchSyncStatus,
 } from '../api';
-import CashflowTrendChart from '../charts/CashflowTrendChart';
+import CashflowTrendChart, { dayTrendPoints, monthTrendPoints } from '../charts/CashflowTrendChart';
 import { formatHours, hourlyRate, monthlyWorkHours, useAmountUnit } from '../hooks/useAmountUnit';
 import { useAmountVisibility, useFormatMYR } from '../hooks/useAmountVisibility';
 import { currentMonthInKL, formatMonthLabel, useMonth } from '../hooks/useMonth';
@@ -23,6 +24,7 @@ import {
 import { useRefreshSignal } from '../hooks/useRefreshSignal';
 import { useSmartRefresh } from '../hooks/useSmartRefresh';
 import { getBudgetStatus } from '../utils/budgetStatus';
+import { todayInKL } from '../utils/dateRange';
 import { formatCompactMYR } from '../utils/money';
 
 import AmountUnitToggle from './AmountUnitToggle';
@@ -41,7 +43,9 @@ export default function CashflowSection() {
     const { unit, setUnit, hoursPerWeek, setHoursPerWeek } = useAmountUnit();
     const { accounts, loading: accountsLoading, refresh: refreshAccounts } = usePaymentAccounts();
     const [data, setData] = useState<ExpenseOverviewResponse | null>(null);
+    // The chart: month by month for 3M / 6M / YTD / Year / All, day by day for Month.
     const [monthlySeries, setMonthlySeries] = useState<MonthlyCashflowPoint[]>([]);
+    const [dailySeries, setDailySeries] = useState<DailyCashflowPoint[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const fingerprintRef = useRef<string | null>(null);
@@ -49,12 +53,14 @@ export default function CashflowSection() {
     const loadData = useCallback(async () => {
         const dates = period === 'month' ? undefined : periodRange(period, periodEndMonth);
         const chart = chartMonthsFor(period, periodEndMonth);
-        const [overviewRes, monthlyRes] = await Promise.all([
+        const [overviewRes, monthlyRes, dailyRes] = await Promise.all([
             fetchExpenseOverview(periodEndMonth, dates),
-            fetchMonthlyCashflow(chart.end, chart.count),
+            period === 'month' ? null : fetchMonthlyCashflow(chart.end, chart.count),
+            period === 'month' ? fetchDailyCashflow(periodEndMonth) : null,
         ]);
         setData(overviewRes);
-        setMonthlySeries(monthlyRes.series);
+        setMonthlySeries(monthlyRes?.series ?? []);
+        setDailySeries(dailyRes?.series ?? []);
 
         const status = await fetchSyncStatus(periodEndMonth, 'expenses');
         fingerprintRef.current = status.fingerprint;
@@ -137,12 +143,16 @@ export default function CashflowSection() {
         return { total, count };
     }, [accounts]);
 
-    // Month and All drop leading months with no entries; a chosen range shows all its months.
-    const trendSeries = useMemo(() => {
-        if (period !== 'month' && period !== 'all') return monthlySeries;
+    // All drops leading months with no entries; a chosen range shows all its months.
+    const trendMonths = useMemo(() => {
+        if (period !== 'all') return monthlySeries;
         const first = monthlySeries.findIndex(hasEntries);
         return first === -1 ? [] : monthlySeries.slice(first);
     }, [monthlySeries, period]);
+    const trendPoints = useMemo(
+        () => (period === 'month' ? dayTrendPoints(dailySeries, todayInKL()) : monthTrendPoints(trendMonths)),
+        [period, dailySeries, trendMonths]
+    );
 
     const rate = data ? hourlyRate(data.salaryAfterTax, hoursPerWeek) : null;
     const effectiveUnit = data && rate == null ? 'rm' : unit;
@@ -207,8 +217,13 @@ export default function CashflowSection() {
     const isMultiMonth = period !== 'month';
 
     const chartData = showHours
-        ? trendSeries.map((p) => ({ ...p, income: p.income / rate!, spending: p.spending / rate!, net: p.net / rate! }))
-        : trendSeries;
+        ? trendPoints.map((p) => ({
+              ...p,
+              income: p.income / rate!,
+              spending: p.spending / rate!,
+              net: p.net == null ? null : p.net / rate!,
+          }))
+        : trendPoints;
     const formatChartValue = (value: number) =>
         showHours ? (hidden ? '•• h' : formatHours(value)) : formatMYR(value);
     const formatChartAxis = (value: number) => {
@@ -219,15 +234,13 @@ export default function CashflowSection() {
     const chartEnd = monthlySeries[monthlySeries.length - 1]?.month ?? periodEndMonth;
     let trendRange: string;
     if (period === 'month') {
-        trendRange = `The 12 months up to ${formatMonthLabel(chartEnd)}`;
-        if (trendSeries.length > 0 && trendSeries.length < monthlySeries.length) {
-            trendRange += ` · entries start ${formatMonthLabel(trendSeries[0].month)}`;
-        }
+        trendRange = `${formatMonthLabel(periodEndMonth)}, day by day`;
     } else if (period === 'all') {
-        trendRange = `${formatMonthLabel(trendSeries[0]?.month ?? chartEnd)} to ${formatMonthLabel(chartEnd)}`;
+        trendRange = `${formatMonthLabel(trendMonths[0]?.month ?? chartEnd)} to ${formatMonthLabel(chartEnd)}`;
     } else {
         trendRange = `${periodLabel(period, periodEndMonth, null)}, month by month`;
     }
+    const netName = period === 'month' ? 'Net so far' : 'Net';
 
     return (
         <section className="panel">
@@ -304,7 +317,7 @@ export default function CashflowSection() {
                             </span>
                             <span>
                                 <span className="legend-line" />
-                                Net
+                                {netName}
                             </span>
                         </div>
                     </div>
@@ -313,6 +326,7 @@ export default function CashflowSection() {
                             data={chartData}
                             formatValue={formatChartValue}
                             formatAxis={formatChartAxis}
+                            netName={netName}
                         />
                     ) : (
                         <p className="empty-chart">No income or spending in this period.</p>

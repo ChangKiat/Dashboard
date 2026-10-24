@@ -99,11 +99,10 @@ export function budgetMonthsFor(period: Period, endMonth: string, monthsWithEntr
 }
 
 /**
- * Months the cash flow chart shows: the period's own months for 3M / 6M / YTD / Year,
- * the 12 months up to the picked month for Month, and everything for All.
+ * Months the cash flow chart shows: the period's own months for 3M / 6M / YTD / Year and
+ * everything for All. (Month shows its days instead.)
  */
 export function chartMonthsFor(period: Period, endMonth: string): { end: string; count: number } {
-    if (period === 'month') return { end: endMonth, count: 12 };
     if (period === 'all') return { end: endMonth, count: 120 };
     const { first, last } = periodMonths(period, endMonth)!;
     return { end: last, count: monthsBetween(first, last) };

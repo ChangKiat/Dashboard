@@ -25,7 +25,7 @@ import {
     upsertInvestmentFundingTransfer,
 } from '../../agent/services/incomeService';
 import { enumerateDates, parseDateRange, parseMonth, parseMonthOrRange } from '../dateUtils';
-import { getMonthlyCashflow, monthsEndingAt } from '../monthlyCashflow';
+import { getDailyCashflow, getMonthlyCashflow, monthsEndingAt } from '../monthlyCashflow';
 import {
     enrichExpenseTransactions,
     groupExpensesByDateNet,
@@ -450,6 +450,18 @@ router.get('/monthly', async (req, res) => {
         res.json({ month, series });
     } catch (err) {
         console.error('GET /api/expenses/monthly', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+    }
+});
+
+/** Income, spending and net for each day of a month, on the same rules as /monthly. */
+router.get('/daily-cashflow', async (req, res) => {
+    try {
+        const { month, start, end } = parseMonth(req.query.month as string | undefined);
+        const series = await getDailyCashflow(start, end);
+        res.json({ month, series });
+    } catch (err) {
+        console.error('GET /api/expenses/daily-cashflow', err);
         res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
     }
 });
