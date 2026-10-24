@@ -546,6 +546,13 @@ export function fetchExpenseOverview(month: string) {
     return fetchJson<ExpenseOverviewResponse>(`/api/expenses/overview?month=${month}`);
 }
 
+export function updateCategoryBudget(category: string, monthlyBudget: number) {
+    return fetchJson<{ ok: true; category: string; monthlyBudget: number }>(
+        `/api/expenses/budgets/${encodeURIComponent(category)}`,
+        { method: 'PUT', body: JSON.stringify({ monthlyBudget }) }
+    );
+}
+
 export function fetchExpenseTransactions(month: string) {
     return fetchJson<ExpenseTransactionsResponse>(`/api/expenses/transactions?month=${month}`);
 }

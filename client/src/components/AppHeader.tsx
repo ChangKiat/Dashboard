@@ -2,16 +2,17 @@ import { useAmountVisibility } from '../hooks/useAmountVisibility';
 import { useRefreshControl } from '../hooks/useRefreshSignal';
 import { TAB_LABELS, TAB_SUBTITLES, type TabId } from '../hooks/useSectionTab';
 import { useTheme } from '../hooks/useTheme';
-import { EyeIcon, EyeOffIcon, LockIcon, MoonIcon, RefreshIcon, SunIcon } from './icons';
-import SectionTabs from './SectionTabs';
+import { EyeIcon, EyeOffIcon, LockIcon, MenuIcon, MoonIcon, RefreshIcon, SunIcon } from './icons';
 
 interface Props {
     activeTab: TabId;
-    onTabChange: (tab: TabId) => void;
+    /** Opens the sidebar drawer; the button only shows on narrow screens. */
+    onOpenMenu: () => void;
+    menuOpen: boolean;
     onLock: () => void;
 }
 
-export default function AppHeader({ activeTab, onTabChange, onLock }: Props) {
+export default function AppHeader({ activeTab, onOpenMenu, menuOpen, onLock }: Props) {
     const { theme, toggleTheme } = useTheme();
     const { hidden, toggleHidden } = useAmountVisibility();
     const { refreshing, requestRefresh } = useRefreshControl();
@@ -19,7 +20,16 @@ export default function AppHeader({ activeTab, onTabChange, onLock }: Props) {
     return (
         <header className="header">
             <div className="header-left">
-                <SectionTabs active={activeTab} onChange={onTabChange} />
+                <button
+                    type="button"
+                    className="icon-btn menu-toggle"
+                    aria-label="Open menu"
+                    aria-expanded={menuOpen}
+                    aria-controls="app-sidebar"
+                    onClick={onOpenMenu}
+                >
+                    <MenuIcon />
+                </button>
                 <div className="header-titles">
                     <h1>{TAB_LABELS[activeTab]}</h1>
                     <p className="subtitle">{TAB_SUBTITLES[activeTab]}</p>

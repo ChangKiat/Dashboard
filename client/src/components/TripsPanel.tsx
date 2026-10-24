@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import type { TripLeg, TripLinkCandidate, TripSummary, TripWithTotals } from '../api';
+import type { TripExpense, TripLeg, TripLinkCandidate, TripSummary, TripWithTotals } from '../api';
 import {
     createExpenseTransaction,
     createTrip,
@@ -16,7 +16,9 @@ import { useAmountVisibility } from '../hooks/useAmountVisibility';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
 import ConfirmDialog from './ConfirmDialog';
 import ExpenseCategorySelect from './ExpenseCategorySelect';
+import { ClockIcon, PlaneIcon, PlusIcon, WalletIcon } from './icons';
 import PaymentMethodSelect from './PaymentMethodSelect';
+import SummaryCard from './SummaryCard';
 
 interface Props {
     variableCategories: string[];
@@ -24,6 +26,8 @@ interface Props {
     onChanged?: () => void;
     /** Bump to reload trips after transactions change elsewhere (e.g. tagged from the expense form). */
     reloadKey?: number;
+    /** Take-home pay for one workday, or null when there is no salary to divide. */
+    workdayValue: number | null;
 }
 
 type FormMode = 'none' | 'create-trip' | 'exchange' | 'expense' | 'link';
@@ -42,6 +46,39 @@ function legLabel(leg: TripLeg | null) {
     return 'Linked';
 }
 
+function parseIsoDate(iso: string) {
+    return new Date(`${iso}T12:00:00`);
+}
+
+/** "14 Oct – 29 Oct 2026", one date with its year, or null when neither is set. */
+function formatTripDates(start: string | null, end: string | null): string | null {
+    const withYear = (iso: string) =>
+        parseIsoDate(iso).toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' });
+    if (start && end) {
+        const startText = parseIsoDate(start).toLocaleDateString('en-MY', { day: 'numeric', month: 'short' });
+        return `${startText} – ${withYear(end)}`;
+    }
+    if (start) return `From ${withYear(start)}`;
+    if (end) return `Until ${withYear(end)}`;
+    return null;
+}
+
+/** Days from start to end inclusive, or null without both dates. */
+function tripDays(start: string | null, end: string | null): number | null {
+    if (!start || !end) return null;
+    const days = Math.round((parseIsoDate(end).getTime() - parseIsoDate(start).getTime()) / 86_400_000) + 1;
+    return days > 0 ? days : null;
+}
+
+function formatDayHeading(iso: string) {
+    return parseIsoDate(iso).toLocaleDateString('en-MY', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+    });
+}
+
 function todayKL(): string {
     const t = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kuala_Lumpur' }));
     const y = t.getFullYear();
@@ -50,7 +87,13 @@ function todayKL(): string {
     return `${y}-${m}-${d}`;
 }
 
-export default function TripsPanel({ variableCategories, formatAmount, onChanged, reloadKey = 0 }: Props) {
+export default function TripsPanel({
+    variableCategories,
+    formatAmount,
+    onChanged,
+    reloadKey = 0,
+    workdayValue,
+}: Props) {
     const { hidden } = useAmountVisibility();
     const formatFx = (amount: number, currency: string) =>
         hidden ? `${currency} ••••••` : formatFxAmount(amount, currency);
@@ -140,11 +183,29 @@ export default function TripsPanel({ variableCategories, formatAmount, onChanged
         );
     }, [summary, categoryFilter]);
 
+    /** Newest day first; entries within a day newest first. */
+    const expensesByDay = useMemo(() => {
+        const days: { date: string; rows: TripExpense[] }[] = [];
+        const sorted = [...visibleExpenses].sort((a, b) =>
+            a.date !== b.date ? b.date.localeCompare(a.date) : b.id - a.id
+        );
+        for (const row of sorted) {
+            const last = days[days.length - 1];
+            if (last && last.date === row.date) last.rows.push(row);
+            else days.push({ date: row.date, rows: [row] });
+        }
+        return days;
+    }, [visibleExpenses]);
+
     useEffect(() => {
         let cancelled = false;
         setLoading(true);
         setError(null);
         loadTrips()
+            .then((entries) => {
+                // Open the first trip so its transactions show straight away.
+                if (!cancelled && entries.length > 0) setSelectedId((id) => id ?? entries[0].id);
+            })
             .catch((err) => {
                 if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load trips');
             })
@@ -398,25 +459,34 @@ export default function TripsPanel({ variableCategories, formatAmount, onChanged
     );
 
     if (loading) {
-        return (
-            <div className="trips-panel card">
-                <p className="muted">Loading trips…</p>
-            </div>
-        );
+        return <p className="muted">Loading trips…</p>;
     }
 
+    const totalSpent = trips.reduce((sum, trip) => sum + trip.spentMyr, 0);
+    const totalEntries = trips.reduce((sum, trip) => sum + trip.entryCount, 0);
+    const biggestTrip = trips.reduce<TripWithTotals | null>(
+        (best, trip) => (best == null || trip.spentMyr > best.spentMyr ? trip : best),
+        null
+    );
+    const formatWorkdays = (myr: number) => {
+        if (workdayValue == null) return null;
+        if (hidden) return '•• workdays';
+        const days = myr / workdayValue;
+        return `${days < 10 ? days.toFixed(1) : Math.round(days).toLocaleString('en-MY')} workdays`;
+    };
+
     return (
-        <div className="trips-panel card">
-            <div className="section-header-row">
-                <h3>Trips</h3>
+        <div className="trips-page">
+            <div className="trips-page-actions">
                 <button
                     type="button"
-                    className="btn-primary"
+                    className="pill-btn pill-btn--primary"
                     onClick={() => {
                         resetForms();
                         setFormMode('create-trip');
                     }}
                 >
+                    <PlusIcon size={18} />
                     New trip
                 </button>
             </div>
@@ -424,7 +494,7 @@ export default function TripsPanel({ variableCategories, formatAmount, onChanged
             {error && <p className="error">{error}</p>}
 
             {formMode === 'create-trip' && (
-                <form className="trips-form" onSubmit={handleCreateTrip}>
+                <form className="card trips-form" onSubmit={handleCreateTrip}>
                     <label>
                         Name
                         <input value={tripName} onChange={(e) => setTripName(e.target.value)} required />
@@ -446,7 +516,7 @@ export default function TripsPanel({ variableCategories, formatAmount, onChanged
                         End
                         <input type="date" value={tripEnd} onChange={(e) => setTripEnd(e.target.value)} />
                     </label>
-                    <div className="trips-form-actions">
+                    <div className="trips-form-actions span-full">
                         <button type="submit" className="btn-primary" disabled={saving}>
                             Create
                         </button>
@@ -457,609 +527,569 @@ export default function TripsPanel({ variableCategories, formatAmount, onChanged
                 </form>
             )}
 
-            <div className="trips-layout">
-                <ul className="trips-list">
-                    {trips.length === 0 && <li className="trips-empty muted">No trips yet</li>}
-                    {trips.map((trip) => (
-                        <li key={trip.id}>
+            <div className="trips-kpis">
+                <SummaryCard
+                    tone="net"
+                    icon={<PlaneIcon size={26} />}
+                    label="Trips"
+                    value={String(trips.length)}
+                    sub={`${totalEntries} ${totalEntries === 1 ? 'transaction' : 'transactions'}`}
+                />
+                <SummaryCard
+                    tone="spend"
+                    icon={<WalletIcon size={26} />}
+                    label="Spent on trips"
+                    value={formatAmount(totalSpent)}
+                    sub={biggestTrip ? `Biggest: ${biggestTrip.name}` : 'No trips yet'}
+                />
+                <SummaryCard
+                    tone="net"
+                    icon={<ClockIcon size={26} />}
+                    label="In workdays"
+                    value={formatWorkdays(totalSpent) ?? '—'}
+                    sub={workdayValue == null ? 'Needs your salary after tax' : 'Across every trip'}
+                />
+            </div>
+
+            {trips.length === 0 ? (
+                <p className="trips-empty muted">No trips yet. Create one to start tracking what it costs.</p>
+            ) : (
+                <div className="trip-card-grid">
+                    {trips.map((trip) => {
+                        const active = selectedId === trip.id;
+                        const dates = formatTripDates(trip.startDate, trip.endDate);
+                        const days = tripDays(trip.startDate, trip.endDate);
+                        return (
                             <button
+                                key={trip.id}
                                 type="button"
-                                className={
-                                    selectedId === trip.id
-                                        ? 'trips-list-item active'
-                                        : 'trips-list-item'
-                                }
+                                className={active ? 'trip-card active' : 'trip-card'}
+                                aria-pressed={active}
                                 onClick={() => {
                                     setSelectedId(trip.id);
                                     setCategoryFilter(null);
                                     resetForms();
                                 }}
                             >
-                                <span className="trips-list-main">
-                                    <span className="trips-list-name">{trip.name}</span>
-                                    <span className="trips-list-meta muted">
-                                        {trip.tripCurrency} · {trip.entryCount}{' '}
-                                        {trip.entryCount === 1 ? 'entry' : 'entries'}
+                                <span className="trip-card-banner" aria-hidden="true">
+                                    <span className="trip-card-currency">{trip.tripCurrency}</span>
+                                    <PlaneIcon size={30} />
+                                </span>
+                                <span className="trip-card-body">
+                                    <span className="trip-card-name">{trip.name}</span>
+                                    <span className="trip-card-dates">{dates ?? 'No dates set'}</span>
+                                    <span className="trip-card-figures">
+                                        <span className="trip-card-money">
+                                            <span className="trip-card-total">{formatAmount(trip.spentMyr)}</span>
+                                            {days != null && (
+                                                <span className="trip-card-sub">
+                                                    {formatAmount(trip.spentMyr / days)} a day
+                                                </span>
+                                            )}
+                                        </span>
+                                        <span className="trip-card-meta">
+                                            {formatWorkdays(trip.spentMyr) && (
+                                                <span>{formatWorkdays(trip.spentMyr)}</span>
+                                            )}
+                                            <span>
+                                                {trip.entryCount}{' '}
+                                                {trip.entryCount === 1 ? 'transaction' : 'transactions'}
+                                            </span>
+                                        </span>
                                     </span>
                                 </span>
-                                <span className="trips-list-total">{formatAmount(trip.spentMyr)}</span>
                             </button>
-                        </li>
-                    ))}
-                </ul>
+                        );
+                    })}
+                </div>
+            )}
 
-                {summary && (
-                    <div className="trips-detail">
-                        <div className="trips-detail-header section-header-row">
-                            <div className="trips-detail-title">
-                                <h4>{summary.trip.name}</h4>
-                                <p className="muted">
-                                    {[summary.trip.startDate, summary.trip.endDate]
-                                        .filter(Boolean)
-                                        .join(' → ') || 'No dates'}{' '}
-                                    · {summary.trip.tripCurrency}
-                                </p>
-                            </div>
-                            <div className="trips-detail-actions">
-                                <button
-                                    type="button"
-                                    className="btn-primary"
-                                    onClick={() => {
-                                        setFormMode('exchange');
-                                        setDescription('');
-                                        setCategory('Travel');
-                                        setDate(todayKL());
-                                    }}
-                                >
-                                    Add exchange
-                                </button>
-                                <button
-                                    type="button"
-                                    className="btn-primary"
-                                    onClick={() => {
-                                        setFormMode('expense');
-                                        setDescription('');
-                                        setCategory('Travel');
-                                        setDate(todayKL());
-                                        setSpendSource(
-                                            summary.fundRemaining > 0 ? 'fund' : 'card'
-                                        );
-                                    }}
-                                >
-                                    Add expense
-                                </button>
+            {summary && (
+                <section className="trip-detail" aria-labelledby="trip-detail-title">
+                    <div className="trip-detail-header">
+                        <div>
+                            <h2 id="trip-detail-title">{summary.trip.name}</h2>
+                            <p className="muted">
+                                {formatTripDates(summary.trip.startDate, summary.trip.endDate) ?? 'No dates'} ·{' '}
+                                {summary.trip.tripCurrency}
+                            </p>
+                        </div>
+                        <div className="trip-detail-actions">
+                            <button
+                                type="button"
+                                className="btn-secondary"
+                                onClick={() => {
+                                    setFormMode('exchange');
+                                    setDescription('');
+                                    setCategory('Travel');
+                                    setDate(todayKL());
+                                }}
+                            >
+                                Add exchange
+                            </button>
+                            <button
+                                type="button"
+                                className="btn-secondary"
+                                onClick={() => {
+                                    setFormMode('expense');
+                                    setDescription('');
+                                    setCategory('Travel');
+                                    setDate(todayKL());
+                                    setSpendSource(summary.fundRemaining > 0 ? 'fund' : 'card');
+                                }}
+                            >
+                                Add expense
+                            </button>
+                            <button
+                                type="button"
+                                className="btn-secondary"
+                                onClick={() => {
+                                    resetForms();
+                                    setFormMode('link');
+                                    void loadCandidates(summary.trip.id);
+                                }}
+                            >
+                                Link transactions
+                            </button>
+                            <button
+                                type="button"
+                                className="btn-danger trips-delete-trip"
+                                onClick={() => setPendingDelete({ kind: 'trip' })}
+                            >
+                                Delete trip
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="trips-summary-strip">
+                        <div className="trips-summary-item trips-summary-item--spent">
+                            <span className="trips-summary-label">Total spent</span>
+                            <span className="trips-summary-value">{formatAmount(summary.spentMyr)}</span>
+                            {summary.days != null && summary.days > 0 && (
+                                <span className="trips-summary-sub muted">
+                                    {formatAmount(summary.spentMyr / summary.days)} / day · {summary.days}{' '}
+                                    {summary.days === 1 ? 'day' : 'days'}
+                                </span>
+                            )}
+                        </div>
+                        <div className="trips-summary-item">
+                            <span className="trips-summary-label">Exchanged</span>
+                            <span className="trips-summary-value">{formatAmount(summary.exchangedMyr)}</span>
+                        </div>
+                        <div className="trips-summary-item">
+                            <span className="trips-summary-label">Fund left</span>
+                            <span className="trips-summary-value">
+                                {formatFx(summary.fundRemaining, summary.trip.tripCurrency)}
+                            </span>
+                        </div>
+                        <div className="trips-summary-item">
+                            <span className="trips-summary-label">Fund used</span>
+                            <span className="trips-summary-value">
+                                {formatFx(summary.fundSpent, summary.trip.tripCurrency)}
+                            </span>
+                        </div>
+                        <div className="trips-summary-item">
+                            <span className="trips-summary-label">Card</span>
+                            <span className="trips-summary-value">{formatAmount(summary.cardMyr)}</span>
+                        </div>
+                        <div className="trips-summary-item">
+                            <span className="trips-summary-label">Linked</span>
+                            <span className="trips-summary-value">{formatAmount(summary.linkedMyr)}</span>
+                        </div>
+                        <div className="trips-summary-item trips-summary-item--total">
+                            <span
+                                className="trips-summary-label"
+                                title="Exchanged + card + linked: MYR that left your accounts"
+                            >
+                                Total cost
+                            </span>
+                            <span className="trips-summary-value">{formatAmount(summary.tripTotalMyr)}</span>
+                        </div>
+                    </div>
+
+                    {formMode === 'link' && (
+                        <form className="card trips-link-form" onSubmit={handleLink}>
+                            <div className="trips-link-filters">
+                                <label>
+                                    From
+                                    <input
+                                        type="date"
+                                        value={candStart}
+                                        onChange={(e) => setCandStart(e.target.value)}
+                                    />
+                                </label>
+                                <label>
+                                    To
+                                    <input type="date" value={candEnd} onChange={(e) => setCandEnd(e.target.value)} />
+                                </label>
                                 <button
                                     type="button"
                                     className="btn-secondary"
-                                    onClick={() => {
-                                        resetForms();
-                                        setFormMode('link');
-                                        void loadCandidates(summary.trip.id);
-                                    }}
+                                    disabled={candLoading || !candStart || !candEnd}
+                                    onClick={() => loadCandidates(summary.trip.id, { start: candStart, end: candEnd })}
                                 >
-                                    Link transactions
+                                    Load
                                 </button>
-                                <button
-                                    type="button"
-                                    className="btn-danger trips-delete-trip"
-                                    onClick={() => setPendingDelete({ kind: 'trip' })}
-                                >
-                                    Delete trip
+                                <label className="trips-link-search">
+                                    Search
+                                    <input
+                                        value={candSearch}
+                                        onChange={(e) => setCandSearch(e.target.value)}
+                                        placeholder="Description, category, account"
+                                    />
+                                </label>
+                            </div>
+
+                            <div className="trips-table-wrap trips-link-table-wrap">
+                                <table className="data-table trips-expenses-table">
+                                    <thead>
+                                        <tr>
+                                            <th className="trips-col-check">
+                                                <input
+                                                    type="checkbox"
+                                                    aria-label="Select all shown"
+                                                    checked={
+                                                        filteredCandidates.length > 0 &&
+                                                        filteredCandidates.every((c) => picked.has(c.id))
+                                                    }
+                                                    onChange={toggleAllVisible}
+                                                    disabled={filteredCandidates.length === 0}
+                                                />
+                                            </th>
+                                            <th>Date</th>
+                                            <th>Category</th>
+                                            <th>Description</th>
+                                            <th className="trips-col-num">MYR</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {candLoading && (
+                                            <tr>
+                                                <td colSpan={5} className="trips-empty muted">
+                                                    Loading…
+                                                </td>
+                                            </tr>
+                                        )}
+                                        {!candLoading && filteredCandidates.length === 0 && (
+                                            <tr>
+                                                <td colSpan={5} className="trips-empty muted">
+                                                    No ungrouped transactions in this range
+                                                </td>
+                                            </tr>
+                                        )}
+                                        {!candLoading &&
+                                            filteredCandidates.map((c) => (
+                                                <tr
+                                                    key={c.id}
+                                                    className={picked.has(c.id) ? 'is-picked' : undefined}
+                                                    onClick={() => togglePicked(c.id)}
+                                                >
+                                                    <td className="trips-col-check">
+                                                        <input
+                                                            type="checkbox"
+                                                            aria-label={`Select ${c.description}`}
+                                                            checked={picked.has(c.id)}
+                                                            onChange={() => togglePicked(c.id)}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                        />
+                                                    </td>
+                                                    <td>{c.date}</td>
+                                                    <td>{c.category}</td>
+                                                    <td>
+                                                        {c.description}
+                                                        {c.paymentMethod ? (
+                                                            <span className="muted"> · {c.paymentMethod}</span>
+                                                        ) : null}
+                                                    </td>
+                                                    <td className="trips-col-num">{formatAmount(c.amount)}</td>
+                                                </tr>
+                                            ))}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div className="trips-form-actions">
+                                <span className="muted trips-link-count">
+                                    {picked.size} selected · {formatAmount(pickedTotal)}
+                                </span>
+                                <button type="submit" className="btn-primary" disabled={saving || picked.size === 0}>
+                                    Add to trip
+                                </button>
+                                <button type="button" className="btn-secondary" onClick={resetForms}>
+                                    Cancel
                                 </button>
                             </div>
-                        </div>
+                        </form>
+                    )}
 
-                        <div className="trips-summary-strip">
-                            <div className="trips-summary-item trips-summary-item--spent">
-                                <span className="trips-summary-label">Total spent</span>
-                                <span className="trips-summary-value">
-                                    {formatAmount(summary.spentMyr)}
-                                </span>
-                                {summary.days != null && summary.days > 0 && (
-                                    <span className="trips-summary-sub muted">
-                                        {formatAmount(summary.spentMyr / summary.days)} / day ·{' '}
-                                        {summary.days} {summary.days === 1 ? 'day' : 'days'}
-                                    </span>
+                    {formMode === 'exchange' && (
+                        <form className="card trips-form" onSubmit={handleExchange}>
+                            <label>
+                                Date
+                                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+                            </label>
+                            <label>
+                                From account
+                                <PaymentMethodSelect
+                                    id="trip-exchange-from"
+                                    value={paymentMethod}
+                                    onChange={setPaymentMethod}
+                                    excludeTypes={['credit', 'investment']}
+                                />
+                            </label>
+                            <label>
+                                MYR paid
+                                <input
+                                    type="number"
+                                    min="0.01"
+                                    step="0.01"
+                                    value={myrAmount}
+                                    onChange={(e) => setMyrAmount(e.target.value)}
+                                    required
+                                />
+                            </label>
+                            <label>
+                                {summary.trip.tripCurrency} received
+                                <input
+                                    type="number"
+                                    min="0.01"
+                                    step="0.01"
+                                    value={fxAmount}
+                                    onChange={(e) => setFxAmount(e.target.value)}
+                                    required
+                                />
+                            </label>
+                            <label>
+                                Category
+                                <ExpenseCategorySelect
+                                    id="trip-exchange-cat"
+                                    value={category}
+                                    variableCategories={categories}
+                                    onChange={setCategory}
+                                />
+                            </label>
+                            <label className="span-full">
+                                Description
+                                <input
+                                    value={description}
+                                    onChange={(e) => setDescription(e.target.value)}
+                                    placeholder="Currency exchange"
+                                />
+                            </label>
+                            <div className="trips-form-actions span-full">
+                                <button type="submit" className="btn-primary" disabled={saving || !paymentMethod}>
+                                    Save exchange
+                                </button>
+                                <button type="button" className="btn-secondary" onClick={resetForms}>
+                                    Cancel
+                                </button>
+                            </div>
+                        </form>
+                    )}
+
+                    {formMode === 'expense' && (
+                        <form className="card trips-form" onSubmit={handleExpense}>
+                            <label>
+                                Date
+                                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+                            </label>
+                            <label>
+                                Pay from
+                                <select
+                                    value={spendSource}
+                                    onChange={(e) => setSpendSource(e.target.value as 'fund' | 'card')}
+                                >
+                                    <option value="fund">
+                                        Trip fund ({formatFx(summary.fundRemaining, summary.trip.tripCurrency)} left)
+                                    </option>
+                                    <option value="card">Credit card</option>
+                                </select>
+                            </label>
+                            <label>
+                                {summary.trip.tripCurrency} amount
+                                <input
+                                    type="number"
+                                    min="0.01"
+                                    step="0.01"
+                                    value={fxAmount}
+                                    onChange={(e) => setFxAmount(e.target.value)}
+                                    required
+                                />
+                            </label>
+                            {spendSource === 'card' && (
+                                <>
+                                    <label>
+                                        MYR charged
+                                        <input
+                                            type="number"
+                                            min="0.01"
+                                            step="0.01"
+                                            value={myrAmount}
+                                            onChange={(e) => setMyrAmount(e.target.value)}
+                                            required
+                                        />
+                                    </label>
+                                    <label>
+                                        Credit card
+                                        <PaymentMethodSelect
+                                            id="trip-card-pay"
+                                            value={paymentMethod}
+                                            onChange={setPaymentMethod}
+                                            excludeTypes={['account', 'investment']}
+                                        />
+                                    </label>
+                                </>
+                            )}
+                            <label>
+                                Category
+                                <ExpenseCategorySelect
+                                    id="trip-expense-cat"
+                                    value={category}
+                                    variableCategories={categories}
+                                    onChange={setCategory}
+                                />
+                            </label>
+                            <label className="span-full">
+                                Description
+                                <input value={description} onChange={(e) => setDescription(e.target.value)} required />
+                            </label>
+                            <div className="trips-form-actions span-full">
+                                <button
+                                    type="submit"
+                                    className="btn-primary"
+                                    disabled={saving || (spendSource === 'card' && !paymentMethod)}
+                                >
+                                    Save expense
+                                </button>
+                                <button type="button" className="btn-secondary" onClick={resetForms}>
+                                    Cancel
+                                </button>
+                            </div>
+                        </form>
+                    )}
+
+                    <div className="trip-detail-grid">
+                        <section className="card trip-categories" aria-labelledby="trip-categories-title">
+                            <div className="trip-section-head">
+                                <h3 id="trip-categories-title">By category</h3>
+                                {categoryFilter && (
+                                    <button type="button" className="btn-link" onClick={() => setCategoryFilter(null)}>
+                                        Show all
+                                    </button>
                                 )}
                             </div>
-                            <div className="trips-summary-item">
-                                <span className="trips-summary-label">Exchanged</span>
-                                <span className="trips-summary-value">
-                                    {formatAmount(summary.exchangedMyr)}
-                                </span>
-                            </div>
-                            <div className="trips-summary-item">
-                                <span className="trips-summary-label">Fund left</span>
-                                <span className="trips-summary-value">
-                                    {formatFx(summary.fundRemaining, summary.trip.tripCurrency)}
-                                </span>
-                            </div>
-                            <div className="trips-summary-item">
-                                <span className="trips-summary-label">Fund used</span>
-                                <span className="trips-summary-value">
-                                    {formatFx(summary.fundSpent, summary.trip.tripCurrency)}
-                                </span>
-                            </div>
-                            <div className="trips-summary-item">
-                                <span className="trips-summary-label">Card</span>
-                                <span className="trips-summary-value">
-                                    {formatAmount(summary.cardMyr)}
-                                </span>
-                            </div>
-                            <div className="trips-summary-item">
-                                <span className="trips-summary-label">Linked</span>
-                                <span className="trips-summary-value">
-                                    {formatAmount(summary.linkedMyr)}
-                                </span>
-                            </div>
-                            <div className="trips-summary-item trips-summary-item--total">
-                                <span
-                                    className="trips-summary-label"
-                                    title="Exchanged + card + linked: MYR that left your accounts"
-                                >
-                                    Total cost
-                                </span>
-                                <span className="trips-summary-value">
-                                    {formatAmount(summary.tripTotalMyr)}
-                                </span>
-                            </div>
-                        </div>
-
-                        {summary.byCategory.length > 0 && (
-                            <div className="trips-breakdown">
-                                <div className="trips-breakdown-head">
-                                    <span className="trips-summary-label">Spending by category</span>
-                                    {categoryFilter && (
-                                        <button
-                                            type="button"
-                                            className="btn-link"
-                                            onClick={() => setCategoryFilter(null)}
-                                        >
-                                            Show all
-                                        </button>
-                                    )}
-                                </div>
-                                <ul className="trips-breakdown-list">
+                            {summary.byCategory.length === 0 ? (
+                                <p className="muted">No spending on this trip yet.</p>
+                            ) : (
+                                <ul className="trip-category-list">
                                     {summary.byCategory.map((c) => {
-                                        const pct =
-                                            summary.spentMyr > 0
-                                                ? (c.amountMyr / summary.spentMyr) * 100
-                                                : 0;
+                                        const pct = summary.spentMyr > 0 ? (c.amountMyr / summary.spentMyr) * 100 : 0;
                                         const active = categoryFilter === c.category;
                                         return (
                                             <li key={c.category}>
                                                 <button
                                                     type="button"
-                                                    className={
-                                                        active
-                                                            ? 'trips-breakdown-row active'
-                                                            : 'trips-breakdown-row'
-                                                    }
+                                                    className={active ? 'trip-category-row active' : 'trip-category-row'}
                                                     aria-pressed={active}
-                                                    onClick={() =>
-                                                        setCategoryFilter(active ? null : c.category)
-                                                    }
+                                                    title={active ? 'Show all transactions' : `Show only ${c.category}`}
+                                                    onClick={() => setCategoryFilter(active ? null : c.category)}
                                                 >
-                                                    <span className="trips-breakdown-name">
-                                                        {c.category}
-                                                        <span className="muted"> · {c.count}</span>
+                                                    <span className="trip-category-top">
+                                                        <span className="trip-category-name">{c.category}</span>
+                                                        <span className="trip-category-amount">
+                                                            {formatAmount(c.amountMyr)}
+                                                        </span>
                                                     </span>
-                                                    <span className="trips-breakdown-bar">
-                                                        <span
-                                                            className="trips-breakdown-fill"
-                                                            style={{ width: `${Math.max(pct, 1)}%` }}
-                                                        />
+                                                    <span className="trip-category-meta">
+                                                        <span>{pct.toFixed(0)}%</span>
+                                                        <span>
+                                                            {c.count} {c.count === 1 ? 'transaction' : 'transactions'}
+                                                        </span>
                                                     </span>
-                                                    <span className="trips-breakdown-amount">
-                                                        {formatAmount(c.amountMyr)}
-                                                        <span className="muted"> {pct.toFixed(0)}%</span>
+                                                    <span className="trip-category-bar">
+                                                        <span style={{ width: `${Math.max(pct, 1)}%` }} />
                                                     </span>
                                                 </button>
                                             </li>
                                         );
                                     })}
                                 </ul>
+                            )}
+                        </section>
+
+                        <section className="card trip-transactions" aria-labelledby="trip-transactions-title">
+                            <div className="trip-section-head">
+                                <h3 id="trip-transactions-title">
+                                    Transactions{categoryFilter ? ` · ${categoryFilter}` : ''}
+                                </h3>
                             </div>
-                        )}
-
-                        {formMode === 'link' && (
-                            <form className="trips-link-form" onSubmit={handleLink}>
-                                <div className="trips-link-filters">
-                                    <label>
-                                        From
-                                        <input
-                                            type="date"
-                                            value={candStart}
-                                            onChange={(e) => setCandStart(e.target.value)}
-                                        />
-                                    </label>
-                                    <label>
-                                        To
-                                        <input
-                                            type="date"
-                                            value={candEnd}
-                                            onChange={(e) => setCandEnd(e.target.value)}
-                                        />
-                                    </label>
-                                    <button
-                                        type="button"
-                                        className="btn-secondary"
-                                        disabled={candLoading || !candStart || !candEnd}
-                                        onClick={() =>
-                                            loadCandidates(summary.trip.id, {
-                                                start: candStart,
-                                                end: candEnd,
-                                            })
-                                        }
-                                    >
-                                        Load
-                                    </button>
-                                    <label className="trips-link-search">
-                                        Search
-                                        <input
-                                            value={candSearch}
-                                            onChange={(e) => setCandSearch(e.target.value)}
-                                            placeholder="Description, category, account"
-                                        />
-                                    </label>
-                                </div>
-
-                                <div className="trips-table-wrap trips-link-table-wrap">
-                                    <table className="data-table trips-expenses-table">
-                                        <thead>
-                                            <tr>
-                                                <th className="trips-col-check">
-                                                    <input
-                                                        type="checkbox"
-                                                        aria-label="Select all shown"
-                                                        checked={
-                                                            filteredCandidates.length > 0 &&
-                                                            filteredCandidates.every((c) =>
-                                                                picked.has(c.id)
-                                                            )
-                                                        }
-                                                        onChange={toggleAllVisible}
-                                                        disabled={filteredCandidates.length === 0}
-                                                    />
-                                                </th>
-                                                <th>Date</th>
-                                                <th>Category</th>
-                                                <th>Description</th>
-                                                <th className="trips-col-num">MYR</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {candLoading && (
-                                                <tr>
-                                                    <td colSpan={5} className="trips-empty muted">
-                                                        Loading…
-                                                    </td>
-                                                </tr>
-                                            )}
-                                            {!candLoading && filteredCandidates.length === 0 && (
-                                                <tr>
-                                                    <td colSpan={5} className="trips-empty muted">
-                                                        No ungrouped transactions in this range
-                                                    </td>
-                                                </tr>
-                                            )}
-                                            {!candLoading &&
-                                                filteredCandidates.map((c) => (
-                                                    <tr
-                                                        key={c.id}
-                                                        className={picked.has(c.id) ? 'is-picked' : undefined}
-                                                        onClick={() => togglePicked(c.id)}
-                                                    >
-                                                        <td className="trips-col-check">
-                                                            <input
-                                                                type="checkbox"
-                                                                aria-label={`Select ${c.description}`}
-                                                                checked={picked.has(c.id)}
-                                                                onChange={() => togglePicked(c.id)}
-                                                                onClick={(e) => e.stopPropagation()}
-                                                            />
-                                                        </td>
-                                                        <td>{c.date}</td>
-                                                        <td>{c.category}</td>
-                                                        <td>
-                                                            {c.description}
-                                                            {c.paymentMethod ? (
-                                                                <span className="muted">
-                                                                    {' '}
-                                                                    · {c.paymentMethod}
-                                                                </span>
-                                                            ) : null}
-                                                        </td>
-                                                        <td className="trips-col-num">
-                                                            {formatAmount(c.amount)}
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-
-                                <div className="trips-form-actions">
-                                    <span className="muted trips-link-count">
-                                        {picked.size} selected · {formatAmount(pickedTotal)}
-                                    </span>
-                                    <button
-                                        type="submit"
-                                        className="btn-primary"
-                                        disabled={saving || picked.size === 0}
-                                    >
-                                        Add to trip
-                                    </button>
-                                    <button type="button" className="btn-secondary" onClick={resetForms}>
-                                        Cancel
-                                    </button>
-                                </div>
-                            </form>
-                        )}
-
-                        {formMode === 'exchange' && (
-                            <form className="trips-form" onSubmit={handleExchange}>
-                                <label>
-                                    Date
-                                    <input
-                                        type="date"
-                                        value={date}
-                                        onChange={(e) => setDate(e.target.value)}
-                                        required
-                                    />
-                                </label>
-                                <label>
-                                    From account
-                                    <PaymentMethodSelect
-                                        id="trip-exchange-from"
-                                        value={paymentMethod}
-                                        onChange={setPaymentMethod}
-                                        excludeTypes={['credit', 'investment']}
-                                    />
-                                </label>
-                                <label>
-                                    MYR paid
-                                    <input
-                                        type="number"
-                                        min="0.01"
-                                        step="0.01"
-                                        value={myrAmount}
-                                        onChange={(e) => setMyrAmount(e.target.value)}
-                                        required
-                                    />
-                                </label>
-                                <label>
-                                    {summary.trip.tripCurrency} received
-                                    <input
-                                        type="number"
-                                        min="0.01"
-                                        step="0.01"
-                                        value={fxAmount}
-                                        onChange={(e) => setFxAmount(e.target.value)}
-                                        required
-                                    />
-                                </label>
-                                <label>
-                                    Category
-                                    <ExpenseCategorySelect
-                                        id="trip-exchange-cat"
-                                        value={category}
-                                        variableCategories={categories}
-                                        onChange={setCategory}
-                                    />
-                                </label>
-                                <label className="span-full">
-                                    Description
-                                    <input
-                                        value={description}
-                                        onChange={(e) => setDescription(e.target.value)}
-                                        placeholder="Currency exchange"
-                                    />
-                                </label>
-                                <div className="trips-form-actions span-full">
-                                    <button
-                                        type="submit"
-                                        className="btn-primary"
-                                        disabled={saving || !paymentMethod}
-                                    >
-                                        Save exchange
-                                    </button>
-                                    <button type="button" className="btn-secondary" onClick={resetForms}>
-                                        Cancel
-                                    </button>
-                                </div>
-                            </form>
-                        )}
-
-                        {formMode === 'expense' && (
-                            <form className="trips-form" onSubmit={handleExpense}>
-                                <label>
-                                    Date
-                                    <input
-                                        type="date"
-                                        value={date}
-                                        onChange={(e) => setDate(e.target.value)}
-                                        required
-                                    />
-                                </label>
-                                <label>
-                                    Pay from
-                                    <select
-                                        value={spendSource}
-                                        onChange={(e) =>
-                                            setSpendSource(e.target.value as 'fund' | 'card')
-                                        }
-                                    >
-                                        <option value="fund">
-                                            Trip fund ({formatFx(summary.fundRemaining, summary.trip.tripCurrency)} left)
-                                        </option>
-                                        <option value="card">Credit card</option>
-                                    </select>
-                                </label>
-                                <label>
-                                    {summary.trip.tripCurrency} amount
-                                    <input
-                                        type="number"
-                                        min="0.01"
-                                        step="0.01"
-                                        value={fxAmount}
-                                        onChange={(e) => setFxAmount(e.target.value)}
-                                        required
-                                    />
-                                </label>
-                                {spendSource === 'card' && (
-                                    <>
-                                        <label>
-                                            MYR charged
-                                            <input
-                                                type="number"
-                                                min="0.01"
-                                                step="0.01"
-                                                value={myrAmount}
-                                                onChange={(e) => setMyrAmount(e.target.value)}
-                                                required
-                                            />
-                                        </label>
-                                        <label>
-                                            Credit card
-                                            <PaymentMethodSelect
-                                                id="trip-card-pay"
-                                                value={paymentMethod}
-                                                onChange={setPaymentMethod}
-                                                excludeTypes={['account', 'investment']}
-                                            />
-                                        </label>
-                                    </>
-                                )}
-                                <label>
-                                    Category
-                                    <ExpenseCategorySelect
-                                        id="trip-expense-cat"
-                                        value={category}
-                                        variableCategories={categories}
-                                        onChange={setCategory}
-                                    />
-                                </label>
-                                <label className="span-full">
-                                    Description
-                                    <input
-                                        value={description}
-                                        onChange={(e) => setDescription(e.target.value)}
-                                        required
-                                    />
-                                </label>
-                                <div className="trips-form-actions span-full">
-                                    <button
-                                        type="submit"
-                                        className="btn-primary"
-                                        disabled={
-                                            saving ||
-                                            (spendSource === 'card' && !paymentMethod)
-                                        }
-                                    >
-                                        Save expense
-                                    </button>
-                                    <button type="button" className="btn-secondary" onClick={resetForms}>
-                                        Cancel
-                                    </button>
-                                </div>
-                            </form>
-                        )}
-
-                        <div className="trips-table-wrap">
-                            <table className="data-table trips-expenses-table">
-                                <thead>
-                                    <tr>
-                                        <th>Date</th>
-                                        <th>Type</th>
-                                        <th>Category</th>
-                                        <th>Description</th>
-                                        <th className="trips-col-num">FX</th>
-                                        <th className="trips-col-num">MYR</th>
-                                        <th className="actions-col" />
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {visibleExpenses.length === 0 && (
-                                        <tr>
-                                            <td colSpan={7} className="trips-empty muted">
-                                                {categoryFilter
-                                                    ? `No ${categoryFilter} entries`
-                                                    : 'No trip entries yet'}
-                                            </td>
-                                        </tr>
-                                    )}
-                                    {visibleExpenses.map((row) => (
-                                        <tr key={row.id}>
-                                            <td>{row.date}</td>
-                                            <td>
-                                                <span
-                                                    className={`trip-leg-badge trip-leg-${row.tripLeg ?? 'none'}`}
-                                                >
-                                                    {legLabel(row.tripLeg)}
-                                                </span>
-                                            </td>
-                                            <td>{row.category}</td>
-                                            <td>
-                                                {row.description}
-                                                {row.paymentMethod ? (
-                                                    <span className="muted">
-                                                        {' '}
-                                                        · {row.paymentMethod}
+                            {expensesByDay.length === 0 ? (
+                                <p className="muted">
+                                    {categoryFilter ? `No ${categoryFilter} entries` : 'No trip entries yet'}
+                                </p>
+                            ) : (
+                                expensesByDay.map((day) => (
+                                    <div key={day.date} className="trip-day">
+                                        <p className="trip-day-heading">{formatDayHeading(day.date)}</p>
+                                        <ul className="trip-txn-list">
+                                            {day.rows.map((row) => (
+                                                <li key={row.id} className="trip-txn">
+                                                    <span className="trip-txn-main">
+                                                        <span className="trip-txn-title">{row.description}</span>
+                                                        <span className="trip-txn-meta">
+                                                            {row.category}
+                                                            <span className={`trip-leg-badge trip-leg-${row.tripLeg ?? 'none'}`}>
+                                                                {legLabel(row.tripLeg)}
+                                                            </span>
+                                                            {row.paymentMethod && <span>{row.paymentMethod}</span>}
+                                                        </span>
                                                     </span>
-                                                ) : null}
-                                            </td>
-                                            <td className="trips-col-num">
-                                                {row.fxAmount != null
-                                                    ? formatFx(
-                                                          row.fxAmount,
-                                                          row.fxCurrency ||
-                                                              summary.trip.tripCurrency
-                                                      )
-                                                    : '—'}
-                                            </td>
-                                            <td className="trips-col-num">
-                                                {row.tripLeg === 'fund' ? (
-                                                    <span
-                                                        className="muted"
-                                                        title="MYR equivalent at the exchange rate (already counted in the exchange)"
-                                                    >
-                                                        ≈ {formatAmount(row.amount)}
+                                                    <span className="trip-txn-side">
+                                                        <span
+                                                            className="trip-txn-amount"
+                                                            title={
+                                                                row.tripLeg === 'fund'
+                                                                    ? 'MYR equivalent at the exchange rate (already counted in the exchange)'
+                                                                    : undefined
+                                                            }
+                                                        >
+                                                            {row.tripLeg === 'fund' ? '≈ ' : ''}
+                                                            {formatAmount(row.amount)}
+                                                        </span>
+                                                        {row.fxAmount != null && (
+                                                            <span className="trip-txn-fx">
+                                                                {formatFx(row.fxAmount, row.fxCurrency || summary.trip.tripCurrency)}
+                                                            </span>
+                                                        )}
+                                                        {row.tripLeg == null ? (
+                                                            <button
+                                                                type="button"
+                                                                className="btn-link"
+                                                                title="Remove from this trip (keeps the transaction)"
+                                                                onClick={() => handleUnlink(row.id)}
+                                                            >
+                                                                Unlink
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                type="button"
+                                                                className="btn-danger-link"
+                                                                onClick={() => setPendingDelete({ kind: 'entry', id: row.id })}
+                                                            >
+                                                                Delete
+                                                            </button>
+                                                        )}
                                                     </span>
-                                                ) : (
-                                                    formatAmount(row.amount)
-                                                )}
-                                            </td>
-                                            <td className="actions-col">
-                                                {row.tripLeg == null ? (
-                                                    <button
-                                                        type="button"
-                                                        className="btn-link"
-                                                        title="Remove from this trip (keeps the transaction)"
-                                                        onClick={() => handleUnlink(row.id)}
-                                                    >
-                                                        Unlink
-                                                    </button>
-                                                ) : (
-                                                    <button
-                                                        type="button"
-                                                        className="btn-danger-link"
-                                                        onClick={() =>
-                                                            setPendingDelete({ kind: 'entry', id: row.id })
-                                                        }
-                                                    >
-                                                        Delete
-                                                    </button>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                ))
+                            )}
+                        </section>
                     </div>
-                )}
-            </div>
+                </section>
+            )}
             {confirmDialog}
         </div>
     );

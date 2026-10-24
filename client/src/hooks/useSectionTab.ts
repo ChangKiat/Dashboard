@@ -1,10 +1,28 @@
 import { useCallback, useState } from 'react';
 
-export type TabId = 'cashflow' | 'health' | 'car' | 'tax' | 'setup';
+export type TabId =
+    | 'cashflow'
+    | 'health'
+    | 'car'
+    | 'tax'
+    | 'budgets'
+    | 'recurring'
+    | 'loans'
+    | 'interest'
+    | 'mealGoals'
+    | 'accounts'
+    | 'trips';
 
 const STORAGE_KEY = 'dashboard-active-tab';
 
-const VALID_TABS: TabId[] = ['cashflow', 'health', 'car', 'tax', 'setup'];
+/** Sidebar groups, top to bottom. A null label means no heading. */
+export const TAB_GROUPS: { label: string | null; tabs: TabId[] }[] = [
+    { label: null, tabs: ['cashflow', 'health', 'car', 'tax'] },
+    { label: 'Planning', tabs: ['budgets', 'recurring', 'loans', 'interest', 'mealGoals'] },
+    { label: 'Organize', tabs: ['accounts', 'trips'] },
+];
+
+const VALID_TABS: TabId[] = TAB_GROUPS.flatMap((group) => group.tabs);
 
 function readStoredTab(): TabId {
     try {
@@ -14,6 +32,9 @@ function readStoredTab(): TabId {
         }
         if (stored === 'expenses' || stored === 'income') {
             return 'cashflow';
+        }
+        if (stored === 'setup') {
+            return 'recurring';
         }
         if (stored && VALID_TABS.includes(stored as TabId)) {
             return stored as TabId;
@@ -29,7 +50,13 @@ export const TAB_LABELS: Record<TabId, string> = {
     health: 'Health',
     car: 'Car',
     tax: 'Tax Relief',
-    setup: 'Setup',
+    budgets: 'Budgets',
+    recurring: 'Recurring',
+    loans: 'Loans',
+    interest: 'Interest',
+    mealGoals: 'Meal goals',
+    accounts: 'Accounts',
+    trips: 'Trips',
 };
 
 export const TAB_SUBTITLES: Record<TabId, string> = {
@@ -37,7 +64,13 @@ export const TAB_SUBTITLES: Record<TabId, string> = {
     health: 'Workouts, meals and body weight',
     car: 'Service visits and maintenance costs',
     tax: 'Claims toward this year’s tax relief',
-    setup: 'Fixed expenses, interest and budget categories',
+    budgets: 'A monthly limit for each spending category',
+    recurring: 'Bills and subscriptions that repeat',
+    loans: 'Loan repayments and their interest',
+    interest: 'Interest your accounts pay you',
+    mealGoals: 'Daily nutrition targets and body stats',
+    accounts: 'Bank accounts, cards and investments',
+    trips: 'What each trip cost, in money and workdays',
 };
 
 export function useSectionTab() {

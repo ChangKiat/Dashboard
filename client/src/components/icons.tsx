@@ -141,6 +141,125 @@ export function TrendUpIcon(props: IconProps) {
     );
 }
 
+export function PlusIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="M12 5v14M5 12h14" />
+        </Icon>
+    );
+}
+
+export function ClockIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 7v5l3 2" />
+        </Icon>
+    );
+}
+
+export function CloseIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="M6 6l12 12M18 6 6 18" />
+        </Icon>
+    );
+}
+
+export function ActivityIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+        </Icon>
+    );
+}
+
+export function CarIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="M19 17h2v-4l-2.5-5h-13L3 13v4h2" />
+            <circle cx="7" cy="17" r="2" />
+            <circle cx="17" cy="17" r="2" />
+            <path d="M9 17h6M3 13h18" />
+        </Icon>
+    );
+}
+
+export function ReceiptIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z" />
+            <path d="M9 8h6M9 12h6M9 16h3" />
+        </Icon>
+    );
+}
+
+export function PieIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="M21 13A9 9 0 1 1 11 3v10z" />
+            <path d="M15 3.5A9 9 0 0 1 20.5 9H15z" />
+        </Icon>
+    );
+}
+
+export function RepeatIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="m17 2 4 4-4 4" />
+            <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
+            <path d="m7 22-4-4 4-4" />
+            <path d="M21 13v1a4 4 0 0 1-4 4H3" />
+        </Icon>
+    );
+}
+
+export function CoinsIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <circle cx="9" cy="9" r="6" />
+            <path d="M18.1 10.4a6 6 0 1 1-7.7 7.7" />
+            <path d="M9 6.5v5M7.5 8h2.5" />
+        </Icon>
+    );
+}
+
+export function PercentIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="M19 5 5 19" />
+            <circle cx="6.5" cy="6.5" r="2.5" />
+            <circle cx="17.5" cy="17.5" r="2.5" />
+        </Icon>
+    );
+}
+
+export function UtensilsIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="M4 3v7a3 3 0 0 0 6 0V3M7 3v18" />
+            <path d="M18 21V3c-2 0-4 2-4 6v4h4" />
+        </Icon>
+    );
+}
+
+export function CardIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <rect x="2" y="5" width="20" height="14" rx="2" />
+            <path d="M2 10h20M6 15h4" />
+        </Icon>
+    );
+}
+
+export function PlaneIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" />
+        </Icon>
+    );
+}
+
 export function BankIcon(props: IconProps) {
     return (
         <Icon {...props}>

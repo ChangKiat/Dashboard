@@ -31,7 +31,7 @@ import {
     groupExpensesByDateNet,
     groupFixedExpensesByCategory,
 } from '../aggregators';
-import { loadExpenseCategories } from '../../agent/config/expenseCategories';
+import { loadExpenseCategories, upsertBudget } from '../../agent/config/expenseCategories';
 import { getSalaryAfterTax } from '../../agent/services/financeSettings';
 import { getTelegramUserId } from '../telegramUser';
 import {
@@ -546,6 +546,27 @@ router.get('/fixed', async (_req, res) => {
         res.json({ entries });
     } catch (err) {
         console.error('GET /api/expenses/fixed', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+    }
+});
+
+/** Change an existing category's monthly budget (the Telegram bot reads the same table). */
+router.put('/budgets/:category', async (req, res) => {
+    try {
+        const monthlyBudget = req.body?.monthlyBudget;
+        if (!isPositiveNumber(monthlyBudget)) {
+            return res.status(400).json({ error: 'Monthly budget must be a positive number' });
+        }
+        const categories = await loadExpenseCategories();
+        const match = categories.find(
+            (c) => c.category.toLowerCase() === String(req.params.category).toLowerCase()
+        );
+        if (!match) return res.status(404).json({ error: 'Unknown category' });
+
+        const result = await upsertBudget(match.category, monthlyBudget);
+        res.json({ ok: true, category: result.category, monthlyBudget: result.monthlyBudget });
+    } catch (err) {
+        console.error('PUT /api/expenses/budgets/:category', err);
         res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
     }
 });

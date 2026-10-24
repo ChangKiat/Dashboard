@@ -14,7 +14,10 @@ import LoansPanel from './LoansPanel';
 import MealsSetupPanel from './MealsSetupPanel';
 import PaymentAccountsPanel from './PaymentAccountsPanel';
 
-export default function SetupSection() {
+/** The settings pages that used to share one Setup tab. */
+export type SetupView = 'recurring' | 'loans' | 'interest' | 'mealGoals' | 'accounts';
+
+export default function SetupSection({ view }: { view: SetupView }) {
     const formatMYR = useFormatMYR();
     const month = currentMonthInKL();
     const { refresh: refreshAccounts } = usePaymentAccounts();
@@ -83,30 +86,41 @@ export default function SetupSection() {
         [fixedConfigs]
     );
 
-    if (loading) return <section className="panel"><p className="muted">Loading setup…</p></section>;
+    if (view === 'mealGoals') {
+        return (
+            <section className="panel">
+                <MealsSetupPanel />
+            </section>
+        );
+    }
+
+    if (loading) return <section className="panel"><p className="muted">Loading…</p></section>;
     if (error) return <section className="panel"><p className="error">{error}</p></section>;
 
     return (
         <section className="panel">
             <div className="setup-layout">
-                <MealsSetupPanel />
-                <InterestSchedulesTable
-                    rows={interestSchedules}
-                    formatAmount={formatMYR}
-                    onChanged={handleChanged}
-                />
-                <LoansPanel
-                    rows={loanRows}
-                    formatAmount={formatMYR}
-                    onChanged={handleChanged}
-                />
-                <FixedExpensesTable
-                    rows={billRows}
-                    variableCategories={variableCategories}
-                    formatAmount={formatMYR}
-                    onChanged={handleChanged}
-                />
-                <PaymentAccountsPanel mode="manage" formatAmount={formatMYR} onChanged={handleChanged} />
+                {view === 'interest' && (
+                    <InterestSchedulesTable
+                        rows={interestSchedules}
+                        formatAmount={formatMYR}
+                        onChanged={handleChanged}
+                    />
+                )}
+                {view === 'loans' && (
+                    <LoansPanel rows={loanRows} formatAmount={formatMYR} onChanged={handleChanged} />
+                )}
+                {view === 'recurring' && (
+                    <FixedExpensesTable
+                        rows={billRows}
+                        variableCategories={variableCategories}
+                        formatAmount={formatMYR}
+                        onChanged={handleChanged}
+                    />
+                )}
+                {view === 'accounts' && (
+                    <PaymentAccountsPanel mode="manage" formatAmount={formatMYR} onChanged={handleChanged} />
+                )}
             </div>
         </section>
     );
