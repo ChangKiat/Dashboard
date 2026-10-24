@@ -1834,20 +1834,10 @@ div.payment-account-card-main:hover {
   font-size: 0.95rem;
 }
 
-.banner svg {
-  flex: none;
-}
-
 .banner.warning {
   background: var(--warn-soft);
   border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
   color: var(--warn);
-}
-
-.banner--info {
-  background: var(--info-bg);
-  border: 1px solid var(--info-border);
-  color: var(--info-text);
 }
 
 .main {

@@ -122,35 +122,3 @@ export async function getSyncFingerprint(month: string, scope: SyncScope): Promi
     if (scope === 'expenses') return getExpensesSyncFingerprint(month);
     return getHealthSyncFingerprint(month);
 }
-
-function latestIso(values: (Date | string | null | undefined)[]): string | null {
-    const times = values
-        .filter((v): v is Date | string => v != null)
-        .map((v) => new Date(v).getTime())
-        .filter((t) => !Number.isNaN(t));
-    return times.length > 0 ? new Date(Math.max(...times)).toISOString() : null;
-}
-
-/** When the newest entry in this scope was created (any month), as an ISO string. */
-export async function getLastEntryAt(scope: SyncScope): Promise<string | null> {
-    const db = requireDb();
-
-    if (scope === 'expenses') {
-        const [expRow, incRow] = await Promise.all([
-            db.select({ at: max(expenses.createdAt) }).from(expenses),
-            db.select({ at: max(incomes.createdAt) }).from(incomes),
-        ]);
-        return latestIso([expRow[0]?.at, incRow[0]?.at]);
-    }
-
-    const userId = getTelegramUserId();
-    const [workoutRow, mealRow, weightRow] = await Promise.all([
-        db.select({ at: max(workouts.createdAt) }).from(workouts).where(eq(workouts.telegramUserId, userId)),
-        db.select({ at: max(meals.createdAt) }).from(meals).where(eq(meals.telegramUserId, userId)),
-        db
-            .select({ at: max(bodyWeightLogs.createdAt) })
-            .from(bodyWeightLogs)
-            .where(eq(bodyWeightLogs.telegramUserId, userId)),
-    ]);
-    return latestIso([workoutRow[0]?.at, mealRow[0]?.at, weightRow[0]?.at]);
-}

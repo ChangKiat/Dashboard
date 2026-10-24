@@ -2,7 +2,7 @@ import { useEffect, useRef, type RefObject } from 'react';
 import type { SyncScope } from '../api';
 import { fetchSyncStatus } from '../api';
 
-export const DEFAULT_INTERVAL_MS = Number(import.meta.env.VITE_SYNC_POLL_MS) || 30_000;
+const DEFAULT_INTERVAL_MS = Number(import.meta.env.VITE_SYNC_POLL_MS) || 30_000;
 
 interface Options {
     month: string;

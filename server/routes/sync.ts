@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getLastEntryAt, getSyncFingerprint, type SyncScope } from '../syncStatus';
+import { getSyncFingerprint, type SyncScope } from '../syncStatus';
 import { parseMonth } from '../dateUtils';
 
 const router = Router();
@@ -15,11 +15,8 @@ router.get('/', async (req, res) => {
         }
 
         const { month } = parseMonth(req.query.month as string | undefined);
-        const [fingerprint, lastEntryAt] = await Promise.all([
-            getSyncFingerprint(month, scope as SyncScope),
-            getLastEntryAt(scope as SyncScope),
-        ]);
-        res.json({ fingerprint, lastEntryAt });
+        const fingerprint = await getSyncFingerprint(month, scope as SyncScope);
+        res.json({ fingerprint });
     } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to get sync status';
         res.status(500).json({ error: message });

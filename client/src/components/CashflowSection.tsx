@@ -39,7 +39,6 @@ import MonthPicker from './MonthPicker';
 import PaymentAccountsPanel from './PaymentAccountsPanel';
 import PeriodPills from './PeriodPills';
 import SummaryCard from './SummaryCard';
-import SyncBanner from './SyncBanner';
 import VariableExpensesTable from './VariableExpensesTable';
 
 export default function CashflowSection() {
@@ -48,7 +47,6 @@ export default function CashflowSection() {
     const { hidden } = useAmountVisibility();
     const { unit, setUnit, hoursPerWeek, setHoursPerWeek } = useAmountUnit();
     const { accounts, loading: accountsLoading, refresh: refreshAccounts } = usePaymentAccounts();
-    const [lastEntryAt, setLastEntryAt] = useState<string | null>(null);
     const [monthlySeries, setMonthlySeries] = useState<MonthlyCashflowPoint[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -110,7 +108,6 @@ export default function CashflowSection() {
 
         const status = await fetchSyncStatus(month, 'expenses');
         fingerprintRef.current = status.fingerprint;
-        setLastEntryAt(status.lastEntryAt);
     }, [month]);
 
     useEffect(() => {
@@ -263,7 +260,6 @@ export default function CashflowSection() {
                     />
                 </div>
             </div>
-            <SyncBanner lastEntryAt={lastEntryAt} />
         </>
     );
 

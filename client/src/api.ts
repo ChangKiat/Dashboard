@@ -1038,9 +1038,7 @@ export function fetchHealth() {
 export type SyncScope = 'expenses' | 'health';
 
 export function fetchSyncStatus(month: string, scope: SyncScope) {
-    return fetchJson<{ fingerprint: string; lastEntryAt: string | null }>(
-        `/api/sync-status?month=${month}&scope=${scope}`
-    );
+    return fetchJson<{ fingerprint: string }>(`/api/sync-status?month=${month}&scope=${scope}`);
 }
 
 export function fetchTrips() {
