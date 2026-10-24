@@ -206,7 +206,7 @@ export default function CalendarSection() {
 
     return (
         <section className="panel">
-            <div className="calendar-summary-grid">
+            <div className="summary-grid-4">
                 <SummaryCard
                     tone="spend"
                     icon={<CalendarIcon size={26} />}

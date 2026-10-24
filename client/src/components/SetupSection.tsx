@@ -8,11 +8,11 @@ import { currentMonthInKL } from '../hooks/useMonth';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
 import { useRefreshSignal } from '../hooks/useRefreshSignal';
 
-import FixedExpensesTable from './FixedExpensesTable';
 import InterestSchedulesTable from './InterestSchedulesTable';
 import LoansPanel from './LoansPanel';
 import MealsSetupPanel from './MealsSetupPanel';
 import PaymentAccountsPanel from './PaymentAccountsPanel';
+import RecurringPage from './RecurringPage';
 
 /** The settings pages that used to share one Setup tab. */
 export type SetupView = 'recurring' | 'loans' | 'interest' | 'mealGoals' | 'accounts';
@@ -26,6 +26,7 @@ export default function SetupSection({ view }: { view: SetupView }) {
     const [fixedConfigs, setFixedConfigs] = useState<FixedExpenseConfig[]>([]);
     const [interestSchedules, setInterestSchedules] = useState<InterestScheduleConfig[]>([]);
     const [variableCategories, setVariableCategories] = useState<string[]>([]);
+    const [salaryAfterTax, setSalaryAfterTax] = useState(0);
 
     const loadData = useCallback(async () => {
         const [fixedRes, interestRes, overviewRes] = await Promise.all([
@@ -36,6 +37,7 @@ export default function SetupSection({ view }: { view: SetupView }) {
         setFixedConfigs(fixedRes.entries);
         setInterestSchedules(interestRes.entries);
         setVariableCategories(overviewRes.variable.map((v) => v.category));
+        setSalaryAfterTax(overviewRes.salaryAfterTax);
     }, [month]);
 
     useEffect(() => {
@@ -111,9 +113,10 @@ export default function SetupSection({ view }: { view: SetupView }) {
                     <LoansPanel rows={loanRows} formatAmount={formatMYR} onChanged={handleChanged} />
                 )}
                 {view === 'recurring' && (
-                    <FixedExpensesTable
+                    <RecurringPage
                         rows={billRows}
                         variableCategories={variableCategories}
+                        salaryAfterTax={salaryAfterTax}
                         formatAmount={formatMYR}
                         onChanged={handleChanged}
                     />

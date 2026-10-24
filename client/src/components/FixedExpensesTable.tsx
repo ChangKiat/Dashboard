@@ -5,6 +5,7 @@ import { createFixedExpense, deleteFixedExpense, updateFixedExpense } from '../a
 import { usePagination } from '../hooks/usePagination';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
 import { isInvestmentCategory, isOtherCategory, requiresAccountTransfer, resolveOtherAccountFields } from '../utils/expenseCategories';
+import { frequencyLabel, monthlyCost, nextDueDate } from '../utils/recurring';
 import ExpenseCategorySelect from './ExpenseCategorySelect';
 import PaymentMethodSelect from './PaymentMethodSelect';
 import RecordModal from './RecordModal';
@@ -24,12 +25,12 @@ const EMPTY_FORM = {
     frequencyMonths: '1',
 };
 
-function formatFrequencyMonths(months: number): string {
-    if (months === 1) return 'Monthly';
-    if (months === 2) return 'Every 2 months';
-    if (months === 3) return 'Quarterly';
-    if (months === 12) return 'Yearly';
-    return `Every ${months} months`;
+function formatShortDate(iso: string) {
+    return new Date(`${iso}T12:00:00`).toLocaleDateString('en-MY', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+    });
 }
 
 function destinationLabel(row: FixedExpenseConfig): string {
@@ -44,9 +45,37 @@ interface Props {
     variableCategories: string[];
     formatAmount: (amount: number) => string;
     onChanged: () => void;
+    today: string;
+    /** Hours of work an amount takes, or null when there's no salary to divide by. */
+    workTime: (amount: number) => string | null;
 }
 
-export default function FixedExpensesTable({ rows, variableCategories, formatAmount, onChanged }: Props) {
+const AVATAR_COLORS = [
+    'var(--series-red)',
+    'var(--series-blue)',
+    'var(--series-green)',
+    'var(--series-purple)',
+    'var(--series-orange)',
+    'var(--series-teal)',
+    'var(--series-pink)',
+    'var(--series-amber)',
+];
+
+/** The same colour every time for a category. */
+function categoryColor(category: string) {
+    let hash = 0;
+    for (const ch of category) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+    return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+}
+
+export default function FixedExpensesTable({
+    rows,
+    variableCategories,
+    formatAmount,
+    onChanged,
+    today,
+    workTime,
+}: Props) {
     const { accounts } = usePaymentAccounts();
     const investmentAccounts = useMemo(
         () =>
@@ -99,10 +128,13 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
         });
     }, [rows, categoryFilter, paymentFilter]);
 
+    // Biggest monthly cost first.
     const sortedRows = useMemo(
         () =>
-            [...filteredRows].sort((a, b) =>
-                a.description.localeCompare(b.description, 'en-MY', { sensitivity: 'base' })
+            [...filteredRows].sort(
+                (a, b) =>
+                    monthlyCost(b) - monthlyCost(a) ||
+                    a.description.localeCompare(b.description, 'en-MY', { sensitivity: 'base' })
             ),
         [filteredRows]
     );
@@ -245,7 +277,10 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
     return (
         <div className="card expenses-fixed-expenses">
             <div className="section-header-row">
-                <h3>Fixed expenses</h3>
+                <div>
+                    <h3>Active</h3>
+                    <p className="recurring-sub">Sorted by what each costs a month</p>
+                </div>
                 <div className="fixed-expense-filters">
                     <select
                         aria-label="Filter by category"
@@ -280,57 +315,52 @@ export default function FixedExpensesTable({ rows, variableCategories, formatAmo
                 </button>
             </div>
             {actionError && <p className="error">{actionError}</p>}
-            <div className="table-scroll">
-                <table className="data-table">
-                    <thead>
-                        <tr>
-                            <th>Description</th>
-                            <th>Category</th>
-                            <th>Payment method</th>
-                            <th>Amount</th>
-                            <th>Date of payment</th>
-                            <th>Frequency</th>
-                            <th className="actions-col">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {rows.length === 0 ? (
-                            <tr>
-                                <td colSpan={7} className="muted">
-                                    No fixed expenses configured
-                                </td>
-                            </tr>
-                        ) : sortedRows.length === 0 ? (
-                            <tr>
-                                <td colSpan={7} className="muted">
-                                    No fixed expenses match these filters
-                                </td>
-                            </tr>
-                        ) : (
-                            pageItems.map((row) => (
-                                <tr key={row.id}>
-                                    <td>{row.description}</td>
-                                    <td>{row.category}</td>
-                                    <td>
-                                        {row.paymentMethod ?? '—'}
-                                        {destinationLabel(row) ? ` → ${destinationLabel(row)}` : ''}
-                                    </td>
-                                    <td>{formatAmount(row.amount)}</td>
-                                    <td>{row.dayOfMonth}</td>
-                                    <td>{formatFrequencyMonths(row.frequencyMonths)}</td>
-                                    <td>
-                                        <RowActions
-                                            onEdit={() => openEdit(row)}
-                                            onDelete={() => handleDelete(row)}
-                                            deleteLabel={`"${row.description}"`}
-                                        />
-                                    </td>
-                                </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
-            </div>
+            {rows.length === 0 ? (
+                <p className="muted">No recurring bills yet.</p>
+            ) : sortedRows.length === 0 ? (
+                <p className="muted">Nothing matches these filters.</p>
+            ) : (
+                <ul className="recurring-list">
+                    {pageItems.map((row) => {
+                        const next = nextDueDate(row, today);
+                        const destination = destinationLabel(row);
+                        const yearly = monthlyCost(row) * 12;
+                        const work = workTime(yearly);
+                        return (
+                            <li key={row.id} className="recurring-row">
+                                <span
+                                    className="recurring-avatar"
+                                    style={{ background: categoryColor(row.category) }}
+                                    aria-hidden="true"
+                                >
+                                    {row.description.trim().charAt(0).toUpperCase()}
+                                </span>
+                                <span className="recurring-main">
+                                    <span className="recurring-name">{row.description}</span>
+                                    <span className="recurring-meta">
+                                        {frequencyLabel(row.frequencyMonths)}
+                                        {next && ` · next ${formatShortDate(next)}`}
+                                        {row.paymentMethod && ` · ${row.paymentMethod}`}
+                                        {destination && ` → ${destination}`}
+                                        <span className="recurring-tag">{row.category}</span>
+                                    </span>
+                                </span>
+                                <span className="recurring-figures">
+                                    <span className="recurring-amount">{formatAmount(row.amount)}</span>
+                                    <span className="recurring-sub">
+                                        {work ? `${work} of work a year` : `${formatAmount(yearly)} a year`}
+                                    </span>
+                                </span>
+                                <RowActions
+                                    onEdit={() => openEdit(row)}
+                                    onDelete={() => handleDelete(row)}
+                                    deleteLabel={`"${row.description}"`}
+                                />
+                            </li>
+                        );
+                    })}
+                </ul>
+            )}
             <TablePagination
                 page={page}
                 totalPages={totalPages}

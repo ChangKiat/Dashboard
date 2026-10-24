@@ -3287,7 +3287,13 @@ div.payment-account-card-main:hover {
   margin-bottom: 12px;
 }
 
-.section-header-row h3,
+.section-header-row h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--text-heading);
+}
+
 .section-header-row h4 {
   margin: 0;
   font-size: 0.95rem;
@@ -5220,8 +5226,8 @@ div.payment-account-card-main:hover {
   }
 }
 
-/* Calendar page: month stats and the year heatmap */
-.calendar-summary-grid {
+/* Four summary cards in a row (Calendar, Recurring), then 2 and 1 on narrower screens */
+.summary-grid-4 {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
@@ -5229,22 +5235,22 @@ div.payment-account-card-main:hover {
 }
 
 @media (max-width: 1200px) {
-  .calendar-summary-grid {
+  .summary-grid-4 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 600px) {
-  .calendar-summary-grid {
+  .summary-grid-4 {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
-.calendar-summary-grid .summary-card {
+.summary-grid-4 .summary-card {
   padding: 18px 20px;
 }
 
-.calendar-summary-grid .summary-value {
+.summary-grid-4 .summary-value {
   font-size: 1.5rem;
   font-weight: 800;
   line-height: 1.15;
@@ -5345,4 +5351,194 @@ div.payment-account-card-main:hover {
 
 .heatmap-legend .heat-cell {
   width: 12px;
+}
+
+/* Recurring page */
+.recurring-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .recurring-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.recurring-sub {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.recurring-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.recurring-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.recurring-row:last-child {
+  border-bottom: 0;
+}
+
+.recurring-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.recurring-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.recurring-name {
+  font-weight: 700;
+  color: var(--text-heading);
+  overflow-wrap: anywhere;
+}
+
+.recurring-meta {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.recurring-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.recurring-figures {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.recurring-amount {
+  font-weight: 700;
+  color: var(--text-heading);
+}
+
+.recurring-figures .recurring-sub {
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+@media (max-width: 600px) {
+  .recurring-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .recurring-row .row-actions {
+    grid-column: 2 / -1;
+    flex-direction: row;
+    gap: 12px;
+  }
+}
+
+.recurring-upcoming h3 {
+  margin: 0;
+}
+
+.recurring-timeline {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0 0 0 18px;
+  border-left: 2px solid var(--border);
+}
+
+.recurring-timeline li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 14px;
+}
+
+.recurring-timeline li:last-child {
+  padding-bottom: 0;
+}
+
+.recurring-timeline li::before {
+  content: '';
+  position: absolute;
+  top: 5px;
+  left: -24px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--surface-2);
+}
+
+.recurring-timeline-date {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.recurring-timeline-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.recurring-timeline-name {
+  font-weight: 700;
+  color: var(--text-heading);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.recurring-timeline-amount {
+  flex: none;
+  font-weight: 700;
+  color: var(--text-heading);
+}
+
+/* Phones: the Recurring filters get their own row under the title */
+@media (max-width: 600px) {
+  .expenses-fixed-expenses .section-header-row {
+    flex-wrap: wrap;
+  }
+
+  .expenses-fixed-expenses .fixed-expense-filters {
+    order: 3;
+    flex: 1 1 100%;
+  }
+
+  .expenses-fixed-expenses .fixed-expense-filters select {
+    flex: 1 1 0;
+    min-width: 0;
+  }
 }
