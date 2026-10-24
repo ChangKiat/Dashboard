@@ -30,6 +30,7 @@ import tripsRouter from './routes/trips';
 import investmentsRouter from './routes/investments';
 import interestSchedulesRouter from './routes/interestSchedules';
 import carServiceRouter from './routes/carService';
+import taxReliefRouter from './routes/taxRelief';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -101,6 +102,7 @@ app.use('/api/nutrition', requireAuth, nutritionRouter);
 app.use('/api/sync-status', requireAuth, syncRouter);
 app.use('/api/trips', requireAuth, tripsRouter);
 app.use('/api/car-service', requireAuth, carServiceRouter);
+app.use('/api/tax-relief', requireAuth, taxReliefRouter);
 
 const clientDist = resolve(__dirname, '../dist-client');
 if (existsSync(clientDist)) {

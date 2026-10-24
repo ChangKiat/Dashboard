@@ -4361,3 +4361,209 @@ div.payment-account-card-main:hover {
   border-top: 2px solid var(--border);
 }
 
+
+/* Tax relief */
+.tax-relief-year {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+
+.tax-relief-year select {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.tax-relief-warn {
+  color: var(--warn);
+}
+
+.tax-relief-form-title {
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.tax-relief-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.tax-relief-form input[type='file'] {
+  padding: 6px;
+}
+
+.tax-relief-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tax-relief-block-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tax-relief-block-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.tax-relief-categories {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.tax-relief-category {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.tax-relief-category:hover {
+  border-color: var(--border-hover);
+}
+
+.tax-relief-category.active {
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+
+.tax-relief-category.unused {
+  opacity: 0.6;
+}
+
+.tax-relief-category-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.tax-relief-category-amount {
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.tax-relief-category-amount .muted {
+  font-weight: 400;
+  font-size: 0.8rem;
+}
+
+.tax-relief-bar {
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-hover);
+  overflow: hidden;
+}
+
+.tax-relief-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.tax-relief-bar-fill.full {
+  background: var(--ok);
+}
+
+.tax-relief-category-meta {
+  font-size: 0.72rem;
+}
+
+.tax-relief-table .tax-relief-col-date {
+  width: 96px;
+}
+
+.tax-relief-table .tax-relief-col-amount {
+  width: 120px;
+}
+
+.tax-relief-table .tax-relief-col-receipts {
+  width: 32%;
+}
+
+.tax-relief-table .actions-col {
+  width: 110px;
+}
+
+.tax-relief-sub {
+  font-size: 0.75rem;
+}
+
+.tax-relief-receipts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.tax-relief-receipt {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  padding: 2px 4px 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 0.75rem;
+}
+
+.tax-relief-receipt a {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--accent-text);
+  text-decoration: none;
+}
+
+.tax-relief-receipt a:hover {
+  text-decoration: underline;
+}
+
+.tax-relief-receipt-remove {
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.tax-relief-receipt-remove:hover {
+  color: var(--danger);
+}
+
+.tax-relief-missing {
+  font-size: 0.75rem;
+  color: var(--warn);
+}
+
+.tax-relief-footnote {
+  margin: 0;
+  font-size: 0.75rem;
+}
+
+@media (max-width: 640px) {
+  .tax-relief-table {
+    min-width: 620px;
+  }
+}

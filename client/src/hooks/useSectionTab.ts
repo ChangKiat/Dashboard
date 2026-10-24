@@ -1,10 +1,10 @@
 import { useCallback, useState } from 'react';
 
-export type TabId = 'cashflow' | 'health' | 'car' | 'setup';
+export type TabId = 'cashflow' | 'health' | 'car' | 'tax' | 'setup';
 
 const STORAGE_KEY = 'dashboard-active-tab';
 
-const VALID_TABS: TabId[] = ['cashflow', 'health', 'car', 'setup'];
+const VALID_TABS: TabId[] = ['cashflow', 'health', 'car', 'tax', 'setup'];
 
 function readStoredTab(): TabId {
     try {
@@ -28,6 +28,7 @@ export const TAB_LABELS: Record<TabId, string> = {
     cashflow: 'Cashflow',
     health: 'Health',
     car: 'Car',
+    tax: 'Tax Relief',
     setup: 'Setup',
 };
 
@@ -35,6 +36,7 @@ export const TAB_SUBTITLES: Record<TabId, string> = {
     cashflow: 'Where your money went',
     health: 'Workouts, meals and body weight',
     car: 'Service visits and maintenance costs',
+    tax: 'Claims toward this year’s tax relief',
     setup: 'Fixed expenses, interest and budget categories',
 };
 

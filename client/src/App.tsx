@@ -6,6 +6,7 @@ import HealthSection from './components/HealthSection';
 import CarServiceSection from './components/CarServiceSection';
 import LoginGate from './components/LoginGate';
 import SetupSection from './components/SetupSection';
+import TaxReliefSection from './components/TaxReliefSection';
 import { AmountVisibilityProvider } from './hooks/useAmountVisibility';
 import { PaymentAccountsProvider } from './hooks/usePaymentAccounts';
 import { RefreshProvider } from './hooks/useRefreshSignal';
@@ -75,6 +76,7 @@ export default function App() {
                             {activeTab === 'cashflow' && <CashflowSection />}
                             {activeTab === 'health' && <HealthSection />}
                             {activeTab === 'car' && <CarServiceSection />}
+                            {activeTab === 'tax' && <TaxReliefSection />}
                             {activeTab === 'setup' && <SetupSection />}
                         </main>
                     </div>

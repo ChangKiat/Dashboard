@@ -1,4 +1,4 @@
-import { pgTable, serial, text, numeric, integer, boolean, timestamp, bigint, jsonb, unique } from 'drizzle-orm/pg-core';
+import { pgTable, serial, text, numeric, integer, boolean, timestamp, bigint, jsonb, unique, customType } from 'drizzle-orm/pg-core';
 
 export const trips = pgTable('trips', {
     id: serial('id').primaryKey(),
@@ -258,5 +258,36 @@ export const carServiceItems = pgTable('car_service_items', {
     category: text('category').default('Material').notNull(),
     description: text('description').notNull(),
     amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+    dataType() {
+        return 'bytea';
+    },
+});
+
+/** One row per relief item (e.g. a book purchase) for a year of assessment. */
+export const taxReliefClaims = pgTable('tax_relief_claims', {
+    id: serial('id').primaryKey(),
+    year: integer('year').notNull(),
+    date: text('date').notNull(),
+    category: text('category').notNull(),
+    description: text('description').notNull(),
+    amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+    notes: text('notes'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+/** Receipt files are kept in the DB so they stay private and survive redeploys. */
+export const taxReliefReceipts = pgTable('tax_relief_receipts', {
+    id: serial('id').primaryKey(),
+    claimId: integer('claim_id')
+        .notNull()
+        .references(() => taxReliefClaims.id, { onDelete: 'cascade' }),
+    fileName: text('file_name').notNull(),
+    mimeType: text('mime_type').notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    data: bytea('data').notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
 });

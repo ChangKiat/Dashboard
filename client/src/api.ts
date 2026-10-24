@@ -1420,3 +1420,110 @@ export function upsertCarServiceItem(
 export function deleteCarServiceItem(id: number) {
     return fetchJson<{ ok: true }>(`/api/car-service/items/${id}`, { method: 'DELETE' });
 }
+
+export interface TaxReliefCategory {
+    id: string;
+    label: string;
+    limit: number | null;
+    hint: string;
+    group: string;
+    /** False for status-based reliefs (spouse, child) that need no receipt */
+    receipt: boolean;
+}
+
+export interface TaxReliefReceipt {
+    id: number;
+    claimId: number;
+    fileName: string;
+    mimeType: string;
+    sizeBytes: number;
+    createdAt: string;
+}
+
+export interface TaxReliefClaim {
+    id: number;
+    year: number;
+    date: string;
+    category: string;
+    description: string;
+    amount: number;
+    notes: string | null;
+    receipts: TaxReliefReceipt[];
+}
+
+export interface TaxReliefCategorySummary {
+    category: string;
+    label: string;
+    limit: number | null;
+    claimed: number;
+    eligible: number;
+    claimCount: number;
+}
+
+export interface TaxReliefOverview {
+    year: number;
+    years: number[];
+    categories: TaxReliefCategory[];
+    claims: TaxReliefClaim[];
+    byCategory: TaxReliefCategorySummary[];
+    summary: {
+        totalClaimed: number;
+        totalEligible: number;
+        individualRelief: number;
+        claimCount: number;
+        receiptCount: number;
+        missingReceiptCount: number;
+    };
+}
+
+export interface TaxReliefClaimFields {
+    date: string;
+    category: string;
+    description: string;
+    amount: number;
+    notes: string | null;
+}
+
+export function fetchTaxReliefOverview(year: number) {
+    return fetchJson<TaxReliefOverview>(`/api/tax-relief?year=${year}`);
+}
+
+export function createTaxReliefClaim(fields: TaxReliefClaimFields) {
+    return fetchJson<{ ok: true; id: number }>('/api/tax-relief/claims', {
+        method: 'POST',
+        body: JSON.stringify(fields),
+    });
+}
+
+export function updateTaxReliefClaim(id: number, fields: Partial<TaxReliefClaimFields>) {
+    return fetchJson<{ ok: true }>(`/api/tax-relief/claims/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(fields),
+    });
+}
+
+export function deleteTaxReliefClaim(id: number) {
+    return fetchJson<{ ok: true }>(`/api/tax-relief/claims/${id}`, { method: 'DELETE' });
+}
+
+export function uploadTaxReliefReceipt(claimId: number, file: File) {
+    return fetchJson<{ ok: true; receipt: TaxReliefReceipt }>(
+        `/api/tax-relief/claims/${claimId}/receipts`,
+        {
+            method: 'POST',
+            headers: {
+                'Content-Type': file.type || 'application/octet-stream',
+                'X-File-Name': encodeURIComponent(file.name),
+            },
+            body: file,
+        }
+    );
+}
+
+export function taxReliefReceiptUrl(id: number, download = false) {
+    return `/api/tax-relief/receipts/${id}${download ? '?download=1' : ''}`;
+}
+
+export function deleteTaxReliefReceipt(id: number) {
+    return fetchJson<{ ok: true }>(`/api/tax-relief/receipts/${id}`, { method: 'DELETE' });
+}
