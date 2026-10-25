@@ -56,12 +56,30 @@ npm run dev:client   # http://localhost:5173 (proxies /api to server)
 
 Open [http://localhost:5173](http://localhost:5173)
 
+## Daily jobs (scheduler)
+
+The server runs the jobs the Telegram bot used to run with node-cron ([server/dailyJobs.ts](server/dailyJobs.ts)), all in Asia/Kuala_Lumpur time, and reports to you through the bot:
+
+- 8:00 weigh-in reminder (sent until noon, never caught up)
+- 9:00 fixed bills, with unit trust buys, funding transfers and loan payments
+- 9:00 interest accrual
+
+Nothing waits for an exact minute, because a free host may be asleep at 9:00. The server checks for due jobs when it starts, every 5 minutes while it's up, and on `POST /api/scheduler/run`. The `scheduled_job_runs` table (`AI Agent/scripts/migrate-scheduled-job-runs.sql`) keeps one row per job per day, so a day never runs twice. When the server was down, it catches up the bills and interest of up to 7 missed days, each dated on its own day. A failed day is retried twice, 30 minutes apart.
+
+To turn it on:
+
+1. Run `migrate-scheduled-job-runs.sql` once (the Supabase SQL editor works).
+2. On the deployed server only, set `SCHEDULER_ENABLED=1`, `SCHEDULER_SECRET` (`openssl rand -hex 32`) and `TELEGRAM_BOT_TOKEN` (the same token as the AI Agent).
+3. If the host sleeps when idle (Render free plan), add the GitHub repository secrets `DASHBOARD_URL` and `SCHEDULER_SECRET`. [.github/workflows/daily-jobs.yml](.github/workflows/daily-jobs.yml) then wakes the server at 8:05 and 9:05, with retries at 10:35 and 14:05. Any cron service that can send `POST /api/scheduler/run` with `Authorization: Bearer <SCHEDULER_SECRET>` works too.
+4. Check that `GET /api/health` shows `"scheduler": "on"`.
+
 ## API endpoints
 
 
 | Endpoint                                   | Description                                         |
 | ------------------------------------------ | --------------------------------------------------- |
 | `GET /api/health`                          | Config status                                       |
+| `POST /api/scheduler/run`                  | Run the due daily jobs (`Authorization: Bearer <SCHEDULER_SECRET>`) |
 | `GET /api/expenses/daily?start=&end=`      | Daily spending series                               |
 | `GET /api/expenses/categories?start=&end=` | Category breakdown                                  |
 | `GET /api/expenses/overview?month=`        | Monthly budget overview (tables, charts, totals)    |

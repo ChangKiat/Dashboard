@@ -31,6 +31,8 @@ import investmentsRouter from './routes/investments';
 import interestSchedulesRouter from './routes/interestSchedules';
 import carServiceRouter from './routes/carService';
 import taxReliefRouter from './routes/taxRelief';
+import schedulerRouter from './routes/scheduler';
+import { isSchedulerEnabled, startScheduler } from './dailyJobs';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -51,6 +53,7 @@ app.get('/api/health', (_req, res) => {
         ok: hasDb,
         database: hasDb ? 'configured' : 'missing DATABASE_URL',
         telegramUser: hasUser ? 'configured' : 'missing TELEGRAM_USER_ID',
+        scheduler: isSchedulerEnabled() ? 'on' : 'off',
     });
 });
 
@@ -103,6 +106,8 @@ app.use('/api/sync-status', requireAuth, syncRouter);
 app.use('/api/trips', requireAuth, tripsRouter);
 app.use('/api/car-service', requireAuth, carServiceRouter);
 app.use('/api/tax-relief', requireAuth, taxReliefRouter);
+// Bearer SCHEDULER_SECRET instead of the session cookie: called by a cron service, not the browser.
+app.use('/api/scheduler', schedulerRouter);
 
 const clientDist = resolve(__dirname, '../dist-client');
 if (existsSync(clientDist)) {
@@ -116,6 +121,7 @@ Promise.all([loadExpenseCategories(), loadPaymentAccounts()])
     .then(() => {
         const server = app.listen(PORT, () => {
             console.log(`Dashboard API running at http://localhost:${PORT}`);
+            startScheduler();
         });
 
         server.on('error', (err: NodeJS.ErrnoException) => {
