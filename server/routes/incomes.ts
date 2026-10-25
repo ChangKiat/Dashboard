@@ -3,10 +3,13 @@ import {
     appendIncome,
     deleteIncome,
     expenseExists,
+    isAccountTransferCategory,
+    isIncomeInputError,
     listIncomes,
     updateIncome,
     validateIncomePaymentAccounts,
 } from '../../agent/services/incomeService';
+import { resolvePaymentMethod } from '../../agent/config/paymentMethods';
 import { enumerateDates, parseDateRange, parseMonthOrRange } from '../dateUtils';
 import { formatIncomeTransactions, groupIncomesByDate } from '../aggregators';
 import {
@@ -115,6 +118,14 @@ router.post('/transactions', async (req, res) => {
             return res.status(400).json({ error: 'Invalid from payment method' });
         }
 
+        // A new row must name active accounts; never save an unknown one as "no account".
+        const fromForCategory = isAccountTransferCategory(body.category) ? fromPaymentMethod : null;
+        for (const name of [paymentMethod, fromForCategory]) {
+            if (name && !resolvePaymentMethod(name)) {
+                return res.status(400).json({ error: `Unknown payment account: ${name}` });
+            }
+        }
+
         const accountError = validateIncomePaymentAccounts(
             body.category.trim(),
             paymentMethod ?? null,
@@ -143,7 +154,7 @@ router.post('/transactions', async (req, res) => {
     } catch (err) {
         console.error('POST /api/incomes/transactions', err);
         const message = err instanceof Error ? err.message : 'Server error';
-        const status = message.includes('Account transfer') || message.includes('account') ? 400 : 500;
+        const status = isIncomeInputError(err) ? 400 : 500;
         res.status(status).json({ error: message });
     }
 });
@@ -243,7 +254,8 @@ router.patch('/transactions/:id', async (req, res) => {
     } catch (err) {
         console.error('PATCH /api/incomes/transactions/:id', err);
         const message = err instanceof Error ? err.message : 'Server error';
-        const status = message.includes('Account transfer') || message.includes('account') ? 400 : 500;
+        // updateIncome throws "Unknown payment account: …" for a changed account that doesn't resolve.
+        const status = isIncomeInputError(err) ? 400 : 500;
         res.status(status).json({ error: message });
     }
 });

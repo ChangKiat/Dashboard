@@ -20,9 +20,15 @@ import {
 import {
     appendReimbursements,
     deleteInvestmentFundingTransfer,
+    fundingDestination,
     getIncomesByExpenseIds,
     getReimbursementsByExpenseIds,
+    isIncomeInputError,
+    isInvestmentCategory,
+    isOtherCategory,
+    normalizeOtherAccounts,
     upsertInvestmentFundingTransfer,
+    validateFundingAccounts,
 } from '../../agent/services/incomeService';
 import { enumerateDates, parseDateRange, parseMonth, parseMonthOrRange } from '../dateUtils';
 import { getDailyCashflow, getMonthlyCashflow, monthsEndingAt } from '../monthlyCashflow';
@@ -31,7 +37,8 @@ import {
     groupExpensesByDateNet,
     groupFixedExpensesByCategory,
 } from '../aggregators';
-import { loadExpenseCategories, upsertBudget } from '../../agent/config/expenseCategories';
+import { loadExpenseCategories, resolveCategory, upsertBudget } from '../../agent/config/expenseCategories';
+import { resolvePaymentMethod } from '../../agent/config/paymentMethods';
 import { getSalaryAfterTax } from '../../agent/services/financeSettings';
 import { getTelegramUserId } from '../telegramUser';
 import {
@@ -41,6 +48,7 @@ import {
     isPositiveNumber,
     isValidDate,
     parseIdParam,
+    unknownAccountError,
 } from '../validation';
 import {
     parseLoanMethod,
@@ -54,11 +62,6 @@ import {
 } from '../../agent/services/fixedContributionService';
 
 const router = Router();
-
-/** Investment always requires from→to; Other may optionally create a linked transfer. */
-function isInvestmentCategory(category: string): boolean {
-    return category.trim().toLowerCase() === 'investment';
-}
 
 function isLoanCategory(category: string): boolean {
     return category.trim().toLowerCase() === 'loan';
@@ -143,67 +146,6 @@ function parseLoanFields(
             loanStartDate,
         },
     };
-}
-
-function isOtherCategory(category: string): boolean {
-    return category.trim().toLowerCase() === 'other';
-}
-
-/** To-only Other → treat destination as payment method (no transfer). */
-function normalizeOtherAccounts(
-    paymentMethod: string | null,
-    toInvestmentAccount: string | null
-): { paymentMethod: string | null; toInvestmentAccount: string | null } {
-    if (paymentMethod && toInvestmentAccount) {
-        return { paymentMethod, toInvestmentAccount };
-    }
-    if (paymentMethod) {
-        return { paymentMethod, toInvestmentAccount: null };
-    }
-    if (toInvestmentAccount) {
-        return { paymentMethod: toInvestmentAccount, toInvestmentAccount: null };
-    }
-    return { paymentMethod: null, toInvestmentAccount: null };
-}
-
-/** Validate from/to for Investment (required) or Other (optional pair). Returns error message or null. */
-function validateFundingAccounts(
-    category: string,
-    paymentMethod: string | null,
-    toInvestmentAccount: string | null,
-    kind: 'expense' | 'fixed' = 'expense'
-): string | null {
-    const label = kind === 'fixed' ? 'fixed expense' : 'expense';
-    if (isInvestmentCategory(category)) {
-        if (!paymentMethod) {
-            return `This ${label} requires a payment method (from account)`;
-        }
-        if (!toInvestmentAccount) {
-            return `This ${label} requires a destination investment account`;
-        }
-        if (paymentMethod === toInvestmentAccount) {
-            return 'From and to accounts must be different';
-        }
-        return null;
-    }
-    if (isOtherCategory(category)) {
-        if (paymentMethod && toInvestmentAccount && paymentMethod === toInvestmentAccount) {
-            return 'From and to accounts must be different';
-        }
-    }
-    return null;
-}
-
-function fundingDestination(
-    category: string,
-    paymentMethod: string | null,
-    toInvestmentAccount: string | null
-): string | null {
-    if (isInvestmentCategory(category)) return toInvestmentAccount;
-    if (isOtherCategory(category) && paymentMethod && toInvestmentAccount) {
-        return toInvestmentAccount;
-    }
-    return null;
 }
 
 function parseOptionalInstrumentId(value: unknown): number | null | undefined | 'invalid' {
@@ -669,6 +611,13 @@ router.post('/transactions', async (req, res) => {
             ));
         }
 
+        // Plain, exchange and card rows; plus the funding destination, checked before anything is written.
+        const accountError = unknownAccountError(
+            paymentMethod,
+            tripLegHint ? null : fundingDestination(category, paymentMethod, toInvestmentAccount)
+        );
+        if (accountError) return res.status(400).json({ error: accountError });
+
         if (!tripLegHint) {
             const fundingError = validateFundingAccounts(
                 category,
@@ -720,7 +669,9 @@ router.post('/transactions', async (req, res) => {
         res.json({ ok: true, id: expenseId });
     } catch (err) {
         console.error('POST /api/expenses/transactions', err);
-        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+        // A linked funding transfer can be refused (e.g. unknown account): bad input, not a crash.
+        const status = isIncomeInputError(err) ? 400 : 500;
+        res.status(status).json({ error: err instanceof Error ? err.message : 'Server error' });
     }
 });
 
@@ -793,6 +744,8 @@ router.post('/fixed', async (req, res) => {
         if (fundingError) {
             return res.status(400).json({ error: fundingError });
         }
+        const accountError = unknownAccountError(paymentMethod, toInvestmentAccount);
+        if (accountError) return res.status(400).json({ error: accountError });
 
         const loanParsed = parseLoanFields(body);
         if (loanParsed.error) {
@@ -908,6 +861,39 @@ router.patch('/transactions/:id', async (req, res) => {
             if (fx > 0) fields.fxRate = effectiveRate(fields.amount, fx);
         }
 
+        // updateExpense refuses a changed paymentMethod that is not an active account ("Unknown payment
+        // account", 400 below) before writing, but keeps an unchanged stored one even if it no longer
+        // resolves. The linked funding transfer is only written after the expense is updated, and
+        // appendIncome / updateIncome refuse a new or changed account that does not resolve, so check
+        // both ends of the transfer first; the transfer's current accounts may stay as they are.
+        const requestedTo = isNonEmptyString(body.toInvestmentAccount)
+            ? body.toInvestmentAccount.trim()
+            : null;
+        const nextCategory =
+            fields.category != null ? resolveCategory(fields.category) : beforeUpdate.category;
+        const writesTransfer =
+            isInvestmentCategory(nextCategory) || (isOtherCategory(nextCategory) && requestedTo != null);
+        const fromValue =
+            fields.paymentMethod !== undefined ? fields.paymentMethod : beforeUpdate.paymentMethod;
+        const nextFrom = fromValue?.trim() || null;
+        const staleName = (name: string | null): string | null =>
+            writesTransfer && name && !resolvePaymentMethod(name) ? name : null;
+        const staleTo = staleName(requestedTo);
+        const staleFrom = staleName(nextFrom);
+        if (staleTo || staleFrom) {
+            const linkedTransfer = (await getIncomesByExpenseIds([id])).find(
+                (income) => income.category === 'Account transfer'
+            );
+            const isStored = (stored: string | null | undefined, next: string) =>
+                stored?.trim().toLowerCase() === next.toLowerCase();
+            if (staleTo && !isStored(linkedTransfer?.paymentMethod, staleTo)) {
+                return res.status(400).json({ error: `Unknown payment account: ${staleTo}` });
+            }
+            if (staleFrom && !isStored(linkedTransfer?.fromPaymentMethod, staleFrom)) {
+                return res.status(400).json({ error: `Unknown payment account: ${staleFrom}` });
+            }
+        }
+
         if (Object.keys(fields).length > 0) {
             const ok = await updateExpense(id, fields);
             if (!ok) return res.status(404).json({ error: 'Expense not found' });
@@ -985,7 +971,10 @@ router.patch('/transactions/:id', async (req, res) => {
         res.json({ ok: true });
     } catch (err) {
         console.error('PATCH /api/expenses/transactions/:id', err);
-        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+        // updateExpense or the linked funding transfer can refuse an account ("Unknown payment
+        // account", Account transfer errors): bad input, not a crash.
+        const status = isIncomeInputError(err) ? 400 : 500;
+        res.status(status).json({ error: err instanceof Error ? err.message : 'Server error' });
     }
 });
 
@@ -1160,14 +1149,21 @@ router.patch('/fixed/:id', async (req, res) => {
         res.json({ ok: true });
     } catch (err) {
         console.error('PATCH /api/expenses/fixed/:id', err);
-        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+        // updateFixedExpenseById refuses a changed account that is not active ("Unknown payment account").
+        const status = isIncomeInputError(err) ? 400 : 500;
+        res.status(status).json({ error: err instanceof Error ? err.message : 'Server error' });
     }
 });
 
 router.post('/fixed/contribute-due', async (_req, res) => {
     try {
-        const result = await contributeDueFixedExpenses();
-        res.json({ ok: true, ...result });
+        // A bill that fails is rolled back and listed in `failed` ({ id, error }); the others still
+        // run, so this stays 200 and the client can warn about the failed bills.
+        const { applied, skipped, failed } = await contributeDueFixedExpenses();
+        if (failed.length > 0) {
+            console.warn('POST /api/expenses/fixed/contribute-due: some bills failed', failed);
+        }
+        res.json({ ok: true, applied, skipped, failed });
     } catch (err) {
         console.error('POST /api/expenses/fixed/contribute-due', err);
         res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
@@ -1200,7 +1196,8 @@ router.post('/fixed/:id/contribute', async (req, res) => {
             message.startsWith('Only Investment') ||
             message.startsWith('Select a unit trust') ||
             message.startsWith('Recurring contributions') ||
-            message.startsWith('Holding must belong')
+            message.startsWith('Holding must belong') ||
+            isIncomeInputError(err)
         ) {
             return res.status(400).json({ error: message });
         }

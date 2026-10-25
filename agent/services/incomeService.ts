@@ -1,7 +1,20 @@
 import { and, desc, eq, gte, inArray, lte } from 'drizzle-orm';
-import { resolvePaymentMethod, paymentMethodsMatch } from '../config/paymentMethods';
+import { resolveCategory } from '../config/expenseCategories';
+import {
+    displayPaymentMethod,
+    paymentMethodsMatch,
+    resolvePaymentMethod,
+    setPaymentAccountsCache,
+} from '../config/paymentMethods';
 import { requireDb } from '../db/client';
 import { expenses, incomes, investmentEvents } from '../db/schema';
+import type { PaymentAccount } from './paymentAccountService';
+
+/**
+ * requireDb() or the `tx` of requireDb().transaction(...): functions that take one run their
+ * queries on it, so a caller can make several writes atomic (see fixedContributionService).
+ */
+export type DbExecutor = Pick<ReturnType<typeof requireDb>, 'select' | 'insert' | 'update'>;
 
 const INCOME_CATEGORIES = ['Claim', 'Transfer', 'Salary', 'Account transfer', 'Cashback', 'Interest', 'Other'] as const;
 export type IncomeCategory = (typeof INCOME_CATEGORIES)[number];
@@ -54,20 +67,177 @@ export function isAccountTransferCategory(category: string): boolean {
     return resolveIncomeCategory(category) === 'Account transfer';
 }
 
+/** Presence and distinctness check on account names that are already resolved (or kept as stored). */
+function transferAccountsError(
+    category: string,
+    to: string | null,
+    from: string | null
+): string | null {
+    if (!isAccountTransferCategory(category)) return null;
+    if (!to || !from) {
+        return 'Account transfer requires from and to accounts';
+    }
+    if (to.toLowerCase() === from.toLowerCase()) {
+        return 'From and to accounts must be different';
+    }
+    return null;
+}
+
 export function validateIncomePaymentAccounts(
     category: string,
     paymentMethod?: string | null,
     fromPaymentMethod?: string | null
 ): string | null {
-    if (!isAccountTransferCategory(category)) return null;
+    return transferAccountsError(
+        category,
+        paymentMethod ? resolvePaymentMethod(paymentMethod) : null,
+        fromPaymentMethod ? resolvePaymentMethod(fromPaymentMethod) : null
+    );
+}
 
-    const to = paymentMethod ? resolvePaymentMethod(paymentMethod) : null;
-    const from = fromPaymentMethod ? resolvePaymentMethod(fromPaymentMethod) : null;
-    if (!to || !from) {
-        return 'Account transfer requires from and to accounts';
+/**
+ * Errors appendIncome / updateIncome throw for bad input (unknown or missing accounts, bad
+ * transfer fee). Routes map these to HTTP 400.
+ */
+export function isIncomeInputError(err: unknown): boolean {
+    const message = err instanceof Error ? err.message : '';
+    return (
+        message.startsWith('Unknown payment account') ||
+        message.startsWith('Account transfer requires') ||
+        message.startsWith('From and to accounts') ||
+        message.startsWith('Transfer fee')
+    );
+}
+
+/** Trimmed, case-insensitive; null and empty are the same. */
+function sameAccountText(a?: string | null, b?: string | null): boolean {
+    return (a?.trim() ?? '').toLowerCase() === (b?.trim() ?? '').toLowerCase();
+}
+
+/**
+ * Write guard for one stored account column.
+ * - Not sent, or the same text as stored: keep the stored raw value, even if it no longer resolves.
+ * - Empty: clear it.
+ * - Anything else must resolve to an active account, or this throws "Unknown payment account: …".
+ */
+function nextAccountValue(
+    incoming: string | null | undefined,
+    stored: string | null
+): { value: string | null; changed: boolean } {
+    if (incoming === undefined || sameAccountText(incoming, stored)) {
+        return { value: stored, changed: false };
     }
-    if (to === from) {
-        return 'From and to accounts must be different';
+    const trimmed = incoming?.trim();
+    if (!trimmed) return { value: null, changed: true };
+    const resolved = resolvePaymentMethod(trimmed);
+    if (!resolved) throw new Error(`Unknown payment account: ${trimmed}`);
+    return { value: resolved, changed: true };
+}
+
+/**
+ * Category and account columns for updateIncome (pure, so the self-check can run it).
+ * paymentMethod / fromPaymentMethod are undefined when that column is left alone.
+ * Accounts are validated only when an account or the category actually changes; an unchanged
+ * account only has to be present, so an old transfer from a deactivated account stays editable.
+ */
+export function planIncomeAccountUpdate(
+    current: { category: string; paymentMethod: string | null; fromPaymentMethod: string | null },
+    fields: { category?: string; paymentMethod?: string | null; fromPaymentMethod?: string | null }
+): { category: IncomeCategory; paymentMethod?: string | null; fromPaymentMethod?: string | null } {
+    const currentCategory = resolveIncomeCategory(current.category);
+    const category =
+        fields.category != null ? resolveIncomeCategory(fields.category) : currentCategory;
+    const isTransfer = isAccountTransferCategory(category);
+
+    const to = nextAccountValue(fields.paymentMethod, current.paymentMethod);
+    // Non-transfers store no from-account, so an incoming one is ignored, not validated.
+    const from = isTransfer
+        ? nextAccountValue(fields.fromPaymentMethod, current.fromPaymentMethod)
+        : { value: null, changed: false };
+
+    if (to.changed || from.changed || category !== currentCategory) {
+        const validationError = transferAccountsError(
+            category,
+            displayPaymentMethod(to.value),
+            displayPaymentMethod(from.value)
+        );
+        if (validationError) throw new Error(validationError);
+    }
+
+    return {
+        category,
+        paymentMethod:
+            fields.paymentMethod !== undefined || fields.category != null ? to.value : undefined,
+        fromPaymentMethod:
+            fields.fromPaymentMethod !== undefined || fields.category != null
+                ? from.value
+                : undefined,
+    };
+}
+
+/** Investment always requires from→to; Other may optionally create a linked transfer. */
+export function isInvestmentCategory(category: string): boolean {
+    return category.trim().toLowerCase() === 'investment';
+}
+
+export function isOtherCategory(category: string): boolean {
+    return category.trim().toLowerCase() === 'other';
+}
+
+/** To-only Other → treat destination as payment method (no transfer). */
+export function normalizeOtherAccounts(
+    paymentMethod: string | null,
+    toInvestmentAccount: string | null
+): { paymentMethod: string | null; toInvestmentAccount: string | null } {
+    if (paymentMethod && toInvestmentAccount) {
+        return { paymentMethod, toInvestmentAccount };
+    }
+    if (paymentMethod) {
+        return { paymentMethod, toInvestmentAccount: null };
+    }
+    if (toInvestmentAccount) {
+        return { paymentMethod: toInvestmentAccount, toInvestmentAccount: null };
+    }
+    return { paymentMethod: null, toInvestmentAccount: null };
+}
+
+/** Validate from/to for Investment (required) or Other (optional pair). Returns error message or null. */
+export function validateFundingAccounts(
+    category: string,
+    paymentMethod: string | null,
+    toInvestmentAccount: string | null,
+    kind: 'expense' | 'fixed' = 'expense'
+): string | null {
+    const label = kind === 'fixed' ? 'fixed expense' : 'expense';
+    if (isInvestmentCategory(category)) {
+        if (!paymentMethod) {
+            return `This ${label} requires a payment method (from account)`;
+        }
+        if (!toInvestmentAccount) {
+            return `This ${label} requires a destination investment account`;
+        }
+        if (paymentMethod === toInvestmentAccount) {
+            return 'From and to accounts must be different';
+        }
+        return null;
+    }
+    if (isOtherCategory(category)) {
+        if (paymentMethod && toInvestmentAccount && paymentMethod === toInvestmentAccount) {
+            return 'From and to accounts must be different';
+        }
+    }
+    return null;
+}
+
+/** Account the linked funding transfer goes to, or null when the expense needs no transfer. */
+export function fundingDestination(
+    category: string,
+    paymentMethod: string | null,
+    toInvestmentAccount: string | null
+): string | null {
+    if (isInvestmentCategory(category)) return toInvestmentAccount;
+    if (isOtherCategory(category) && paymentMethod && toInvestmentAccount) {
+        return toInvestmentAccount;
     }
     return null;
 }
@@ -101,7 +271,8 @@ export async function appendIncome(
     expenseId?: number,
     paymentMethod?: string | null,
     fromPaymentMethod?: string | null,
-    transferFee?: number | null
+    transferFee?: number | null,
+    executor?: DbExecutor
 ): Promise<number> {
     const resolvedCategory = resolveIncomeCategory(category);
     const validationError = validateIncomePaymentAccounts(
@@ -113,7 +284,7 @@ export async function appendIncome(
 
     const fee = parseTransferFeeValue(transferFee, resolvedCategory);
     const accounts = normalizeIncomePaymentFields(resolvedCategory, paymentMethod, fromPaymentMethod);
-    const db = requireDb();
+    const db = executor ?? requireDb();
     const [row] = await db
         .insert(incomes)
         .values({
@@ -168,7 +339,7 @@ export async function findRecentExpenseByDescription(keyword: string): Promise<n
     return matches[0]?.id ?? null;
 }
 
-export type ReplyRecordType = 'expense' | 'income' | 'meal';
+export type ReplyRecordType = 'expense' | 'income' | 'meal' | 'workout';
 
 export interface ReplyRecordTarget {
     type: ReplyRecordType;
@@ -177,6 +348,11 @@ export interface ReplyRecordTarget {
 
 /** Parse confirmation text shape; order matters so income ≠ expense. */
 export function parseReplyRecordFromBotReply(text: string): ReplyRecordTarget | null {
+    const workoutMatch = text.match(/Workout ID:\s*(\d+)/);
+    if (workoutMatch) {
+        const id = parseInt(workoutMatch[1], 10);
+        return id > 0 ? { type: 'workout', id } : null;
+    }
     const incomeMatch = text.match(/(?:Logged|Updated) income #(\d+)/i);
     if (incomeMatch) {
         const id = parseInt(incomeMatch[1], 10);
@@ -226,23 +402,16 @@ export async function getIncomeById(id: number) {
         description: row.description,
         source: row.source,
         expenseId: row.expenseId,
-        paymentMethod: row.paymentMethod ? resolvePaymentMethod(row.paymentMethod) : null,
-        fromPaymentMethod: row.fromPaymentMethod
-            ? resolvePaymentMethod(row.fromPaymentMethod)
-            : null,
+        paymentMethod: displayPaymentMethod(row.paymentMethod),
+        fromPaymentMethod: displayPaymentMethod(row.fromPaymentMethod),
         transferFee: parseStoredTransferFee(row.transferFee),
     };
 }
 
-export async function resolveReplyToExpenseId(text: string): Promise<number | undefined> {
-    const parsed = parseExpenseIdFromBotReply(text);
-    if (parsed == null) return undefined;
-    return (await expenseExists(parsed)) ? parsed : undefined;
-}
-
 export async function resolveReplyRecord(
     text: string,
-    mealExists?: (id: number) => Promise<boolean>
+    /** Per-user ownership check for meal/workout rows (expense/income are checked here). */
+    userRecordExists?: (target: ReplyRecordTarget) => Promise<boolean>
 ): Promise<ReplyRecordTarget | undefined> {
     const parsed = parseReplyRecordFromBotReply(text);
     if (!parsed) return undefined;
@@ -252,7 +421,7 @@ export async function resolveReplyRecord(
     if (parsed.type === 'income') {
         return (await incomeExists(parsed.id)) ? parsed : undefined;
     }
-    if (mealExists && !(await mealExists(parsed.id))) return undefined;
+    if (userRecordExists && !(await userRecordExists(parsed))) return undefined;
     return parsed;
 }
 
@@ -286,8 +455,8 @@ export async function listIncomes(startDate: string, endDate: string) {
         .orderBy(desc(incomes.date), desc(incomes.id));
 }
 
-export async function getIncomesByExpenseId(expenseId: number) {
-    const db = requireDb();
+export async function getIncomesByExpenseId(expenseId: number, executor?: DbExecutor) {
+    const db = executor ?? requireDb();
     return db.select().from(incomes).where(eq(incomes.expenseId, expenseId));
 }
 
@@ -310,40 +479,17 @@ export async function updateIncome(
         paymentMethod?: string | null;
         fromPaymentMethod?: string | null;
         transferFee?: number | null;
-    }
+    },
+    executor?: DbExecutor
 ): Promise<boolean> {
-    const db = requireDb();
+    const db = executor ?? requireDb();
     const existing = await db.select().from(incomes).where(eq(incomes.id, id));
     const current = existing[0];
     if (!current) return false;
 
-    const nextCategory =
-        fields.category != null ? resolveIncomeCategory(fields.category) : current.category;
-    const nextPaymentMethod =
-        fields.paymentMethod !== undefined
-            ? fields.paymentMethod != null
-                ? resolvePaymentMethod(fields.paymentMethod)
-                : null
-            : current.paymentMethod;
-    const nextFromPaymentMethod =
-        fields.fromPaymentMethod !== undefined
-            ? fields.fromPaymentMethod != null
-                ? resolvePaymentMethod(fields.fromPaymentMethod)
-                : null
-            : current.fromPaymentMethod;
-
-    const validationError = validateIncomePaymentAccounts(
-        nextCategory,
-        nextPaymentMethod,
-        isAccountTransferCategory(nextCategory) ? nextFromPaymentMethod : null
-    );
-    if (validationError) throw new Error(validationError);
-
-    if (fields.transferFee !== undefined) {
-        parseTransferFeeValue(fields.transferFee, nextCategory);
-    } else if (fields.category != null && !isAccountTransferCategory(nextCategory)) {
-        // category changed away from transfer — fee will be cleared below
-    }
+    // Throws "Unknown payment account: …" or an Account transfer error before anything is written.
+    const accounts = planIncomeAccountUpdate(current, fields);
+    const nextCategory = accounts.category;
 
     const set: Record<string, string | number | null> = {};
 
@@ -360,13 +506,11 @@ export async function updateIncome(
         // category changed away from transfer — leave expenseId as-is unless cleared above
     }
 
-    if (fields.paymentMethod !== undefined || fields.category != null) {
-        set.paymentMethod = nextPaymentMethod;
+    if (accounts.paymentMethod !== undefined) {
+        set.paymentMethod = accounts.paymentMethod;
     }
-    if (fields.fromPaymentMethod !== undefined || fields.category != null) {
-        set.fromPaymentMethod = isAccountTransferCategory(nextCategory)
-            ? nextFromPaymentMethod
-            : null;
+    if (accounts.fromPaymentMethod !== undefined) {
+        set.fromPaymentMethod = accounts.fromPaymentMethod;
     }
 
     if (fields.transferFee !== undefined) {
@@ -483,28 +627,41 @@ export async function deleteIncomesByExpenseId(expenseId: number): Promise<numbe
     return result.count ?? 0;
 }
 
-/** Linked Account transfer that funds an investment from an Investment expense. */
-export async function upsertInvestmentFundingTransfer(fields: {
-    expenseId: number;
-    date: string;
-    amount: number;
-    description: string;
-    fromPaymentMethod: string;
-    toInvestmentAccount: string;
-}): Promise<number> {
-    const existing = await getIncomesByExpenseId(fields.expenseId);
+/**
+ * Linked Account transfer that funds an investment from an Investment expense.
+ * Re-upserting passes the bill's stored accounts. When they match the transfer's stored text
+ * (trimmed, case-insensitive) they are kept as they are, even if the account was deactivated
+ * since, so editing an old bill's amount or date still works (see planIncomeAccountUpdate).
+ * Pass `executor` (a transaction) to write the transfer together with the expense it funds.
+ */
+export async function upsertInvestmentFundingTransfer(
+    fields: {
+        expenseId: number;
+        date: string;
+        amount: number;
+        description: string;
+        fromPaymentMethod: string;
+        toInvestmentAccount: string;
+    },
+    executor?: DbExecutor
+): Promise<number> {
+    const existing = await getIncomesByExpenseId(fields.expenseId, executor);
     const transfer = existing.find((row) => isAccountTransferCategory(row.category));
     if (transfer) {
-        await updateIncome(transfer.id, {
-            date: fields.date,
-            amount: fields.amount,
-            description: fields.description,
-            category: 'Account transfer',
-            expenseId: fields.expenseId,
-            paymentMethod: fields.toInvestmentAccount,
-            fromPaymentMethod: fields.fromPaymentMethod,
-            transferFee: 0,
-        });
+        await updateIncome(
+            transfer.id,
+            {
+                date: fields.date,
+                amount: fields.amount,
+                description: fields.description,
+                category: 'Account transfer',
+                expenseId: fields.expenseId,
+                paymentMethod: fields.toInvestmentAccount,
+                fromPaymentMethod: fields.fromPaymentMethod,
+                transferFee: 0,
+            },
+            executor
+        );
         return transfer.id;
     }
     return appendIncome(
@@ -516,7 +673,9 @@ export async function upsertInvestmentFundingTransfer(fields: {
         undefined,
         fields.expenseId,
         fields.toInvestmentAccount,
-        fields.fromPaymentMethod
+        fields.fromPaymentMethod,
+        undefined,
+        executor
     );
 }
 
@@ -552,11 +711,11 @@ export async function getTransferFeesForSpendingSummary(
         paymentMethod?: string;
     }
 ): Promise<{ total: number; breakdown: Record<string, number>; byPaymentMethod: Record<string, number> }> {
+    // The budget row may be stored as 'Bank Charges' (Telegram title-cases new budgets), so bucket
+    // fees under the canonical budget category, the same way expense rows are bucketed.
+    const feeCategory = resolveCategory(TRANSFER_FEE_EXPENSE_CATEGORY);
     const resolvedFilterCategory = filters?.category;
-    if (
-        resolvedFilterCategory != null &&
-        resolvedFilterCategory !== TRANSFER_FEE_EXPENSE_CATEGORY
-    ) {
+    if (resolvedFilterCategory != null && resolvedFilterCategory !== feeCategory) {
         return { total: 0, breakdown: {}, byPaymentMethod: {} };
     }
 
@@ -577,16 +736,13 @@ export async function getTransferFeesForSpendingSummary(
                 continue;
             }
         }
-        if (filters?.paymentMethod) {
-            const from = row.fromPaymentMethod
-                ? resolvePaymentMethod(row.fromPaymentMethod)
-                : null;
-            if (!from || !paymentMethodsMatch(from, filters.paymentMethod)) continue;
+        // Same rule as expense rows: the fee is paid from the from-account.
+        if (filters?.paymentMethod && !paymentMethodsMatch(row.fromPaymentMethod, filters.paymentMethod)) {
+            continue;
         }
 
         total += fee;
-        breakdown[TRANSFER_FEE_EXPENSE_CATEGORY] =
-            (breakdown[TRANSFER_FEE_EXPENSE_CATEGORY] || 0) + fee;
+        breakdown[feeCategory] = (breakdown[feeCategory] || 0) + fee;
         const methodKey = row.fromPaymentMethod
             ? resolvePaymentMethod(row.fromPaymentMethod) ?? row.fromPaymentMethod
             : 'Unspecified';
@@ -619,7 +775,9 @@ export function formatIncomeLogReply(
     linkedExpense?: boolean,
     paymentMethod?: string | null,
     fromPaymentMethod?: string | null,
-    headerPrefix = '✅ Logged income'
+    headerPrefix = '✅ Logged income',
+    /** Kept after headerPrefix so existing positional callers don't shift. */
+    transferFee?: number | null
 ): string {
     const header =
         incomeId != null ? `${headerPrefix} #${incomeId}` : headerPrefix;
@@ -633,6 +791,10 @@ export function formatIncomeLogReply(
     if (source) lines.push(`👤 From: ${source}`);
     const accountFlow = formatIncomeAccountFlow(paymentMethod, fromPaymentMethod);
     if (accountFlow) lines.push(`💳 Accounts: ${accountFlow}`);
+    if (transferFee != null && transferFee > 0) {
+        const feeSource = fromPaymentMethod ? ` (from ${fromPaymentMethod})` : '';
+        lines.push(`💸 Fee: ${currency || 'MYR'} ${transferFee}${feeSource}`);
+    }
     if (linkedExpense) lines.push('🔗 Linked to expense (reduces your net cost)');
     return lines.join('\n');
 }
@@ -713,6 +875,115 @@ if (require.main === module) {
     if (updatedIncome?.type !== 'income' || updatedIncome.id !== 42) {
         throw new Error(`expected updated income #42, got ${JSON.stringify(updatedIncome)}`);
     }
+    const workoutTarget = parseReplyRecordFromBotReply(
+        '✅ Logged\n📅 Date: 2026-09-23\n\n• ISO incline press — 4 sets @ 15/20/20/20kg\n\n#️⃣ Workout ID: 812'
+    );
+    if (workoutTarget?.type !== 'workout' || workoutTarget.id !== 812) {
+        throw new Error(`expected workout #812, got ${JSON.stringify(workoutTarget)}`);
+    }
+
+    // Transfer fee: own reply line after the accounts; positional headerPrefix unchanged.
+    const feeFmt = formatIncomeLogReply(
+        '2026-06-29',
+        500,
+        'MYR',
+        'Account transfer',
+        'Top up',
+        43,
+        undefined,
+        false,
+        'TnG',
+        'Maybank Savings',
+        undefined,
+        1.5
+    );
+    if (!feeFmt.startsWith('✅ Logged income #43') || !feeFmt.includes('💸 Fee: MYR 1.5 (from Maybank Savings)')) {
+        throw new Error(`fee reply wrong: ${feeFmt}`);
+    }
+    if (incomeFmt.includes('Fee:')) throw new Error('fee line without a fee');
+    if (parseTransferFeeValue(1.234, 'Account transfer') !== 1.23) throw new Error('fee not rounded');
+    if (parseTransferFeeValue(null, 'Salary') !== 0) throw new Error('no fee on Salary should be 0');
+    if (parseStoredTransferFee('2.50') !== 2.5 || parseStoredTransferFee(null) !== 0) {
+        throw new Error('parseStoredTransferFee wrong');
+    }
+
+    // Write guard (2.5) and unchanged-account tolerance (2.18). 'Old Bank' is not in the cache.
+    const account = (id: number, name: string, active = true): PaymentAccount => ({
+        id,
+        name,
+        accountType: 'account',
+        initialBalance: 0,
+        balanceBaselineDate: '2020-01-01',
+        creditLimit: null,
+        statementDay: null,
+        rebateConfig: null,
+        active,
+    });
+    setPaymentAccountsCache([
+        account(1, 'TnG'),
+        account(2, 'Maybank Savings'),
+        account(3, 'Maybank', false),
+    ]);
+    const expectInputError = (fn: () => unknown, message: string) => {
+        try {
+            fn();
+        } catch (err) {
+            if (err instanceof Error && err.message === message && isIncomeInputError(err)) return;
+            throw new Error(`expected "${message}", got ${err}`);
+        }
+        throw new Error(`expected "${message}", got no error`);
+    };
+    const oldTransfer = { category: 'Account transfer', paymentMethod: 'TnG', fromPaymentMethod: 'Old Bank' };
+
+    // Amount-only edit of a transfer from an account that no longer resolves.
+    const amountOnly = planIncomeAccountUpdate(oldTransfer, {});
+    if (amountOnly.paymentMethod !== undefined || amountOnly.fromPaymentMethod !== undefined) {
+        throw new Error(`amount-only edit touched accounts: ${JSON.stringify(amountOnly)}`);
+    }
+    // Re-upsert of a funding transfer with the stored accounts (other case/spacing) keeps the raw text.
+    const reUpsert = planIncomeAccountUpdate(oldTransfer, {
+        category: 'Account transfer',
+        paymentMethod: 'TnG',
+        fromPaymentMethod: ' old bank ',
+    });
+    if (reUpsert.paymentMethod !== 'TnG' || reUpsert.fromPaymentMethod !== 'Old Bank') {
+        throw new Error(`re-upsert should keep stored accounts: ${JSON.stringify(reUpsert)}`);
+    }
+    // Same for a deactivated account.
+    const inactiveKept = planIncomeAccountUpdate(
+        { category: 'Account transfer', paymentMethod: 'TnG', fromPaymentMethod: 'Maybank' },
+        { fromPaymentMethod: 'Maybank' }
+    );
+    if (inactiveKept.fromPaymentMethod !== 'Maybank') throw new Error('inactive account not kept');
+    // New values must resolve; resolved names are stored.
+    expectInputError(
+        () => planIncomeAccountUpdate(oldTransfer, { fromPaymentMethod: 'Boost Wallet' }),
+        'Unknown payment account: Boost Wallet'
+    );
+    expectInputError(
+        () => planIncomeAccountUpdate(oldTransfer, { paymentMethod: 'Maybank' }),
+        'Unknown payment account: Maybank'
+    );
+    if (planIncomeAccountUpdate(oldTransfer, { fromPaymentMethod: 'maybank savings' }).fromPaymentMethod !== 'Maybank Savings') {
+        throw new Error('new from-account should be stored resolved');
+    }
+    expectInputError(
+        () => planIncomeAccountUpdate(oldTransfer, { fromPaymentMethod: 'tng' }),
+        'From and to accounts must be different'
+    );
+    expectInputError(
+        () => planIncomeAccountUpdate(oldTransfer, { fromPaymentMethod: null }),
+        'Account transfer requires from and to accounts'
+    );
+    // Leaving Account transfer clears the from-account and ignores an incoming one.
+    const toSalary = planIncomeAccountUpdate(oldTransfer, { category: 'Salary', fromPaymentMethod: 'Boost Wallet' });
+    if (toSalary.category !== 'Salary' || toSalary.paymentMethod !== 'TnG' || toSalary.fromPaymentMethod !== null) {
+        throw new Error(`category change wrong: ${JSON.stringify(toSalary)}`);
+    }
+    expectInputError(
+        () => planIncomeAccountUpdate({ category: 'Salary', paymentMethod: null, fromPaymentMethod: null }, { paymentMethod: 'Boost Wallet' }),
+        'Unknown payment account: Boost Wallet'
+    );
 
     console.log('incomeService self-check ok');
 }

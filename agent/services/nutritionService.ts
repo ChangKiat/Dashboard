@@ -160,9 +160,13 @@ export async function updateNutritionTargets(
         set.heightCm = targets.heightCm != null ? String(targets.heightCm) : null;
     }
     if (targets.age !== undefined) {
-        set.age = targets.age;
+        // user_settings.age is INTEGER; a fractional age (e.g. 30.5) would fail the insert.
+        set.age = targets.age != null ? Math.round(targets.age) : null;
     }
-    if (targets.sex !== undefined) {
+    if (
+        targets.sex !== undefined &&
+        (targets.sex === 'male' || targets.sex === 'female' || targets.sex === null)
+    ) {
         set.sex = targets.sex;
     }
 

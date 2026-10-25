@@ -22,7 +22,8 @@ export const expenses = pgTable('expenses', {
     tripLeg: text('trip_leg'),
     fxAmount: numeric('fx_amount', { precision: 12, scale: 2 }),
     fxCurrency: text('fx_currency'),
-    fxRate: numeric('fx_rate', { precision: 12, scale: 6 }),
+    /** numeric(20,12) after AI Agent/scripts/migrate-fx-rate-precision.sql (small rates such as VND to MYR need the extra digits). */
+    fxRate: numeric('fx_rate', { precision: 20, scale: 12 }),
     createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
