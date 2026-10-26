@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 
 import type { FixedExpenseConfig } from '../api';
-import { formatHours, hourlyRate, useAmountUnit } from '../hooks/useAmountUnit';
+import { formatHours, hourlyRate, useWorkHours } from '../hooks/useWorkHours';
 import { useAmountVisibility } from '../hooks/useAmountVisibility';
 import { monthToDateRange, todayInKL } from '../utils/dateRange';
 import { dueDatesBetween, monthlyCost } from '../utils/recurring';
@@ -40,7 +40,7 @@ function formatClock(minutesFromMidnight: number) {
 /** Bills and subscriptions that repeat: totals, the list, and what's due in the next 30 days. */
 export default function RecurringPage({ rows, variableCategories, salaryAfterTax, formatAmount, onChanged }: Props) {
     const { hidden } = useAmountVisibility();
-    const { hoursPerWeek } = useAmountUnit();
+    const { hoursPerWeek } = useWorkHours();
     const today = todayInKL();
     const rate = hourlyRate(salaryAfterTax, hoursPerWeek);
     /** "6.1 h" of work for an amount, or null without a salary. */

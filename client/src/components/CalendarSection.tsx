@@ -17,7 +17,7 @@ import {
     fetchSyncStatus,
 } from '../api';
 import SpendingHeatmap from '../charts/SpendingHeatmap';
-import { formatHours, hourlyRate, useAmountUnit } from '../hooks/useAmountUnit';
+import { formatHours, hourlyRate, useWorkHours } from '../hooks/useWorkHours';
 import { useAmountVisibility, useFormatMYR } from '../hooks/useAmountVisibility';
 import { shiftMonth, useMonth } from '../hooks/useMonth';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
@@ -57,7 +57,7 @@ export default function CalendarSection() {
     const { month, setMonth } = useMonth();
     const formatMYR = useFormatMYR();
     const { hidden } = useAmountVisibility();
-    const { hoursPerWeek } = useAmountUnit();
+    const { hoursPerWeek } = useWorkHours();
     const { refresh: refreshAccounts } = usePaymentAccounts();
     const [salaryAfterTax, setSalaryAfterTax] = useState(0);
     // A year of daily spending ending at the month shown, for the heatmap and the no-spend run.

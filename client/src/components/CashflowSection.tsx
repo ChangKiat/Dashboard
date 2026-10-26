@@ -9,7 +9,6 @@ import {
     fetchSyncStatus,
 } from '../api';
 import CashflowTrendChart, { dayTrendPoints, monthTrendPoints } from '../charts/CashflowTrendChart';
-import { formatHours, hourlyRate, monthlyWorkHours, useAmountUnit } from '../hooks/useAmountUnit';
 import { useAmountVisibility, useFormatMYR } from '../hooks/useAmountVisibility';
 import { currentMonthInKL, formatMonthLabel, useMonth } from '../hooks/useMonth';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
@@ -27,7 +26,6 @@ import { getBudgetStatus } from '../utils/budgetStatus';
 import { todayInKL } from '../utils/dateRange';
 import { formatCompactMYR } from '../utils/money';
 
-import AmountUnitToggle from './AmountUnitToggle';
 import { BankIcon, IncomeIcon, TrendUpIcon, WalletIcon } from './icons';
 import PeriodControls from './PeriodControls';
 import SummaryCard from './SummaryCard';
@@ -40,7 +38,6 @@ export default function CashflowSection() {
     const periodEndMonth = periodEndMonthFor(period, month, currentMonthInKL());
     const formatMYR = useFormatMYR();
     const { hidden } = useAmountVisibility();
-    const { unit, setUnit, hoursPerWeek, setHoursPerWeek } = useAmountUnit();
     const { accounts, loading: accountsLoading, refresh: refreshAccounts } = usePaymentAccounts();
     const [data, setData] = useState<ExpenseOverviewResponse | null>(null);
     // The chart: month by month for 3M / 6M / YTD / Year / All, day by day for Month.
@@ -154,13 +151,6 @@ export default function CashflowSection() {
         [period, dailySeries, trendMonths]
     );
 
-    const rate = data ? hourlyRate(data.salaryAfterTax, hoursPerWeek) : null;
-    const effectiveUnit = data && rate == null ? 'rm' : unit;
-    const showHours = effectiveUnit === 'hours' && rate != null;
-    const toHours = (amount: number) => (hidden ? '•• h' : formatHours(amount / rate!));
-    /** A card's main figure: RM, or hours of work when Hours is on. */
-    const formatFigure = (amount: number) => (showHours ? toHours(amount) : formatMYR(amount));
-
     const toolbar = (
         <div className="page-toolbar">
             <div className="page-toolbar-group">
@@ -171,23 +161,6 @@ export default function CashflowSection() {
                     onMonthChange={setMonth}
                     firstDataMonth={firstDataMonth}
                     allEndMonth={periodEndMonth}
-                />
-            </div>
-            <div className="page-toolbar-group">
-                <AmountUnitToggle
-                    unit={effectiveUnit}
-                    onUnitChange={setUnit}
-                    hoursPerWeek={hoursPerWeek}
-                    onHoursPerWeekChange={setHoursPerWeek}
-                    rateLabel={rate == null ? null : `${formatMYR(rate)}/h`}
-                    rateExplanation={
-                        data
-                            ? `${formatMYR(data.salaryAfterTax)} take-home ÷ ${Math.round(
-                                  monthlyWorkHours(hoursPerWeek)
-                              )} h a month`
-                            : null
-                    }
-                    hoursDisabledReason={data && rate == null ? 'Needs your salary after tax' : undefined}
                 />
             </div>
         </div>
@@ -216,21 +189,7 @@ export default function CashflowSection() {
     const budget = data.totals.budget * budgetMonths;
     const isMultiMonth = period !== 'month';
 
-    const chartData = showHours
-        ? trendPoints.map((p) => ({
-              ...p,
-              income: p.income / rate!,
-              spending: p.spending / rate!,
-              net: p.net == null ? null : p.net / rate!,
-          }))
-        : trendPoints;
-    const formatChartValue = (value: number) =>
-        showHours ? (hidden ? '•• h' : formatHours(value)) : formatMYR(value);
-    const formatChartAxis = (value: number) => {
-        if (hidden) return '••';
-        if (showHours) return `${Math.round(value).toLocaleString('en-MY')} h`;
-        return formatCompactMYR(value);
-    };
+    const formatChartAxis = (value: number) => (hidden ? '••' : formatCompactMYR(value));
     const chartEnd = monthlySeries[monthlySeries.length - 1]?.month ?? periodEndMonth;
     let trendRange: string;
     if (period === 'month') {
@@ -251,49 +210,31 @@ export default function CashflowSection() {
                         tone="spend"
                         icon={<WalletIcon size={26} />}
                         label="Actual spend"
-                        value={formatFigure(actualSpend)}
+                        value={formatMYR(actualSpend)}
                         variant={actualSpendVariant}
-                        sub={
-                            showHours
-                                ? `${formatMYR(actualSpend)} · budget ${toHours(budget)}`
-                                : `of ${formatMYR(budget)} budget`
-                        }
+                        sub={`of ${formatMYR(budget)} budget`}
                     />
                     <SummaryCard
                         tone="income"
                         icon={<IncomeIcon size={26} />}
                         label="Total income"
-                        value={formatFigure(totalIncome)}
-                        sub={
-                            showHours
-                                ? formatMYR(totalIncome)
-                                : `Salary after tax ${formatMYR(data.salaryAfterTax)}${isMultiMonth ? ' a month' : ''}`
-                        }
+                        value={formatMYR(totalIncome)}
+                        sub={`Salary after tax ${formatMYR(data.salaryAfterTax)}${isMultiMonth ? ' a month' : ''}`}
                     />
                     <SummaryCard
                         tone="net"
                         icon={<TrendUpIcon size={26} />}
                         label="Net cashflow"
-                        value={formatFigure(netCashflow)}
+                        value={formatMYR(netCashflow)}
                         variant={netCashflow < 0 ? 'danger' : 'default'}
-                        sub={
-                            showHours
-                                ? formatMYR(netCashflow)
-                                : netCashflow < 0
-                                  ? 'Spent more than came in'
-                                  : 'Left over after spending'
-                        }
+                        sub={netCashflow < 0 ? 'Spent more than came in' : 'Left over after spending'}
                     />
                     <SummaryCard
                         tone="net"
                         icon={<BankIcon size={26} />}
                         label="Net worth"
-                        value={accountsLoading ? '…' : formatFigure(netWorth.total)}
-                        sub={
-                            showHours && !accountsLoading
-                                ? formatMYR(netWorth.total)
-                                : `Accounts + investments − credit cards · ${netWorth.count} accounts`
-                        }
+                        value={accountsLoading ? '…' : formatMYR(netWorth.total)}
+                        sub={`Accounts + investments − credit cards · ${netWorth.count} accounts`}
                     />
                 </div>
 
@@ -301,10 +242,7 @@ export default function CashflowSection() {
                     <div className="cashflow-trend-header">
                         <div>
                             <h3 id="cashflow-trend-title">Cash flow</h3>
-                            <p className="cashflow-trend-sub">
-                                {trendRange}
-                                {showHours && ' · in hours of work'}
-                            </p>
+                            <p className="cashflow-trend-sub">{trendRange}</p>
                         </div>
                         <div className="chart-legend" aria-hidden="true">
                             <span>
@@ -321,10 +259,10 @@ export default function CashflowSection() {
                             </span>
                         </div>
                     </div>
-                    {chartData.length > 0 ? (
+                    {trendPoints.length > 0 ? (
                         <CashflowTrendChart
-                            data={chartData}
-                            formatValue={formatChartValue}
+                            data={trendPoints}
+                            formatValue={formatMYR}
                             formatAxis={formatChartAxis}
                             netName={netName}
                         />
@@ -336,7 +274,6 @@ export default function CashflowSection() {
                         is after reimbursements.
                     </p>
                 </section>
-
             </div>
         </section>
     );
