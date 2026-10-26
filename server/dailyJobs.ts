@@ -144,8 +144,11 @@ function escapeMarkdown(text: string): string {
     return text.replace(/[_*`[]/g, (ch) => `\\${ch}`);
 }
 
+/** Drizzle's "Failed query: <sql>" keeps the database's reason in `cause`, so that goes first. */
 function errorText(error: unknown): string {
-    return error instanceof Error ? error.message : String(error);
+    if (!(error instanceof Error)) return String(error);
+    if (!(error.cause instanceof Error)) return error.message;
+    return `${error.cause.message} (${error.message.split('\n')[0].slice(0, 100)})`;
 }
 
 function dayLabel(date: string, today: string): string {
@@ -572,5 +575,14 @@ if (require.main === module) {
     eq(pendingRunDates(checkIn, at2140, '2026-10-20', []), ['2026-10-26'], 'check-in today only, no catch-up');
     eq(pendingRunDates(checkIn, at2140, '2026-10-20', [row('2026-10-26', 'done', 5)]), [], 'check-in sent once');
     eq(pendingRunDates(checkIn, at0010, '2026-10-20', []), [], 'missed check-in is not sent after midnight');
+    const dbError = new Error('Failed query: select "id" from "workouts"\nparams: 1', {
+        cause: new Error('(EMAXCONNSESSION) max clients reached in session mode'),
+    });
+    eq(
+        errorText(dbError),
+        '(EMAXCONNSESSION) max clients reached in session mode (Failed query: select "id" from "workouts")',
+        'database reason first, query cut to its first line'
+    );
+    eq(errorText(new Error('plain')), 'plain', 'an error without a cause is unchanged');
     console.log('dailyJobs self-check ok');
 }

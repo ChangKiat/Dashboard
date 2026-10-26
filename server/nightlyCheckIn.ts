@@ -119,14 +119,16 @@ export function formatNightlyCheckIn(day: CheckInDay): string | null {
 async function loadCheckInDay(date: string): Promise<CheckInDay> {
     const userId = getTelegramUserId();
     const month = parseMonth(date.slice(0, 7));
-    const [nutrition, today, thisMonth, categories, exercises, activity] = await Promise.all([
-        getTodayMacroProgress(userId, date),
-        getSpendingSummary(undefined, undefined, date, date),
-        getSpendingSummary(undefined, undefined, month.start, month.end),
-        loadExpenseCategories(),
-        getWorkoutHistory(userId, date, date),
-        listDailyActivityLogs(userId, date, date),
-    ]);
+    // One query at a time, not Promise.all: the Supabase session pooler has 15 client slots for the
+    // Dashboard, the bot and any local dev server together, and six at once ran out of them
+    // (EMAXCONNSESSION). One at a time reuses a connection the server already holds.
+    // Categories first: getSpendingSummary groups rows by the category list loaded here.
+    const categories = await loadExpenseCategories();
+    const nutrition = await getTodayMacroProgress(userId, date);
+    const today = await getSpendingSummary(undefined, undefined, date, date);
+    const thisMonth = await getSpendingSummary(undefined, undefined, month.start, month.end);
+    const exercises = await getWorkoutHistory(userId, date, date);
+    const activity = await listDailyActivityLogs(userId, date, date);
 
     const { sessions, standalone } = groupWorkoutsBySession(exercises);
     const workouts = [
