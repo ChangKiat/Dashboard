@@ -57,7 +57,7 @@ export default function App() {
     }
 
     if (!authenticated) {
-        return <LoginGate onAuthenticated={() => setAuthenticated(true)} />;
+        return <LoginGate />;
     }
 
     const configWarning =

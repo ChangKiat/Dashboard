@@ -516,13 +516,6 @@ export function getAuthMe() {
     return fetchJson<{ authenticated: boolean }>('/api/auth/me');
 }
 
-export function verifyAuth(code: string) {
-    return fetchJson<{ ok: true }>('/api/auth/verify', {
-        method: 'POST',
-        body: JSON.stringify({ code }),
-    });
-}
-
 export function logoutAuth() {
     return fetchJson<{ ok: true }>('/api/auth/logout', { method: 'POST' });
 }

@@ -9,17 +9,8 @@ import cors from 'cors';
 import express from 'express';
 import { loadExpenseCategories } from '../agent/config/expenseCategories';
 import { loadPaymentAccounts } from '../agent/config/paymentMethods';
-import {
-    clearSessionCookieOptions,
-    createSessionToken,
-    getSetupPayload,
-    isAuthenticated,
-    isSetupEnabled,
-    requireAuth,
-    SESSION_COOKIE,
-    sessionCookieOptions,
-    verifyTotp,
-} from './auth';
+import { requireAuth } from './auth';
+import authRouter from './routes/auth';
 import expensesRouter from './routes/expenses';
 import incomesRouter from './routes/incomes';
 import paymentAccountsRouter from './routes/paymentAccounts';
@@ -57,44 +48,7 @@ app.get('/api/health', (_req, res) => {
     });
 });
 
-app.get('/api/auth/me', (req, res) => {
-    res.json({ authenticated: isAuthenticated(req) });
-});
-
-app.post('/api/auth/verify', (req, res) => {
-    const code = typeof req.body?.code === 'string' ? req.body.code : '';
-    try {
-        if (!verifyTotp(code)) {
-            res.status(401).json({ error: 'Invalid code' });
-            return;
-        }
-        res.cookie(SESSION_COOKIE, createSessionToken(), sessionCookieOptions());
-        res.json({ ok: true });
-    } catch (err) {
-        console.error('Auth verify failed:', err);
-        res.status(500).json({ error: 'Auth not configured' });
-    }
-});
-
-app.post('/api/auth/logout', (_req, res) => {
-    res.clearCookie(SESSION_COOKIE, clearSessionCookieOptions());
-    res.json({ ok: true });
-});
-
-app.get('/api/auth/setup', async (_req, res) => {
-    if (!isSetupEnabled()) {
-        res.status(404).json({ error: 'Not found' });
-        return;
-    }
-    try {
-        const payload = await getSetupPayload();
-        res.json(payload);
-    } catch (err) {
-        console.error('Auth setup failed:', err);
-        res.status(500).json({ error: 'Auth not configured' });
-    }
-});
-
+app.use('/api/auth', authRouter);
 app.use('/api/expenses', requireAuth, expensesRouter);
 app.use('/api/incomes', requireAuth, incomesRouter);
 app.use('/api/payment-accounts', requireAuth, paymentAccountsRouter);

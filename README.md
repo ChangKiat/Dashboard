@@ -17,27 +17,21 @@ For a fuller product/architecture summary, see [docs/PROJECT_OVERVIEW.md](docs/P
 3. Fill in `.env`:
   - `DATABASE_URL` — copy from your AI Agent `.env`
   - `TELEGRAM_USER_ID` — your Telegram user ID (`ctx.from.id` from the bot)
-  - `AUTH_TOTP_SECRET` — base32 secret for your authenticator app
+  - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `AUTH_ALLOWED_EMAILS` — Google sign-in (below)
   - `AUTH_SESSION_SECRET` — long random string (cookie signing)
 
-## Authenticator login (TOTP)
+## Google sign-in
 
-The dashboard is locked behind a 6-digit authenticator code (no password). Sessions last 14 days.
+The dashboard opens only for the Google accounts listed in `AUTH_ALLOWED_EMAILS`. Anyone else who signs in with Google is sent back to the login screen. Sessions last 14 days, and removing an email from the list ends its sessions at once.
 
-1. Generate secrets:
+1. In [Google Cloud Console](https://console.cloud.google.com/), pick a project (the one with the bot's Calendar service account works) and open **APIs & Services → OAuth consent screen**. Choose **External**, fill in the app name and your email, and add your Google account under **Test users**. Leave it in **Testing**: only test users can get past Google then, on top of the email list.
+2. Open **APIs & Services → Credentials → Create credentials → OAuth client ID**, type **Web application**. Under **Authorized redirect URIs** add:
+   - `http://localhost:5173/api/auth/google/callback` (development)
+   - `https://<your-app>.onrender.com/api/auth/google/callback` (deployed)
+3. Put the client ID and secret in `.env` and on Render as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Set `GOOGLE_REDIRECT_URI` to the redirect URI for that place: the localhost one in `.env`, the Render one on Render.
+4. Set `AUTH_ALLOWED_EMAILS` to your Google email (comma-separated for more than one) and `AUTH_SESSION_SECRET` to the output of `openssl rand -hex 32`.
 
-```bash
-node -e "console.log(new (require('otpauth').Secret)().base32)"
-openssl rand -hex 32
-```
-
-2. Put them in `.env` / Render as `AUTH_TOTP_SECRET` and `AUTH_SESSION_SECRET`.
-
-3. One-time QR setup: set `AUTH_TOTP_SETUP=1`, restart, open `GET /api/auth/setup`, scan `qrDataUrl` (or add `otpauthUrl` manually) in Google Authenticator / Authy.
-
-4. Unset `AUTH_TOTP_SETUP` and restart so `/api/auth/setup` returns 404.
-
-Auth endpoints: `GET /api/auth/me`, `POST /api/auth/verify`, `POST /api/auth/logout`, `GET /api/auth/setup` (setup only).
+Auth endpoints: `GET /api/auth/me`, `GET /api/auth/google` (starts sign-in), `GET /api/auth/google/callback` (Google returns here), `POST /api/auth/logout`.
 
 ## Run (development)
 

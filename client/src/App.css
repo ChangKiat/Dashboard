@@ -3969,29 +3969,17 @@ div.payment-account-card-main:hover {
   color: var(--text-heading);
 }
 
-.login-label {
-  font-size: 0.85rem;
-  color: var(--text-muted);
-}
-
 .login-card .btn-primary {
   width: 100%;
 }
 
-.login-input {
-  font-size: 1.5rem;
-  letter-spacing: 0.35em;
+/* The Google button is a link to /api/auth/google, styled as .btn-primary. */
+.login-google {
+  padding: 12px 14px;
+  font-size: 0.95rem;
+  font-weight: 500;
   text-align: center;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-  color: var(--text-heading);
-}
-
-.login-input:focus {
-  outline: none;
-  border-color: var(--accent);
+  text-decoration: none;
 }
 
 .login-error {

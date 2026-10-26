@@ -1,55 +1,40 @@
-import { useState, type SubmitEvent } from 'react';
-import { verifyAuth } from '../api';
+import { useEffect, useState } from 'react';
 
-interface LoginGateProps {
-    onAuthenticated: () => void;
+/** Keyed by the `auth_error` the server's Google callback redirects back with (server/routes/auth.ts). */
+const AUTH_ERRORS: Record<string, string> = {
+    config: 'Google sign-in is not set up on the server yet.',
+    expired: 'That sign-in took too long or was opened in another tab. Try again.',
+    cancelled: 'Sign-in was cancelled.',
+    denied: 'That Google account is not allowed to open this dashboard.',
+    failed: 'Google sign-in failed. Try again.',
+};
+
+function readAuthError(): string | null {
+    const reason = new URLSearchParams(window.location.search).get('auth_error');
+    return reason ? (AUTH_ERRORS[reason] ?? AUTH_ERRORS.failed) : null;
 }
 
-export default function LoginGate({ onAuthenticated }: LoginGateProps) {
-    const [code, setCode] = useState('');
-    const [error, setError] = useState<string | null>(null);
-    const [submitting, setSubmitting] = useState(false);
+export default function LoginGate() {
+    const [error] = useState(readAuthError);
 
-    async function onSubmit(e: SubmitEvent<HTMLFormElement>) {
-        e.preventDefault();
-        setError(null);
-        setSubmitting(true);
-        try {
-            await verifyAuth(code.trim());
-            onAuthenticated();
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Invalid code');
-        } finally {
-            setSubmitting(false);
-        }
-    }
+    // Drop ?auth_error= so a reload doesn't show the message again.
+    useEffect(() => {
+        const url = new URL(window.location.href);
+        if (!url.searchParams.has('auth_error')) return;
+        url.searchParams.delete('auth_error');
+        window.history.replaceState(null, '', url);
+    }, []);
 
     return (
         <div className="app login-gate">
-            <form className="login-card" onSubmit={onSubmit}>
+            <div className="login-card">
                 <h1>Personal Dashboard</h1>
-                <p className="subtitle">Enter the 6-digit code from your authenticator app</p>
-                <label className="login-label" htmlFor="totp-code">
-                    Authenticator code
-                </label>
-                <input
-                    id="totp-code"
-                    className="login-input"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    pattern="[0-9]{6}"
-                    maxLength={6}
-                    placeholder="000000"
-                    value={code}
-                    onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    disabled={submitting}
-                    autoFocus
-                />
+                <p className="subtitle">Sign in with your Google account</p>
                 {error && <div className="banner warning login-error">{error}</div>}
-                <button type="submit" className="btn-primary" disabled={submitting || code.length !== 6}>
-                    {submitting ? 'Checking…' : 'Unlock'}
-                </button>
-            </form>
+                <a className="btn-primary login-google" href="/api/auth/google">
+                    Sign in with Google
+                </a>
+            </div>
         </div>
     );
 }
