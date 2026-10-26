@@ -22,11 +22,11 @@ import {
 } from '../agent/services/interestScheduleService';
 import { getInstrumentById } from '../agent/services/investmentPortfolioService';
 import { applyLoanPayment } from '../agent/services/loanService';
-import { isTelegramConfigured, sendTelegramReport } from './telegramNotify';
+import { sendTelegramReport } from './telegramNotify';
 
 /**
- * The daily jobs that used to be node-cron jobs in the AI Agent bot: the 8am weigh-in reminder,
- * and the 9am fixed bills and interest accrual (Asia/Kuala_Lumpur).
+ * The daily jobs that used to be node-cron jobs in the AI Agent bot: the 9am fixed bills and
+ * interest accrual (Asia/Kuala_Lumpur).
  *
  * A host may put this server to sleep, so nothing waits for an exact minute. Each run (a timer
  * while the server is up, the server starting, or POST /api/scheduler/run from an outside ping)
@@ -62,17 +62,12 @@ const STALE_RUNNING_MS = 15 * 60_000;
 const FAILED_RETRY_MS = 30 * 60_000;
 const MAX_ATTEMPTS = 3;
 
-type JobName = 'weigh-in-reminder' | 'fixed-bills' | 'interest';
+type JobName = 'fixed-bills' | 'interest';
 
 interface DailyJob {
     name: JobName;
-    /** Due from this KL time, in minutes after midnight. */
+    /** Due from this KL time, in minutes after midnight. Missed days are run later, oldest first. */
     at: number;
-    /** Missed days are run later, oldest first. Otherwise only today, and only before `until`. */
-    catchUp: boolean;
-    until?: number;
-    /** Only a Telegram message: skipped while Telegram is not configured. */
-    telegramOnly?: boolean;
     /** Logs the day and returns its summary for scheduled_job_runs. Throws when nothing was done. */
     run: (date: string, today: string) => Promise<string>;
     /** Telegram alert when run() throws. */
@@ -120,7 +115,7 @@ function canTakeOver(row: LedgerRow, now: Date): boolean {
  * deploy doesn't redo days the bot already ran; after that, missed days back to CATCH_UP_DAYS.
  */
 function pendingRunDates(
-    job: Pick<DailyJob, 'at' | 'catchUp' | 'until'>,
+    job: Pick<DailyJob, 'at'>,
     now: Date,
     firstRunDate: string | null,
     rows: LedgerRow[]
@@ -128,9 +123,8 @@ function pendingRunDates(
     const { date: today, minutes } = klClock(now);
     const blocked = new Set(rows.filter((row) => !canTakeOver(row, now)).map((row) => row.runDate));
     const pastTime = minutes >= job.at;
-    if (!job.catchUp || firstRunDate == null) {
-        const dueToday = pastTime && (job.until == null || minutes < job.until);
-        return dueToday && !blocked.has(today) ? [today] : [];
+    if (firstRunDate == null) {
+        return pastTime && !blocked.has(today) ? [today] : [];
     }
     const end = pastTime ? today : addDays(today, -1);
     const windowStart = addDays(today, -CATCH_UP_DAYS);
@@ -352,35 +346,16 @@ async function runInterest(date: string, today: string): Promise<string> {
     return msg;
 }
 
-async function sendWeighInReminder(): Promise<string> {
-    const sent = await sendTelegramReport(
-        '⚖️ Morning weigh-in — step on the scale and reply like "weight 85.5" to log it.',
-        { markdown: false }
-    );
-    if (!sent) throw new Error('Telegram message not sent');
-    return 'sent';
-}
-
 const JOBS: DailyJob[] = [
-    {
-        name: 'weigh-in-reminder',
-        at: 8 * 60,
-        catchUp: false,
-        until: 12 * 60,
-        telegramOnly: true,
-        run: sendWeighInReminder,
-    },
     {
         name: 'fixed-bills',
         at: 9 * 60,
-        catchUp: true,
         run: runFixedBills,
         failureText: (day) => `🚨 *Automated Billing failed:* The fixed expenses for ${day} were NOT logged.`,
     },
     {
         name: 'interest',
         at: 9 * 60,
-        catchUp: true,
         run: runInterest,
         failureText: (day) => `🚨 *Interest accrual failed:* The scheduled interest for ${day} was NOT accrued.`,
     },
@@ -497,7 +472,6 @@ async function runDueJobsOnce(triggeredBy: string): Promise<JobRunResult[]> {
     let cachesReloaded = false;
 
     for (const job of JOBS) {
-        if (job.telegramOnly && !isTelegramConfigured()) continue;
         try {
             const ledger = await loadLedger(job.name, addDays(today, -CATCH_UP_DAYS));
             for (const date of pendingRunDates(job, now, ledger.firstRunDate, ledger.rows)) {
@@ -540,7 +514,7 @@ export function startScheduler(): void {
     }
     void runDueJobs('startup');
     setInterval(() => void runDueJobs('timer'), TICK_MS).unref();
-    console.log('Scheduler on: 8:00 weigh-in reminder, 9:00 fixed bills and interest (Asia/Kuala_Lumpur)');
+    console.log('Scheduler on: 9:00 fixed bills and interest (Asia/Kuala_Lumpur)');
 }
 
 // ponytail self-check: pure date math, no DB: npx tsx server/dailyJobs.ts
@@ -553,8 +527,7 @@ if (require.main === module) {
     // 2026-10-26 09:05 and 07:30 in KL (UTC+8)
     const at0905 = new Date('2026-10-26T01:05:00Z');
     const at0730 = new Date('2026-10-25T23:30:00Z');
-    const bills = { at: 9 * 60, catchUp: true };
-    const weighIn = { at: 8 * 60, catchUp: false, until: 12 * 60 };
+    const bills = { at: 9 * 60 };
     const row = (runDate: string, status: string, minutesAgo: number, attempts = 1): LedgerRow => ({
         runDate,
         status,
@@ -581,8 +554,5 @@ if (require.main === module) {
     eq(pendingRunDates(bills, at0905, '2026-10-26', [row('2026-10-26', 'failed', 10)]), [], 'failed day waits 30 minutes');
     eq(pendingRunDates(bills, at0905, '2026-10-26', [row('2026-10-26', 'failed', 40, 2)]), ['2026-10-26'], 'failed day is retried');
     eq(pendingRunDates(bills, at0905, '2026-10-26', [row('2026-10-26', 'failed', 40, 3)]), [], 'third failure gives up');
-    eq(pendingRunDates(weighIn, at0905, '2026-10-01', []), ['2026-10-26'], 'reminder today, no catch-up');
-    eq(pendingRunDates(weighIn, at0730, '2026-10-01', []), [], 'reminder waits for 8am');
-    eq(pendingRunDates(weighIn, new Date('2026-10-26T04:30:00Z'), '2026-10-01', []), [], 'reminder skipped after noon');
     console.log('dailyJobs self-check ok');
 }

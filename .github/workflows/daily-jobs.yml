@@ -1,14 +1,13 @@
 name: Daily jobs
 
-# Wakes the deployed Dashboard and runs its due daily jobs (8:00 weigh-in reminder, 9:00 fixed
-# bills and interest, Asia/Kuala_Lumpur). The server records each day it ran, so extra pings are
-# harmless; the later ones cover a GitHub schedule that ran late or not at all.
+# Wakes the deployed Dashboard and runs its due daily jobs (9:00 fixed bills and interest,
+# Asia/Kuala_Lumpur). The server records each day it ran, so extra pings are harmless; the later
+# ones cover a GitHub schedule that ran late or not at all.
 # Needs the repository secrets DASHBOARD_URL (e.g. https://your-app.onrender.com) and
 # SCHEDULER_SECRET (the same value as on the server).
 
 on:
   schedule:
-    - cron: '5 0 * * *' # 08:05 KL
     - cron: '5 1 * * *' # 09:05 KL
     - cron: '35 2 * * *' # 10:35 KL
     - cron: '5 6 * * *' # 14:05 KL

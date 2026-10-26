@@ -60,7 +60,6 @@ Open [http://localhost:5173](http://localhost:5173)
 
 The server runs the jobs the Telegram bot used to run with node-cron ([server/dailyJobs.ts](server/dailyJobs.ts)), all in Asia/Kuala_Lumpur time, and reports to you through the bot:
 
-- 8:00 weigh-in reminder (sent until noon, never caught up)
 - 9:00 fixed bills, with unit trust buys, funding transfers and loan payments
 - 9:00 interest accrual
 
@@ -70,7 +69,7 @@ To turn it on:
 
 1. Run `migrate-scheduled-job-runs.sql` once (the Supabase SQL editor works).
 2. On the deployed server only, set `SCHEDULER_ENABLED=1`, `SCHEDULER_SECRET` (`openssl rand -hex 32`) and `TELEGRAM_BOT_TOKEN` (the same token as the AI Agent).
-3. If the host sleeps when idle (Render free plan), add the GitHub repository secrets `DASHBOARD_URL` and `SCHEDULER_SECRET`. [.github/workflows/daily-jobs.yml](.github/workflows/daily-jobs.yml) then wakes the server at 8:05 and 9:05, with retries at 10:35 and 14:05. Any cron service that can send `POST /api/scheduler/run` with `Authorization: Bearer <SCHEDULER_SECRET>` works too.
+3. If the host sleeps when idle (Render free plan), add the GitHub repository secrets `DASHBOARD_URL` and `SCHEDULER_SECRET`. [.github/workflows/daily-jobs.yml](.github/workflows/daily-jobs.yml) then wakes the server at 9:05, with retries at 10:35 and 14:05. Any cron service that can send `POST /api/scheduler/run` with `Authorization: Bearer <SCHEDULER_SECRET>` works too.
 4. Check that `GET /api/health` shows `"scheduler": "on"`.
 
 ## API endpoints
