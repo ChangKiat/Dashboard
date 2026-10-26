@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 import type { FixedExpenseConfig } from '../api';
 import { formatHours, hourlyRate, useWorkHours } from '../hooks/useWorkHours';
@@ -63,6 +63,10 @@ export default function RecurringPage({ rows, variableCategories, salaryAfterTax
             .flatMap((row) => dueDatesBetween(row, today, until).map((date) => ({ row, date })))
             .sort((a, b) => a.date.localeCompare(b.date) || b.row.amount - a.row.amount);
     }, [rows, today]);
+    const [showAllUpcoming, setShowAllUpcoming] = useState(false);
+    const shownUpcoming = showAllUpcoming ? upcoming : upcoming.slice(0, UPCOMING_SHOWN);
+    const hiddenUpcoming = upcoming.slice(UPCOMING_SHOWN);
+    const upcomingTotal = upcoming.reduce((sum, u) => sum + u.row.amount, 0);
 
     let paidOffValue = '—';
     let paidOffSub = 'Needs your salary after tax';
@@ -119,12 +123,16 @@ export default function RecurringPage({ rows, variableCategories, salaryAfterTax
 
                 <section className="card recurring-upcoming" aria-labelledby="recurring-upcoming-title">
                     <h3 id="recurring-upcoming-title">Coming up</h3>
-                    <p className="recurring-sub">The next {UPCOMING_DAYS} days</p>
+                    <p className="recurring-sub">
+                        The next {UPCOMING_DAYS} days
+                        {upcoming.length > 0 &&
+                            ` · ${upcoming.length} ${upcoming.length === 1 ? 'payment' : 'payments'}, ${formatAmount(upcomingTotal)}`}
+                    </p>
                     {upcoming.length === 0 ? (
                         <p className="muted">Nothing due in the next {UPCOMING_DAYS} days.</p>
                     ) : (
                         <ol className="recurring-timeline">
-                            {upcoming.slice(0, UPCOMING_SHOWN).map(({ row, date }) => (
+                            {shownUpcoming.map(({ row, date }) => (
                                 <li key={`${row.id}-${date}`}>
                                     <span className="recurring-timeline-date">
                                         {date === today
@@ -143,13 +151,19 @@ export default function RecurringPage({ rows, variableCategories, salaryAfterTax
                             ))}
                         </ol>
                     )}
-                    {upcoming.length > UPCOMING_SHOWN && (
-                        <p className="recurring-sub">
-                            + {upcoming.length - UPCOMING_SHOWN} more, {formatAmount(
-                                upcoming.slice(UPCOMING_SHOWN).reduce((sum, u) => sum + u.row.amount, 0)
-                            )}{' '}
-                            in total
-                        </p>
+                    {hiddenUpcoming.length > 0 && (
+                        <button
+                            type="button"
+                            className="show-more-btn"
+                            aria-expanded={showAllUpcoming}
+                            onClick={() => setShowAllUpcoming((s) => !s)}
+                        >
+                            {showAllUpcoming
+                                ? 'Show fewer'
+                                : `Show ${hiddenUpcoming.length} more · ${formatAmount(
+                                      hiddenUpcoming.reduce((sum, u) => sum + u.row.amount, 0)
+                                  )}`}
+                        </button>
                     )}
                 </section>
             </div>
