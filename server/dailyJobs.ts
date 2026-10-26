@@ -22,17 +22,18 @@ import {
 } from '../agent/services/interestScheduleService';
 import { getInstrumentById } from '../agent/services/investmentPortfolioService';
 import { applyLoanPayment } from '../agent/services/loanService';
+import { runNightlyCheckIn } from './nightlyCheckIn';
 import { sendTelegramReport } from './telegramNotify';
 
 /**
- * The daily jobs that used to be node-cron jobs in the AI Agent bot: the 9am fixed bills and
- * interest accrual (Asia/Kuala_Lumpur).
+ * The daily jobs: the 9am fixed bills and interest accrual that used to be node-cron jobs in the
+ * AI Agent bot, and the 9:30pm check-in (Asia/Kuala_Lumpur).
  *
  * A host may put this server to sleep, so nothing waits for an exact minute. Each run (a timer
  * while the server is up, the server starting, or POST /api/scheduler/run from an outside ping)
  * runs every job that is due and not yet done. scheduled_job_runs holds one row per job per day,
  * and inserting that row is the lock: a day is never run twice, even by two servers at once, and
- * a day the server missed is caught up later with that day's date.
+ * a day the server missed is caught up later with that day's date (except a todayOnly job).
  */
 
 /** AI Agent/scripts/migrate-scheduled-job-runs.sql. Dashboard-only, so not in the vendored schema. */
@@ -62,12 +63,14 @@ const STALE_RUNNING_MS = 15 * 60_000;
 const FAILED_RETRY_MS = 30 * 60_000;
 const MAX_ATTEMPTS = 3;
 
-type JobName = 'fixed-bills' | 'interest';
+type JobName = 'fixed-bills' | 'interest' | 'nightly-check-in';
 
 interface DailyJob {
     name: JobName;
     /** Due from this KL time, in minutes after midnight. Missed days are run later, oldest first. */
     at: number;
+    /** Runs only on the day itself: a day the server missed is skipped, not caught up. */
+    todayOnly?: boolean;
     /** Logs the day and returns its summary for scheduled_job_runs. Throws when nothing was done. */
     run: (date: string, today: string) => Promise<string>;
     /** Telegram alert when run() throws. */
@@ -113,9 +116,10 @@ function canTakeOver(row: LedgerRow, now: Date): boolean {
 /**
  * Days `job` should run now, oldest first. A job that has never run starts today, so the first
  * deploy doesn't redo days the bot already ran; after that, missed days back to CATCH_UP_DAYS.
+ * A todayOnly job never looks back.
  */
 function pendingRunDates(
-    job: Pick<DailyJob, 'at'>,
+    job: Pick<DailyJob, 'at' | 'todayOnly'>,
     now: Date,
     firstRunDate: string | null,
     rows: LedgerRow[]
@@ -123,7 +127,7 @@ function pendingRunDates(
     const { date: today, minutes } = klClock(now);
     const blocked = new Set(rows.filter((row) => !canTakeOver(row, now)).map((row) => row.runDate));
     const pastTime = minutes >= job.at;
-    if (firstRunDate == null) {
+    if (job.todayOnly || firstRunDate == null) {
         return pastTime && !blocked.has(today) ? [today] : [];
     }
     const end = pastTime ? today : addDays(today, -1);
@@ -359,6 +363,12 @@ const JOBS: DailyJob[] = [
         run: runInterest,
         failureText: (day) => `🚨 *Interest accrual failed:* The scheduled interest for ${day} was NOT accrued.`,
     },
+    {
+        name: 'nightly-check-in',
+        at: 21 * 60 + 30,
+        todayOnly: true,
+        run: runNightlyCheckIn,
+    },
 ];
 
 async function loadLedger(job: JobName, since: string): Promise<{ firstRunDate: string | null; rows: LedgerRow[] }> {
@@ -514,7 +524,7 @@ export function startScheduler(): void {
     }
     void runDueJobs('startup');
     setInterval(() => void runDueJobs('timer'), TICK_MS).unref();
-    console.log('Scheduler on: 9:00 fixed bills and interest (Asia/Kuala_Lumpur)');
+    console.log('Scheduler on: 9:00 fixed bills and interest, 21:30 check-in (Asia/Kuala_Lumpur)');
 }
 
 // ponytail self-check: pure date math, no DB: npx tsx server/dailyJobs.ts
@@ -528,6 +538,7 @@ if (require.main === module) {
     const at0905 = new Date('2026-10-26T01:05:00Z');
     const at0730 = new Date('2026-10-25T23:30:00Z');
     const bills = { at: 9 * 60 };
+    const checkIn = { at: 21 * 60 + 30, todayOnly: true };
     const row = (runDate: string, status: string, minutesAgo: number, attempts = 1): LedgerRow => ({
         runDate,
         status,
@@ -554,5 +565,12 @@ if (require.main === module) {
     eq(pendingRunDates(bills, at0905, '2026-10-26', [row('2026-10-26', 'failed', 10)]), [], 'failed day waits 30 minutes');
     eq(pendingRunDates(bills, at0905, '2026-10-26', [row('2026-10-26', 'failed', 40, 2)]), ['2026-10-26'], 'failed day is retried');
     eq(pendingRunDates(bills, at0905, '2026-10-26', [row('2026-10-26', 'failed', 40, 3)]), [], 'third failure gives up');
+    // 2026-10-26 21:40 and 2026-10-27 00:10 in KL
+    const at2140 = new Date('2026-10-26T13:40:00Z');
+    const at0010 = new Date('2026-10-26T16:10:00Z');
+    eq(pendingRunDates(checkIn, at0905, '2026-10-20', []), [], 'check-in waits for 21:30');
+    eq(pendingRunDates(checkIn, at2140, '2026-10-20', []), ['2026-10-26'], 'check-in today only, no catch-up');
+    eq(pendingRunDates(checkIn, at2140, '2026-10-20', [row('2026-10-26', 'done', 5)]), [], 'check-in sent once');
+    eq(pendingRunDates(checkIn, at0010, '2026-10-20', []), [], 'missed check-in is not sent after midnight');
     console.log('dailyJobs self-check ok');
 }
