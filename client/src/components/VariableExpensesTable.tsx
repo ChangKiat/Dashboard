@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import type { ExpenseTransaction, IncomeTransaction } from '../api';
 import {
@@ -7,7 +7,7 @@ import {
     getBudgetUsagePct,
 } from '../utils/budgetStatus';
 import { BANK_CHARGES_CATEGORY, transferFeesToExpenseEntries } from '../utils/bankCharges';
-import VariableCategoryDetailModal from './VariableCategoryDetailModal';
+import VariableTransactionsList from './VariableTransactionsList';
 
 interface Row {
     category: string;
@@ -27,7 +27,7 @@ interface Props {
     budgetLeft?: number;
     /** Shown under the title, e.g. which months a multi-month period covers. */
     subtitle?: string;
-    /** Name of a multi-month period ("Aug – Oct 2026") for the category details. */
+    /** Name of a multi-month period ("Aug – Oct 2026") for the transaction list. */
     periodLabel?: string;
 }
 
@@ -42,26 +42,30 @@ export default function VariableExpensesTable({
     subtitle,
     periodLabel,
 }: Props) {
+    // The card picked to filter the list below; null lists every variable expense.
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+    const listRef = useRef<HTMLElement>(null);
 
-    const selectedRow = useMemo(
-        () => rows.find((r) => r.category === selectedCategory) ?? null,
-        [rows, selectedCategory]
+    // Every variable-category expense (trip-fund spends are already counted in the exchange),
+    // plus account-transfer fees, which count as Bank charges.
+    const allTransactions = useMemo(() => {
+        const categories = new Set(rows.map((r) => r.category));
+        const expenses = transactions.filter((t) => categories.has(t.category) && t.tripLeg !== 'fund');
+        return categories.has(BANK_CHARGES_CATEGORY)
+            ? [...expenses, ...transferFeesToExpenseEntries(incomes)]
+            : expenses;
+    }, [rows, transactions, incomes]);
+
+    const shownTransactions = useMemo(
+        () => (selectedCategory ? allTransactions.filter((t) => t.category === selectedCategory) : allTransactions),
+        [allTransactions, selectedCategory]
     );
 
-    const selectedTransactions = useMemo(() => {
-        if (!selectedCategory) return [];
-
-        const expenseEntries = transactions.filter(
-            (t) => t.category === selectedCategory && t.tripLeg !== 'fund'
-        );
-
-        if (selectedCategory !== BANK_CHARGES_CATEGORY) {
-            return expenseEntries;
-        }
-
-        return [...expenseEntries, ...transferFeesToExpenseEntries(incomes)];
-    }, [transactions, incomes, selectedCategory]);
+    const pickCategory = (category: string) => {
+        const next = selectedCategory === category ? null : category;
+        setSelectedCategory(next);
+        if (next) listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
 
     const alertCategories = useMemo(() => {
         return rows
@@ -118,8 +122,11 @@ export default function VariableExpensesTable({
                         <button
                             key={row.category}
                             type="button"
-                            className={`variable-expense-card variable-expense-card--clickable budget-row budget-row--${status}`}
-                            onClick={() => setSelectedCategory(row.category)}
+                            className={`variable-expense-card variable-expense-card--clickable budget-row budget-row--${status}${
+                                selectedCategory === row.category ? ' selected' : ''
+                            }`}
+                            aria-pressed={selectedCategory === row.category}
+                            onClick={() => pickCategory(row.category)}
                         >
                             <div className="variable-expense-card-header">
                                 <div className="variable-expense-card-title">
@@ -169,17 +176,14 @@ export default function VariableExpensesTable({
                     );
                 })}
             </div>
-            {selectedRow && selectedCategory && (
-                <VariableCategoryDetailModal
-                    category={selectedCategory}
-                    monthlyBudget={selectedRow.monthlyBudget}
-                    spending={selectedRow.spending}
-                    transactions={selectedTransactions}
-                    formatAmount={formatAmount}
-                    onClose={() => setSelectedCategory(null)}
-                    periodLabel={periodLabel}
-                />
-            )}
+            <VariableTransactionsList
+                ref={listRef}
+                transactions={shownTransactions}
+                category={selectedCategory}
+                onClear={() => setSelectedCategory(null)}
+                formatAmount={formatAmount}
+                periodText={periodLabel ? `in ${periodLabel}` : 'this month'}
+            />
         </div>
     );
 }

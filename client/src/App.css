@@ -3318,30 +3318,6 @@ div.payment-account-card-main:hover {
   color: var(--accent-text);
 }
 
-.category-detail-summary {
-  margin-bottom: 16px;
-  padding: 0 0 12px;
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid var(--border);
-  border-radius: 0;
-}
-
-.category-detail-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  margin: 0;
-}
-
-.category-detail-transactions-heading {
-  margin: 0 0 10px;
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--text-muted);
-  
-}
-
 .category-detail-search {
   margin-bottom: 12px;
 }
@@ -3450,67 +3426,6 @@ div.payment-account-card-main:hover {
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
   color: var(--text-muted);
-}
-
-.category-detail-transactions {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.category-detail-transaction {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 0;
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid var(--border);
-  border-radius: 0;
-}
-
-.category-detail-transaction-main {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.category-detail-transaction-desc {
-  font-size: 0.875rem;
-  color: var(--text);
-}
-
-.category-detail-transaction-date {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
-
-.category-detail-transaction-amount {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-}
-
-.category-detail-transaction-amounts {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.category-detail-transaction-net {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
 }
 
 .variable-expense-card.budget-row--ok {
@@ -5450,4 +5365,129 @@ div.payment-account-card-main:hover {
   margin: -10px 0 16px;
   font-size: 0.85rem;
   color: var(--text-muted);
+}
+
+/* Variable expenses: the picked card, and the transaction list under the cards */
+.variable-expense-card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.variable-txns {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  scroll-margin-top: 16px;
+}
+
+.variable-txns-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.variable-txns-header h3 {
+  margin: 0;
+}
+
+.variable-txns-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.variable-txns-tools input {
+  width: 220px;
+  max-width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.variable-txn-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.variable-txn {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.variable-txn:last-child {
+  border-bottom: 0;
+}
+
+.variable-txn-main {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.variable-txn-title,
+.variable-txn-meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.variable-txn-title {
+  flex: 0 1 auto;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text-heading);
+}
+
+.variable-txn-meta {
+  flex: 0 2 auto;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.variable-txn-figures {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  white-space: nowrap;
+}
+
+.variable-txn-amount {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text-heading);
+}
+
+.variable-txn-net {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.variable-txns .show-more-btn {
+  margin-top: 10px;
+}
+
+@media (max-width: 600px) {
+  .variable-txn-main {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1px;
+  }
+
+  .variable-txns-tools,
+  .variable-txns-tools input {
+    width: 100%;
+  }
 }
