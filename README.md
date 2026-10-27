@@ -24,12 +24,18 @@ For a fuller product/architecture summary, see [docs/PROJECT_OVERVIEW.md](docs/P
 
 The dashboard opens only for the Google accounts listed in `AUTH_ALLOWED_EMAILS`. Anyone else who signs in with Google is sent back to the login screen. Sessions last 14 days, and removing an email from the list ends its sessions at once.
 
-1. In [Google Cloud Console](https://console.cloud.google.com/), pick a project (the one with the bot's Calendar service account works) and open **APIs & Services → OAuth consent screen**. Choose **External**, fill in the app name and your email, and add your Google account under **Test users**. Leave it in **Testing**: only test users can get past Google then, on top of the email list.
-2. Open **APIs & Services → Credentials → Create credentials → OAuth client ID**, type **Web application**. Under **Authorized redirect URIs** add:
+1. In [Google Cloud Console](https://console.cloud.google.com/), pick a project (the one with the bot's Calendar service account works) and open **Google Auth Platform** (search for it; **APIs & Services → OAuth consent screen** opens it too). If it isn't set up yet, click **Get started**, enter an app name and your email, and pick **External** for the audience. A personal Gmail account can only pick External.
+2. **Branding**: the **App name** is what Google's sign-in page shows ("to continue to …"), so name it something like Personal Dashboard.
+3. **Audience**: leave **Publishing status** on **Testing**, and add your Google account under **Test users → + Add users**. While it's in Testing, only test users get past Google, on top of the email list.
+4. **Clients → + Create client**, application type **Web application**. Under **Authorized redirect URIs** add:
    - `http://localhost:5173/api/auth/google/callback` (development)
    - `https://<your-app>.onrender.com/api/auth/google/callback` (deployed)
-3. Put the client ID and secret in `.env` and on Render as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Set `GOOGLE_REDIRECT_URI` to the redirect URI for that place: the localhost one in `.env`, the Render one on Render.
-4. Set `AUTH_ALLOWED_EMAILS` to your Google email (comma-separated for more than one) and `AUTH_SESSION_SECRET` to the output of `openssl rand -hex 32`.
+
+   Click **Create** and copy the client secret right away: the console shows it only once. If you lose it, open the client and add a new secret.
+5. Put the client ID and secret in `.env` and on Render as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Set `GOOGLE_REDIRECT_URI` to the redirect URI for that place: the localhost one in `.env`, the Render one on Render.
+6. Set `AUTH_ALLOWED_EMAILS` to your Google email (comma-separated for more than one) and `AUTH_SESSION_SECRET` to the output of `openssl rand -hex 32`.
+
+**Data Access** needs nothing added: sign-in asks Google only for your email (`openid email`).
 
 Auth endpoints: `GET /api/auth/me`, `GET /api/auth/google` (starts sign-in), `GET /api/auth/google/callback` (Google returns here), `POST /api/auth/logout`.
 
@@ -64,7 +70,9 @@ To turn it on:
 
 1. Run `migrate-scheduled-job-runs.sql` once (the Supabase SQL editor works).
 2. On the deployed server only, set `SCHEDULER_ENABLED=1`, `SCHEDULER_SECRET` (`openssl rand -hex 32`) and `TELEGRAM_BOT_TOKEN` (the same token as the AI Agent).
-3. If the host sleeps when idle (Render free plan), add the GitHub repository secrets `DASHBOARD_URL` and `SCHEDULER_SECRET`. [.github/workflows/daily-jobs.yml](.github/workflows/daily-jobs.yml) then wakes the server at 9:05, with retries at 10:35 and 14:05, and at 21:35 and 22:35 for the check-in. Any cron service that can send `POST /api/scheduler/run` with `Authorization: Bearer <SCHEDULER_SECRET>` works too.
+3. If the host sleeps when idle (Render free plan), have something wake it at 9:05 and 21:35. Waking it is enough: the server runs the due jobs as soon as it starts, so a plain `GET /api/health` will do, and the cron service never needs `SCHEDULER_SECRET`.
+   - **Use [cron-job.org](https://cron-job.org)** (free, runs on the minute). Create a cron job with the URL `https://<your-app>.onrender.com/api/health`, a custom schedule of `5,35 9,21,22 * * *` and the time zone Asia/Kuala_Lumpur. That covers 9:05 and 21:35 with retries; the extra pings never run a day twice. If cron-job.org reports a timeout, that's fine: Render takes about 30 seconds to wake, longer than cron-job.org waits, and the request still wakes it.
+   - **Keep GitHub Actions as a backup only.** With the repository secrets `DASHBOARD_URL` and `SCHEDULER_SECRET`, [.github/workflows/daily-jobs.yml](.github/workflows/daily-jobs.yml) calls `POST /api/scheduler/run` at 9:05, 10:35, 14:05, 21:35 and 22:35. GitHub starts scheduled runs late, often by hours (on 2026-10-27 the 9:05 run started around 14:00), and a check-in ping that lands after midnight skips that evening.
 4. Check that `GET /api/health` shows `"scheduler": "on"`.
 
 ## API endpoints
