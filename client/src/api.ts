@@ -334,6 +334,20 @@ export interface AccountActivityResponse {
     entries: AccountActivityEntry[];
 }
 
+export interface BalancePoint {
+    date: string;
+    value: number;
+}
+
+/** A bank account's balance, or a credit card's amount owed, over time. */
+export interface AccountBalanceHistory {
+    id: number;
+    /** Latest transaction date, including ones before the balance baseline. */
+    lastActivity: string | null;
+    /** Starts the day before tracking began; then the end-of-day value on each day it changed. */
+    points: BalancePoint[];
+}
+
 export interface RebateCategoryResult {
     category: string;
     spend: number;
@@ -785,6 +799,10 @@ export function deletePaymentAccount(id: number) {
 
 export function fetchAccountActivity(id: number) {
     return fetchJson<AccountActivityResponse>(`/api/payment-accounts/${id}/activity`);
+}
+
+export function fetchAccountHistory() {
+    return fetchJson<{ entries: AccountBalanceHistory[] }>('/api/payment-accounts/history');
 }
 
 export function fetchAccountRebate(id: number, month: string) {

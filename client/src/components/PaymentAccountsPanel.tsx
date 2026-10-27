@@ -1,25 +1,33 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { PaymentAccount, PaymentAccountType, RebateConfig } from '../api';
+import type { AccountBalanceHistory, PaymentAccount, PaymentAccountType, RebateConfig } from '../api';
 import {
     createPaymentAccount,
     deletePaymentAccount,
+    fetchAccountHistory,
     fetchExpenseOverview,
     updatePaymentAccount,
 } from '../api';
+import Sparkline from '../charts/Sparkline';
+import { useAmountVisibility } from '../hooks/useAmountVisibility';
 import {
     buildRebateConfig,
     emptyRebateForm,
     rebateFormFromConfig,
     type RebateFormState,
 } from '../utils/rebateForm';
+import { addDays, dailyValues } from '../utils/accountHistory';
+import { todayInKL } from '../utils/dateRange';
+import { formatCompactMYR } from '../utils/money';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
 import AccountActivityModal from './AccountActivityModal';
+import AccountDetailPanel, { accountTypeLabel } from './AccountDetailPanel';
 import AccountIcon from './AccountIcon';
 import CreditAccountForm, { type CreditSettingsTab } from './CreditAccountForm';
 import PortfolioModal from './PortfolioModal';
 import RecordModal from './RecordModal';
-import RowActions from './RowActions';
+import SummaryCard from './SummaryCard';
+import { BankIcon, CardIcon, TrendUpIcon } from './icons';
 
 const DEFAULT_EXPENSE_CATEGORIES = [
     'Drink',
@@ -49,106 +57,60 @@ function sortByName(accounts: PaymentAccount[]) {
     );
 }
 
-function AccountBalanceStats({
-    account,
-    formatAmount,
-}: {
-    account: PaymentAccount;
-    formatAmount: (amount: number) => string;
-}) {
-    if (account.accountType === 'credit') {
-        return (
-            <div className="payment-account-stats">
-                <span className="payment-account-stat">
-                    Limit {formatAmount(account.creditLimit ?? 0)}
-                </span>
-                <span className="payment-account-stat">
-                    Used {formatAmount(account.amountOwed ?? 0)}
-                </span>
-                <span
-                    className={`payment-account-stat payment-account-balance ${
-                        (account.availableCredit ?? 0) < 0 ? 'negative' : 'positive'
-                    }`}
-                >
-                    Avail {formatAmount(account.availableCredit ?? 0)}
-                </span>
-            </div>
-        );
-    }
-    if (account.accountType === 'investment') {
-        const deposit = account.totalCostBasis ?? 0;
-        const pnl = account.unrealizedGain ?? 0;
-        const holdingNames = account.holdingNames ?? [];
-        return (
-            <>
-                <div className="payment-account-stats">
-                    <span className="payment-account-stat payment-account-balance positive">
-                        Deposit {formatAmount(deposit)}
-                    </span>
-                    <span
-                        className={`payment-account-stat payment-account-balance ${
-                            pnl < 0 ? 'negative' : 'positive'
-                        }`}
-                    >
-                        P/L {formatAmount(pnl)}
-                    </span>
-                </div>
-                {holdingNames.length > 0 && (
-                    <span className="payment-account-holdings">{holdingNames.join(' · ')}</span>
-                )}
-            </>
-        );
-    }
-    return (
-        <div className="payment-account-stats">
-            <span
-                className={`payment-account-stat payment-account-balance ${
-                    (account.balance ?? 0) < 0 ? 'negative' : 'positive'
-                }`}
-            >
-                {formatAmount(account.balance ?? 0)}
-            </span>
-            {(account.fdLocked ?? 0) > 0 && (
-                <>
-                    <span
-                        className={`payment-account-stat payment-account-balance ${
-                            (account.available ?? 0) < 0 ? 'negative' : 'positive'
-                        }`}
-                    >
-                        Avail {formatAmount(account.available ?? 0)}
-                    </span>
-                    <span className="payment-account-stat">FD {formatAmount(account.fdLocked ?? 0)}</span>
-                </>
-            )}
-        </div>
-    );
+const SPARKLINE_DAYS = 90;
+
+function plural(count: number, word: string) {
+    return `${count} ${word}${count === 1 ? '' : 's'}`;
 }
 
-interface ColumnProps {
+/** What a row shows: balance, amount owed on a card, or an investment's value. */
+function rowAmount(account: PaymentAccount): number {
+    if (account.accountType === 'credit') return account.amountOwed ?? 0;
+    if (account.accountType === 'investment') return account.nav ?? account.balance ?? 0;
+    return account.balance ?? 0;
+}
+
+/** The last 90 days, through any future-dated entry, so the dot matches the amount beside it. */
+function sparklineValues(history: AccountBalanceHistory | undefined, today: string): number[] | null {
+    if (!history || history.points.length === 0) return null;
+    const lastPoint = history.points[history.points.length - 1].date;
+    const end = lastPoint > today ? lastPoint : today;
+    return dailyValues(history.points, addDays(end, 1 - SPARKLINE_DAYS), end).map((p) => p.value);
+}
+
+interface GroupProps {
     title: string;
     accountType: PaymentAccountType;
     accounts: PaymentAccount[];
+    history: Map<number, AccountBalanceHistory>;
+    selectedId: number | null;
     formatAmount: (amount: number) => string;
     onAdd: (accountType: PaymentAccountType) => void;
-    onEdit: (account: PaymentAccount) => void;
-    onDelete: (account: PaymentAccount) => void;
-    onView: (account: PaymentAccount) => void;
+    onSelect: (account: PaymentAccount) => void;
 }
 
-function PaymentAccountColumn({
+function AccountGroup({
     title,
     accountType,
     accounts,
+    history,
+    selectedId,
     formatAmount,
     onAdd,
-    onEdit,
-    onDelete,
-    onView,
-}: ColumnProps) {
+    onSelect,
+}: GroupProps) {
+    const today = todayInKL();
+    const isCredit = accountType === 'credit';
+    const total = accounts.reduce((sum, account) => sum + rowAmount(account), 0);
+
     return (
-        <div className="payment-accounts-column">
-            <div className="payment-accounts-column-header">
-                <h4>{title}</h4>
+        <section className="card account-group" aria-label={title}>
+            <div className="account-group-header">
+                <h3>{title}</h3>
+                <span className="account-group-total">
+                    {formatAmount(total)}
+                    {isCredit && <small> owed</small>}
+                </span>
                 <button type="button" className="btn-add" onClick={() => onAdd(accountType)}>
                     + Add
                 </button>
@@ -156,41 +118,64 @@ function PaymentAccountColumn({
             {accounts.length === 0 ? (
                 <p className="muted">No accounts yet.</p>
             ) : (
-                <ul className="payment-accounts-list">
-                    {accounts.map((account) => (
-                        <li key={account.id} className="payment-account-card">
-                            <button
-                                type="button"
-                                className="payment-account-card-main"
-                                onClick={() => onView(account)}
-                                title={
-                                    account.accountType === 'investment'
-                                        ? 'Open the portfolio'
-                                        : 'Open this account’s activity'
-                                }
-                            >
-                                <span className="payment-account-title">
+                <ul className="account-rows">
+                    {accounts.map((account) => {
+                        const amount = rowAmount(account);
+                        const spark = sparklineValues(history.get(account.id), today);
+                        const gain = account.unrealizedGain ?? 0;
+                        const selected = account.id === selectedId;
+                        return (
+                            <li key={account.id}>
+                                <button
+                                    type="button"
+                                    className={`account-row${selected ? ' selected' : ''}`}
+                                    aria-pressed={selected}
+                                    onClick={() => onSelect(account)}
+                                >
                                     <AccountIcon name={account.name} accountType={account.accountType} />
-                                    <span className="payment-account-name">{account.name}</span>
-                                </span>
-                                <AccountBalanceStats account={account} formatAmount={formatAmount} />
-                            </button>
-                            <RowActions
-                                onEdit={() => onEdit(account)}
-                                onDelete={() => onDelete(account)}
-                                deleteLabel={`"${account.name}"`}
-                            />
-                        </li>
-                    ))}
+                                    <span className="account-row-name">
+                                        <strong>{account.name}</strong>
+                                        <span>{accountTypeLabel(account)}</span>
+                                    </span>
+                                    {spark ? (
+                                        <Sparkline values={spark} tone={isCredit ? 'owed' : 'balance'} />
+                                    ) : (
+                                        <span className="sparkline" aria-hidden="true" />
+                                    )}
+                                    <span
+                                        className={`account-row-amount${
+                                            !isCredit && amount < 0 ? ' negative' : ''
+                                        }`}
+                                    >
+                                        {formatAmount(amount)}
+                                        {isCredit && <small>owed</small>}
+                                        {accountType === 'investment' && (
+                                            <small className={gain < 0 ? 'account-activity-out' : 'account-activity-in'}>
+                                                {gain < 0 ? '−' : '+'}
+                                                {formatAmount(Math.abs(gain))}
+                                            </small>
+                                        )}
+                                    </span>
+                                </button>
+                            </li>
+                        );
+                    })}
                 </ul>
             )}
-        </div>
+        </section>
     );
 }
 
-/** Every account with its balance: open one for its activity (or portfolio), or add, edit and delete. */
+/**
+ * Accounts grouped by type with totals and a 90-day trend; the picked one shows its balance over
+ * time and every transaction. Add, edit and delete live here too.
+ */
 export default function PaymentAccountsPanel({ month, onChanged, formatAmount }: Props) {
-    const { accounts, refresh } = usePaymentAccounts();
+    const { accounts, loading: accountsLoading, refresh } = usePaymentAccounts();
+    const { hidden } = useAmountVisibility();
+    const [history, setHistory] = useState<Map<number, AccountBalanceHistory>>(new Map());
+    const [selectedId, setSelectedId] = useState<number | null>(null);
+    const detailRef = useRef<HTMLDivElement>(null);
     const [modalMode, setModalMode] = useState<ModalMode>('closed');
     const [viewingAccount, setViewingAccount] = useState<PaymentAccount | null>(null);
     const [portfolioAccount, setPortfolioAccount] = useState<PaymentAccount | null>(null);
@@ -234,6 +219,52 @@ export default function PaymentAccountsPanel({ month, onChanged, formatAmount }:
         () => sortByName(accounts.filter((a) => a.accountType === 'investment')),
         [accounts]
     );
+
+    // Reloads whenever the accounts do (after a save, or the header's Refresh).
+    useEffect(() => {
+        if (accounts.length === 0) return;
+        let cancelled = false;
+        fetchAccountHistory()
+            .then((res) => {
+                if (!cancelled) setHistory(new Map(res.entries.map((h) => [h.id, h])));
+            })
+            .catch(() => {
+                /* rows still show, just without trend lines */
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [accounts]);
+
+    const ordered = [...debitAccounts, ...creditAccounts, ...investmentAccounts];
+    const selected = ordered.find((a) => a.id === selectedId) ?? ordered[0] ?? null;
+
+    const totals = useMemo(() => {
+        let assets = 0;
+        let owed = 0;
+        let available = 0;
+        for (const account of accounts) {
+            if (account.accountType === 'credit') {
+                owed += account.amountOwed ?? 0;
+                available += account.availableCredit ?? 0;
+            } else {
+                assets += rowAmount(account);
+            }
+        }
+        return { assets, owed, available, net: assets - owed };
+    }, [accounts]);
+
+    const formatAxis = (value: number) => (hidden ? '••' : formatCompactMYR(value));
+
+    const selectAccount = (account: PaymentAccount) => {
+        setSelectedId(account.id);
+        // One column on narrower screens: bring the details into view.
+        if (window.matchMedia('(max-width: 1279px)').matches) {
+            requestAnimationFrame(() =>
+                detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            );
+        }
+    };
 
     const handleChanged = async () => {
         await refresh();
@@ -384,42 +415,83 @@ export default function PaymentAccountsPanel({ month, onChanged, formatAmount }:
         }
     };
 
+    const loadingFirstTime = accountsLoading && accounts.length === 0;
+    const groupProps = {
+        history,
+        selectedId: selected?.id ?? null,
+        formatAmount,
+        onAdd: openCreate,
+        onSelect: selectAccount,
+    };
+
     return (
-        <div className="card payment-accounts-panel">
-            <h3>Account balances</h3>
-            <p className="payment-accounts-hint">Choose an account to see its activity, or an investment for its portfolio.</p>
+        <div className="accounts-page">
             {actionError && <p className="error">{actionError}</p>}
-            <div className="payment-accounts-split">
-                <PaymentAccountColumn
-                    title="Accounts"
-                    accountType="account"
-                    accounts={debitAccounts}
-                    formatAmount={formatAmount}
-                    onAdd={openCreate}
-                    onEdit={openEdit}
-                    onDelete={handleDelete}
-                    onView={setViewingAccount}
+            <div className="accounts-summary-grid">
+                <SummaryCard
+                    tone="income"
+                    icon={<BankIcon size={26} />}
+                    label="Assets"
+                    value={loadingFirstTime ? '…' : formatAmount(totals.assets)}
+                    sub={`${plural(debitAccounts.length, 'account')} and ${plural(
+                        investmentAccounts.length,
+                        'investment'
+                    )}`}
                 />
-                <PaymentAccountColumn
-                    title="Credit accounts"
-                    accountType="credit"
-                    accounts={creditAccounts}
-                    formatAmount={formatAmount}
-                    onAdd={openCreate}
-                    onEdit={openEdit}
-                    onDelete={handleDelete}
-                    onView={setViewingAccount}
+                <SummaryCard
+                    tone="spend"
+                    icon={<CardIcon size={26} />}
+                    label="Owed on cards"
+                    value={loadingFirstTime ? '…' : formatAmount(totals.owed)}
+                    sub={`${plural(creditAccounts.length, 'credit card')} · ${formatAmount(
+                        totals.available
+                    )} available`}
                 />
-                <PaymentAccountColumn
-                    title="Investments"
-                    accountType="investment"
-                    accounts={investmentAccounts}
-                    formatAmount={formatAmount}
-                    onAdd={openCreate}
-                    onEdit={openEdit}
-                    onDelete={handleDelete}
-                    onView={(account) => setPortfolioAccount(account)}
+                <SummaryCard
+                    tone="net"
+                    icon={<TrendUpIcon size={26} />}
+                    label="Net worth"
+                    value={loadingFirstTime ? '…' : formatAmount(totals.net)}
+                    variant={totals.net < 0 ? 'danger' : 'default'}
+                    sub="What you have, minus what you owe on cards"
                 />
+            </div>
+
+            <div className="accounts-layout">
+                <div className="accounts-groups">
+                    <AccountGroup title="Accounts" accountType="account" accounts={debitAccounts} {...groupProps} />
+                    <AccountGroup
+                        title="Credit cards"
+                        accountType="credit"
+                        accounts={creditAccounts}
+                        {...groupProps}
+                    />
+                    <AccountGroup
+                        title="Investments"
+                        accountType="investment"
+                        accounts={investmentAccounts}
+                        {...groupProps}
+                    />
+                </div>
+                {selected ? (
+                    <AccountDetailPanel
+                        ref={detailRef}
+                        account={selected}
+                        history={history.get(selected.id)}
+                        formatAmount={formatAmount}
+                        formatAxis={formatAxis}
+                        onEdit={() => openEdit(selected)}
+                        onDelete={() => void handleDelete(selected)}
+                        onOpenStatement={() => setViewingAccount(selected)}
+                        onOpenPortfolio={() => setPortfolioAccount(selected)}
+                    />
+                ) : (
+                    <section className="card account-detail">
+                        <p className="muted">
+                            {loadingFirstTime ? 'Loading accounts…' : 'Add an account to see its balance and activity here.'}
+                        </p>
+                    </section>
+                )}
             </div>
             <RecordModal
                 title={modalMode === 'create' ? 'Add payment account' : 'Edit payment account'}

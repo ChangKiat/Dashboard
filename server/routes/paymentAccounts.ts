@@ -22,6 +22,7 @@ import {
 } from '../../agent/services/investmentPortfolioService';
 import {
     buildAccountActivity,
+    buildBalanceHistory,
     computeAccountBalances,
 } from '../accountBalances';
 import { parseMonth } from '../dateUtils';
@@ -103,6 +104,28 @@ router.get('/', async (_req, res) => {
         res.json({ entries });
     } catch (err) {
         console.error('GET /api/payment-accounts', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+    }
+});
+
+/** Balance history for every active bank account and credit card (not investments), in one pass. */
+router.get('/history', async (_req, res) => {
+    try {
+        const [accounts, { expenseRows, incomeRows, investedExpenseIds }] = await Promise.all([
+            listActivePaymentAccounts(),
+            loadAllTransactions(),
+        ]);
+        const entries = accounts
+            .filter((account) => account.accountType !== 'investment')
+            .map((account) =>
+                buildBalanceHistory(
+                    account,
+                    buildAccountActivity(account, expenseRows, incomeRows, investedExpenseIds)
+                )
+            );
+        res.json({ entries });
+    } catch (err) {
+        console.error('GET /api/payment-accounts/history', err);
         res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
     }
 });

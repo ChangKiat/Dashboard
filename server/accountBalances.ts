@@ -300,9 +300,10 @@ export function buildAccountActivity(
             runningOwed =
                 (runningOwed ?? account.initialBalance) +
                 (entry.direction === 'out' ? entry.amount : -entry.amount);
-            runningOwed = Math.max(0, runningOwed);
+            // Clamp what's shown, not the sum: like computeAccountBalances, an overpayment
+            // offsets later charges.
             runningByKey.set(`${entry.date}:${entry.id}:${entry.type}`, {
-                runningOwed,
+                runningOwed: Math.max(0, runningOwed),
             });
         }
     }
@@ -311,4 +312,52 @@ export function buildAccountActivity(
         ...entry,
         ...runningByKey.get(`${entry.date}:${entry.id}:${entry.type}`),
     }));
+}
+
+export type BalancePoint = { date: string; value: number };
+
+export type AccountBalanceHistory = {
+    id: number;
+    /** Latest transaction date, including ones before the balance baseline. */
+    lastActivity: string | null;
+    /** Balance (or amount owed, for credit cards) at the end of each day it changed. */
+    points: BalancePoint[];
+};
+
+function previousDay(date: string): string {
+    const d = new Date(`${date}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 1);
+    return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Day-by-day balance from `buildAccountActivity` entries. The first point is the day before tracking
+ * starts — the baseline date for accounts, the first transaction for credit cards — holding the
+ * starting balance; later points are end-of-day values.
+ */
+export function buildBalanceHistory(
+    account: PaymentAccount,
+    entries: AccountActivityEntry[]
+): AccountBalanceHistory {
+    // Same order the running balances were summed in, so the last entry of a day holds its end value.
+    const tracked = entries
+        .filter((entry) => !entry.beforeBaseline)
+        .sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
+    const isCredit = account.accountType === 'credit';
+    const baseline = account.balanceBaselineDate || undefined;
+    const firstEntry = tracked[0]?.date;
+    const start =
+        (isCredit ? firstEntry ?? baseline : baseline ?? firstEntry) ?? new Date().toISOString().slice(0, 10);
+    const points: BalancePoint[] = [{ date: previousDay(start), value: account.initialBalance }];
+
+    for (const entry of tracked) {
+        const value = isCredit ? entry.runningOwed : entry.runningBalance;
+        if (value == null) continue;
+        const rounded = Math.round(value * 100) / 100;
+        const last = points[points.length - 1];
+        if (last.date === entry.date) last.value = rounded;
+        else points.push({ date: entry.date, value: rounded });
+    }
+
+    return { id: account.id, lastActivity: entries[0]?.date ?? null, points };
 }
