@@ -6,6 +6,7 @@ import { useAmountVisibility, useFormatMYR } from '../hooks/useAmountVisibility'
 import { currentMonthInKL, useMonth } from '../hooks/useMonth';
 import { useRefreshSignal } from '../hooks/useRefreshSignal';
 import { BUDGET_STATUS_LABELS, getBudgetStatus } from '../utils/budgetStatus';
+import CategoryIcon from './CategoryIcon';
 import { PieIcon, TrendUpIcon, WalletIcon } from './icons';
 import MonthPicker from './MonthPicker';
 import SummaryCard from './SummaryCard';
@@ -166,6 +167,7 @@ export default function BudgetsSection() {
                             const inputId = `budget-${row.category.replace(/\W+/g, '-')}`;
                             return (
                                 <li key={row.category} className={`budget-row-item budget-row-item--${status}`}>
+                                    <CategoryIcon category={row.category} />
                                     <div className="budget-row-main">
                                         <span className="budget-row-name">
                                             {row.category}

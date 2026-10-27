@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useMemo, useState } from 'react';
 
 import type { ExpenseTransaction } from '../api';
+import CategoryIcon from './CategoryIcon';
 
 const PREVIEW_COUNT = 15;
 
@@ -100,7 +101,8 @@ const VariableTransactionsList = forwardRef<HTMLElement, Props>(function Variabl
                         <p className="trip-day-heading">{formatDayHeading(day.date)}</p>
                         <ul className="variable-txn-list">
                             {day.rows.map((tx) => (
-                                <li key={tx.id} className="variable-txn">
+                                <li key={tx.id} className="variable-txn variable-txn--with-icon">
+                                    <CategoryIcon category={tx.category} size="sm" />
                                     <span className="variable-txn-main">
                                         <span className="variable-txn-title" title={tx.description}>
                                             {tx.description}

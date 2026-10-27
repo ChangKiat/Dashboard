@@ -7,6 +7,7 @@ import {
     getBudgetUsagePct,
 } from '../utils/budgetStatus';
 import { BANK_CHARGES_CATEGORY, transferFeesToExpenseEntries } from '../utils/bankCharges';
+import CategoryIcon from './CategoryIcon';
 import VariableTransactionsList from './VariableTransactionsList';
 
 interface Row {
@@ -129,19 +130,18 @@ export default function VariableExpensesTable({
                             onClick={() => pickCategory(row.category)}
                         >
                             <div className="variable-expense-card-header">
+                                <CategoryIcon category={row.category} />
                                 <div className="variable-expense-card-title">
-                                    <h4>{row.category}</h4>
-                                    {statusLabel && (
-                                        <span className={`budget-badge budget-badge--${status}`}>
-                                            {statusLabel}
-                                        </span>
-                                    )}
+                                    <h4 title={row.category}>{row.category}</h4>
+                                    <span
+                                        className={`variable-expense-card-amount${status === 'over' ? ' over-budget-text' : status === 'warning' ? ' near-budget-text' : ''}`}
+                                    >
+                                        {formatAmount(row.spending)}
+                                    </span>
                                 </div>
-                                <span
-                                    className={`variable-expense-card-amount${status === 'over' ? ' over-budget-text' : status === 'warning' ? ' near-budget-text' : ''}`}
-                                >
-                                    {formatAmount(row.spending)}
-                                </span>
+                                {statusLabel && (
+                                    <span className={`budget-badge budget-badge--${status}`}>{statusLabel}</span>
+                                )}
                             </div>
                             <div className="variable-expense-card-meta">
                                 <span>

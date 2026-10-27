@@ -318,3 +318,64 @@ export function BankIcon(props: IconProps) {
         </Icon>
     );
 }
+
+export function CoffeeIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="M17 8h1a4 4 0 0 1 0 8h-1" />
+            <path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4z" />
+            <path d="M6 2v3M10 2v3M14 2v3" />
+        </Icon>
+    );
+}
+
+export function TicketIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="M3 9a3 3 0 0 0 0 6v3a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a3 3 0 0 1 0-6V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2z" />
+            <path d="M13 5v2M13 11v2M13 17v2" />
+        </Icon>
+    );
+}
+
+export function ShoppingBagIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+            <path d="M3 6h18M16 10a4 4 0 0 1-8 0" />
+        </Icon>
+    );
+}
+
+export function ShieldIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+        </Icon>
+    );
+}
+
+export function BoltIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="M13 2 3 14h9l-1 8 10-12h-9z" />
+        </Icon>
+    );
+}
+
+export function HeartIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7z" />
+        </Icon>
+    );
+}
+
+export function TagIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="M12 2H2v10l9.3 9.3a2 2 0 0 0 2.8 0l7.2-7.2a2 2 0 0 0 0-2.8z" />
+            <path d="M7 7h.01" />
+        </Icon>
+    );
+}

@@ -3254,7 +3254,7 @@ div.payment-account-card-main:hover {
 
 .variable-expense-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 270px), 1fr));
   gap: 12px;
   flex: 1;
 }
@@ -3409,8 +3409,7 @@ div.payment-account-card-main:hover {
 
 .variable-expense-card-header {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  align-items: center;
   gap: 12px;
   margin-bottom: 12px;
 }
@@ -3418,16 +3417,25 @@ div.payment-account-card-main:hover {
 .variable-expense-card-title {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
+  flex: 1;
+  gap: 2px;
   min-width: 0;
 }
 
 .variable-expense-card-header h4 {
   margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 0.9rem;
   font-weight: 500;
   color: var(--text);
+}
+
+.variable-expense-card-header .budget-badge {
+  align-self: flex-start;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .variable-expense-card-amount {
@@ -3440,7 +3448,9 @@ div.payment-account-card-main:hover {
 
 .variable-expense-card-meta {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, auto);
+  justify-content: space-between;
+  white-space: nowrap;
   gap: 8px;
   font-size: 0.8rem;
   color: var(--text);
@@ -4507,14 +4517,25 @@ div.payment-account-card-main:hover {
   gap: 12px;
 }
 
+/* The category badge sits beside the name and bar; everything else lines up after it. */
 .budget-row-item {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px 14px;
   padding: 16px 18px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 16px;
+}
+
+.budget-row-item > * {
+  grid-column: 2;
+}
+
+.budget-row-item > .category-icon {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  align-self: center;
 }
 
 .budget-row-main,
@@ -5751,4 +5772,38 @@ div.payment-account-card-main:hover {
     width: 100%;
     justify-content: flex-start;
   }
+}
+
+/* Category badges: one tint per kind of spending, shared by both themes' series colours */
+.category-icon {
+  --category-tint: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--category-tint) 15%, transparent);
+  color: var(--category-tint);
+}
+
+.category-icon--sm {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+}
+
+.category-icon--orange { --category-tint: var(--series-orange); }
+.category-icon--amber { --category-tint: var(--series-amber); }
+.category-icon--purple { --category-tint: var(--series-purple); }
+.category-icon--pink { --category-tint: var(--series-pink); }
+.category-icon--blue { --category-tint: var(--series-blue); }
+.category-icon--teal { --category-tint: var(--series-teal); }
+.category-icon--green { --category-tint: var(--series-green); }
+.category-icon--fuchsia { --category-tint: var(--series-fuchsia); }
+
+/* Variable expense rows: the category badge before the description */
+.variable-txn--with-icon {
+  grid-template-columns: auto minmax(0, 1fr) auto;
 }
