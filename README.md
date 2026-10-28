@@ -141,7 +141,16 @@ Transactions and income are viewed, added, and edited per day via the spending c
 
 Variable expense categories and salary come from the AI Agent database (`budgets` table and `user_settings.salary_after_tax`). The API loads categories at startup via `loadExpenseCategories()`.
 
-## Health tab
+## Health tabs
+
+Health has its own sidebar group, split like the expense tabs. Each tab has a month picker and four summary cards on top:
+
+- **Health**: body weight, training days, protein hit rate and net calories, then the body weight and calories burned charts
+- **Health calendar**: training streak, steps, calories burned and meal days, then the activity calendar with the day panel for logging
+- **Workouts**: sessions, training days, streak and personal records set this month, then volume, top exercises, lift progress and the records table
+- **Meals**: calories and protein per day against their targets, protein hit rate and net calories, then the macros, adherence and net calorie charts
+
+Details:
 
 - Activity calendar with inline day summary panel; workouts grouped by session in the day panel (e.g. Shoulder + Abs day with exercises listed underneath); add workouts per day with optional session label or join an existing same-day session
 - Workout entries use `session_id` and `session_label` in the database — run `AI Agent/scripts/migrate-workout-sessions.sql` on older DBs

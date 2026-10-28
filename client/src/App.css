@@ -2677,59 +2677,43 @@ div.payment-account-card-main:hover {
   width: 56px;
 }
 
-.health-section {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.health-layout {
+/* Charts on the Health tabs: one column, then a wide and a narrow one */
+.health-grid {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
-  grid-template-columns: 1fr;
-}
-
-.health-layout .card.full-width {
-  margin-top: 0;
-}
-
-.health-calendar,
-.health-day-panel,
-.health-summary-row,
-.health-volume-chart,
-.health-top-exercises,
-.health-weight-trend,
-.health-pr-table,
-.health-macros-chart,
-.health-macro-adherence,
-.health-net-calories-chart,
-.health-body-weight-chart,
-.health-burn-chart {
-  min-width: 0;
-}
-
-.health-summary-row {
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-}
-
-.health-day-panel {
-  align-self: start;
-}
-
-.health-summary-row {
-  grid-column: 1 / -1;
-  grid-row: 1;
-}
-
-.health-calendar {
-  grid-column: 1 / -1;
-  grid-row: 2;
 }
 
 .health-workout-parts,
 .health-nutrition-parts,
 .health-body-parts {
   display: contents;
+}
+
+/* Health calendar: the month beside the picked day's entries */
+.health-calendar-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.health-calendar-row > * {
+  min-width: 0;
+}
+
+@media (min-width: 1200px) {
+  .health-grid {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  }
+
+  .health-net-calories-chart {
+    grid-column: 1 / -1;
+  }
+
+  .health-calendar-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
 }
 
 .day-body-weight-log {
@@ -2791,103 +2775,6 @@ div.payment-account-card-main:hover {
 .macro-adherence-note {
   margin: 0;
   font-size: 0.8rem;
-}
-
-@media (min-width: 768px) {
-  .health-layout {
-    grid-template-columns: 3fr 2fr;
-  }
-
-  .health-summary-row {
-    grid-column: 1 / -1;
-    grid-row: 1;
-  }
-
-  .health-calendar {
-    grid-column: 1;
-    grid-row: 2;
-  }
-
-  .health-day-panel {
-    grid-column: 2;
-    grid-row: 2;
-  }
-
-  .health-volume-chart { grid-column: 1; grid-row: 3; }
-  .health-top-exercises { grid-column: 2; grid-row: 3; }
-  .health-weight-trend { grid-column: 1; grid-row: 4; }
-  .health-pr-table { grid-column: 2; grid-row: 4; }
-  .health-macros-chart { grid-column: 1 / -1; grid-row: 5; }
-  .health-macro-adherence { grid-column: 1 / -1; grid-row: 6; }
-  .health-net-calories-chart { grid-column: 1 / -1; grid-row: 7; }
-  .health-body-weight-chart { grid-column: 1; grid-row: 8; }
-  .health-burn-chart { grid-column: 2; grid-row: 8; }
-}
-
-@media (min-width: 1024px) {
-  .health-layout {
-    grid-template-columns: 2fr 1fr 1fr;
-  }
-
-  .health-summary-row {
-    grid-column: 1 / -1;
-    grid-row: 1;
-  }
-
-  .health-calendar {
-    grid-column: 1;
-    grid-row: 2;
-  }
-
-  .health-day-panel {
-    grid-column: 2 / -1;
-    grid-row: 2;
-  }
-
-  .health-volume-chart {
-    grid-column: 1;
-    grid-row: 3;
-  }
-
-  .health-top-exercises {
-    grid-column: 2;
-    grid-row: 3;
-  }
-
-  .health-weight-trend {
-    grid-column: 3;
-    grid-row: 3;
-  }
-
-  .health-pr-table {
-    grid-column: 1 / -1;
-    grid-row: 4;
-  }
-
-  .health-macros-chart {
-    grid-column: 1 / 3;
-    grid-row: 5;
-  }
-
-  .health-macro-adherence {
-    grid-column: 3;
-    grid-row: 5;
-  }
-
-  .health-net-calories-chart {
-    grid-column: 1 / -1;
-    grid-row: 6;
-  }
-
-  .health-body-weight-chart {
-    grid-column: 1 / 3;
-    grid-row: 7;
-  }
-
-  .health-burn-chart {
-    grid-column: 3;
-    grid-row: 7;
-  }
 }
 
 .activity-calendar {

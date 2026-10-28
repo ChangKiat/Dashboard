@@ -5,6 +5,9 @@ export type TabId =
     | 'calendar'
     | 'variable'
     | 'health'
+    | 'healthCalendar'
+    | 'workouts'
+    | 'meals'
     | 'car'
     | 'tax'
     | 'budgets'
@@ -19,7 +22,8 @@ const STORAGE_KEY = 'dashboard-active-tab';
 
 /** Sidebar groups, top to bottom. A null label means no heading. */
 export const TAB_GROUPS: { label: string | null; tabs: TabId[] }[] = [
-    { label: null, tabs: ['cashflow', 'calendar', 'variable', 'health', 'car', 'tax'] },
+    { label: null, tabs: ['cashflow', 'calendar', 'variable', 'car', 'tax'] },
+    { label: 'Health', tabs: ['health', 'healthCalendar', 'workouts', 'meals'] },
     { label: 'Planning', tabs: ['budgets', 'recurring', 'loans', 'interest', 'mealGoals'] },
     { label: 'Organize', tabs: ['accounts', 'trips'] },
 ];
@@ -29,9 +33,6 @@ const VALID_TABS: TabId[] = TAB_GROUPS.flatMap((group) => group.tabs);
 function readStoredTab(): TabId {
     try {
         const stored = sessionStorage.getItem(STORAGE_KEY);
-        if (stored === 'workouts' || stored === 'meals') {
-            return 'health';
-        }
         if (stored === 'expenses' || stored === 'income') {
             return 'cashflow';
         }
@@ -52,6 +53,9 @@ export const TAB_LABELS: Record<TabId, string> = {
     calendar: 'Calendar',
     variable: 'Variable expenses',
     health: 'Health',
+    healthCalendar: 'Health calendar',
+    workouts: 'Workouts',
+    meals: 'Meals',
     car: 'Car',
     tax: 'Tax Relief',
     budgets: 'Budgets',
@@ -67,7 +71,10 @@ export const TAB_SUBTITLES: Record<TabId, string> = {
     cashflow: 'Where your money went',
     calendar: 'Income and spending day by day',
     variable: 'Spending in each category against its budget',
-    health: 'Workouts, meals and body weight',
+    health: 'Weight, training and eating at a glance',
+    healthCalendar: 'Workouts, meals, weight and steps day by day',
+    workouts: 'Sessions, lifts and personal records',
+    meals: 'Calories and protein against your targets',
     car: 'Service visits and maintenance costs',
     tax: 'Claims toward this year’s tax relief',
     budgets: 'A monthly limit for each spending category',

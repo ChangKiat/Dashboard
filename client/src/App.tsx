@@ -4,14 +4,17 @@ import AppHeader from './components/AppHeader';
 import BudgetsSection from './components/BudgetsSection';
 import CalendarSection from './components/CalendarSection';
 import CashflowSection from './components/CashflowSection';
+import HealthCalendarSection from './components/HealthCalendarSection';
 import HealthSection from './components/HealthSection';
 import CarServiceSection from './components/CarServiceSection';
 import LoginGate from './components/LoginGate';
+import MealsSection from './components/MealsSection';
 import SetupSection from './components/SetupSection';
 import Sidebar from './components/Sidebar';
 import TaxReliefSection from './components/TaxReliefSection';
 import TripsSection from './components/TripsSection';
 import VariableExpensesSection from './components/VariableExpensesSection';
+import WorkoutsSection from './components/WorkoutsSection';
 import { AmountVisibilityProvider } from './hooks/useAmountVisibility';
 import { PaymentAccountsProvider } from './hooks/usePaymentAccounts';
 import { RefreshProvider } from './hooks/useRefreshSignal';
@@ -99,6 +102,9 @@ export default function App() {
                                 {activeTab === 'calendar' && <CalendarSection />}
                                 {activeTab === 'variable' && <VariableExpensesSection />}
                                 {activeTab === 'health' && <HealthSection />}
+                                {activeTab === 'healthCalendar' && <HealthCalendarSection />}
+                                {activeTab === 'workouts' && <WorkoutsSection />}
+                                {activeTab === 'meals' && <MealsSection />}
                                 {activeTab === 'car' && <CarServiceSection />}
                                 {activeTab === 'tax' && <TaxReliefSection />}
                                 {activeTab === 'budgets' && <BudgetsSection />}

@@ -379,3 +379,50 @@ export function TagIcon(props: IconProps) {
         </Icon>
     );
 }
+
+export function DumbbellIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="M6.5 6.5l11 11M21 21l-1-1M3 3l1 1M18 22l4-4M2 6l4-4M3 10l7-7M14 21l7-7" />
+        </Icon>
+    );
+}
+
+export function ScaleIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <circle cx="12" cy="5" r="3" />
+            <path d="M6.5 8a2 2 0 0 0-1.9 1.5L2.1 18.5A2 2 0 0 0 4 21h16a2 2 0 0 0 1.9-2.5L19.4 9.5A2 2 0 0 0 17.5 8z" />
+        </Icon>
+    );
+}
+
+export function FootprintsIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="M4 16v-2.4C4 11.5 3 10.5 3 8c0-2.7 1.5-6 4.5-6C9.4 2 10 3.8 10 5.5c0 3.1-2 5.7-2 8.7V16a2 2 0 1 1-4 0z" />
+            <path d="M20 20v-2.4c0-2.1 1-3.1 1-5.6 0-2.7-1.5-6-4.5-6C14.6 6 14 7.8 14 9.5c0 3.1 2 5.7 2 8.7V20a2 2 0 1 0 4 0z" />
+            <path d="M16 17h4M4 13h4" />
+        </Icon>
+    );
+}
+
+export function TrophyIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16" />
+            <path d="M10 14.7V17c0 .6-.5 1-1 1.2C7.9 18.8 7 20.2 7 22M14 14.7V17c0 .6.5 1 1 1.2 1.1.6 2 2 2 3.8" />
+            <path d="M18 2H6v7a6 6 0 0 0 12 0z" />
+        </Icon>
+    );
+}
+
+export function TargetIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <circle cx="12" cy="12" r="10" />
+            <circle cx="12" cy="12" r="6" />
+            <circle cx="12" cy="12" r="2" />
+        </Icon>
+    );
+}
