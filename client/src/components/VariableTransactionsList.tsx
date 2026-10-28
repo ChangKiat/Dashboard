@@ -13,7 +13,12 @@ interface Props {
     formatAmount: (amount: number) => string;
     /** "this month" or "in Aug – Oct 2026". */
     periodText: string;
+    /** Opens a logged expense for editing. Transfer fees (negative ids) come from incomes and aren't editable here. */
+    onEdit: (tx: ExpenseTransaction) => void;
 }
+
+const isEditable = (tx: ExpenseTransaction) => tx.id > 0;
+const hasNoAccount = (tx: ExpenseTransaction) => isEditable(tx) && !tx.paymentMethod?.trim();
 
 function formatDayHeading(iso: string) {
     return new Date(`${iso}T12:00:00`).toLocaleDateString('en-MY', {
@@ -26,7 +31,7 @@ function formatDayHeading(iso: string) {
 
 /** Variable expenses for the period, newest day first, under the category cards. */
 const VariableTransactionsList = forwardRef<HTMLElement, Props>(function VariableTransactionsList(
-    { transactions, category, onClear, formatAmount, periodText },
+    { transactions, category, onClear, formatAmount, periodText, onEdit },
     ref
 ) {
     const [query, setQuery] = useState('');
@@ -61,6 +66,7 @@ const VariableTransactionsList = forwardRef<HTMLElement, Props>(function Variabl
     }, [matching, showAll]);
 
     const total = matching.reduce((sum, tx) => sum + (tx.netAmount ?? tx.amount), 0);
+    const noAccountCount = matching.filter(hasNoAccount).length;
 
     return (
         <section ref={ref} className="variable-txns" aria-labelledby="variable-txns-title">
@@ -70,6 +76,14 @@ const VariableTransactionsList = forwardRef<HTMLElement, Props>(function Variabl
                     <p className="variable-expenses-sub">
                         {matching.length} {matching.length === 1 ? 'transaction' : 'transactions'} {periodText}
                         {matching.length > 0 && ` · ${formatAmount(total)}`}
+                        {noAccountCount > 0 && (
+                            <>
+                                {' · '}
+                                <span className="variable-txn-missing">
+                                    {noAccountCount} with no payment method
+                                </span>
+                            </>
+                        )}
                     </p>
                 </div>
                 <div className="variable-txns-tools">
@@ -100,32 +114,58 @@ const VariableTransactionsList = forwardRef<HTMLElement, Props>(function Variabl
                     <div key={day.date} className="trip-day">
                         <p className="trip-day-heading">{formatDayHeading(day.date)}</p>
                         <ul className="variable-txn-list">
-                            {day.rows.map((tx) => (
-                                <li key={tx.id} className="variable-txn variable-txn--with-icon">
-                                    <CategoryIcon category={tx.category} size="sm" />
-                                    <span className="variable-txn-main">
-                                        <span className="variable-txn-title" title={tx.description}>
-                                            {tx.description}
-                                        </span>
-                                        <span className="variable-txn-meta">
-                                            {category ? '' : tx.category}
-                                            {!category && tx.paymentMethod ? ' · ' : ''}
-                                            {tx.paymentMethod ?? ''}
-                                        </span>
-                                    </span>
-                                    <span className="variable-txn-figures">
-                                        <span className="variable-txn-amount">
-                                            {formatAmount(tx.grossAmount ?? tx.amount)}
-                                        </span>
-                                        {(tx.reimbursed ?? 0) > 0 && (
-                                            <span className="variable-txn-net">
-                                                net {formatAmount(tx.netAmount ?? tx.amount)} · reimbursed{' '}
-                                                {formatAmount(tx.reimbursed ?? 0)}
+                            {day.rows.map((tx) => {
+                                const noAccount = hasNoAccount(tx);
+                                const content = (
+                                    <>
+                                        <CategoryIcon category={tx.category} size="sm" />
+                                        <span className="variable-txn-main">
+                                            <span className="variable-txn-title" title={tx.description}>
+                                                {tx.description}
                                             </span>
+                                            <span className="variable-txn-meta">
+                                                {category ? '' : tx.category}
+                                                {!category && (tx.paymentMethod || noAccount) ? ' · ' : ''}
+                                                {noAccount ? (
+                                                    <span className="variable-txn-missing">No payment method</span>
+                                                ) : (
+                                                    tx.paymentMethod ?? ''
+                                                )}
+                                            </span>
+                                        </span>
+                                        <span className="variable-txn-figures">
+                                            <span className="variable-txn-amount">
+                                                {formatAmount(tx.grossAmount ?? tx.amount)}
+                                            </span>
+                                            {(tx.reimbursed ?? 0) > 0 && (
+                                                <span className="variable-txn-net">
+                                                    net {formatAmount(tx.netAmount ?? tx.amount)} · reimbursed{' '}
+                                                    {formatAmount(tx.reimbursed ?? 0)}
+                                                </span>
+                                            )}
+                                        </span>
+                                    </>
+                                );
+                                const className = `variable-txn variable-txn--with-icon${
+                                    noAccount ? ' variable-txn--no-account' : ''
+                                }`;
+                                return (
+                                    <li key={tx.id}>
+                                        {isEditable(tx) ? (
+                                            <button
+                                                type="button"
+                                                className={`${className} variable-txn--clickable`}
+                                                title="Edit transaction"
+                                                onClick={() => onEdit(tx)}
+                                            >
+                                                {content}
+                                            </button>
+                                        ) : (
+                                            <div className={className}>{content}</div>
                                         )}
-                                    </span>
-                                </li>
-                            ))}
+                                    </li>
+                                );
+                            })}
                         </ul>
                     </div>
                 ))

@@ -5407,7 +5407,7 @@ div.payment-account-card-main:hover {
   border-bottom: 1px solid var(--border);
 }
 
-.variable-txn:last-child {
+.variable-txn-list > li:last-child > .variable-txn {
   border-bottom: 0;
 }
 
@@ -5806,4 +5806,41 @@ div.payment-account-card-main:hover {
 /* Variable expense rows: the category badge before the description */
 .variable-txn--with-icon {
   grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+/* A logged expense row is a button that opens the Edit transaction modal. */
+.variable-txn--clickable {
+  width: 100%;
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.variable-txn--clickable:hover {
+  background: var(--surface-hover);
+}
+
+.variable-txn--clickable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* No payment method yet: tinted like a near-budget card until an account is set. */
+.variable-txn--no-account {
+  background: var(--warn-soft);
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+
+.variable-txn--no-account.variable-txn--clickable:hover {
+  background: color-mix(in srgb, var(--warn) 22%, transparent);
+}
+
+.variable-txn-missing {
+  color: var(--warn);
+  font-weight: 600;
 }

@@ -147,6 +147,7 @@ export default function VariableExpensesSection() {
                 budget={budget}
                 budgetLeft={budget - data.totals.actualSpend}
                 periodLabel={isMultiMonth ? label : undefined}
+                onChanged={handleStale}
                 subtitle={
                     isMultiMonth
                         ? `${label} · budgets cover ${budgetMonths} ${budgetMonths === 1 ? 'month' : 'months'}${

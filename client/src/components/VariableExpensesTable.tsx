@@ -8,6 +8,7 @@ import {
 } from '../utils/budgetStatus';
 import { BANK_CHARGES_CATEGORY, transferFeesToExpenseEntries } from '../utils/bankCharges';
 import CategoryIcon from './CategoryIcon';
+import ExpenseRecordModal from './ExpenseRecordModal';
 import VariableTransactionsList from './VariableTransactionsList';
 
 interface Row {
@@ -30,6 +31,8 @@ interface Props {
     subtitle?: string;
     /** Name of a multi-month period ("Aug – Oct 2026") for the transaction list. */
     periodLabel?: string;
+    /** Reloads the data after a transaction is edited. */
+    onChanged: () => void;
 }
 
 export default function VariableExpensesTable({
@@ -42,9 +45,11 @@ export default function VariableExpensesTable({
     budgetLeft,
     subtitle,
     periodLabel,
+    onChanged,
 }: Props) {
     // The card picked to filter the list below; null lists every variable expense.
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+    const [editing, setEditing] = useState<ExpenseTransaction | null>(null);
     const listRef = useRef<HTMLElement>(null);
 
     // Every variable-category expense (trip-fund spends are already counted in the exchange),
@@ -183,7 +188,17 @@ export default function VariableExpensesTable({
                 onClear={() => setSelectedCategory(null)}
                 formatAmount={formatAmount}
                 periodText={periodLabel ? `in ${periodLabel}` : 'this month'}
+                onEdit={setEditing}
             />
+            {editing && (
+                <ExpenseRecordModal
+                    entry={editing}
+                    variableCategories={rows.map((r) => r.category)}
+                    usedCategories={transactions.map((t) => t.category)}
+                    onClose={() => setEditing(null)}
+                    onSaved={onChanged}
+                />
+            )}
         </div>
     );
 }
