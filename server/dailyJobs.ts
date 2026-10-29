@@ -1,9 +1,9 @@
-import { and, eq, gte, min, sql } from 'drizzle-orm';
+import { and, eq, gte, isNull, like, min, sql } from 'drizzle-orm';
 import { integer, pgTable, primaryKey, text, timestamp } from 'drizzle-orm/pg-core';
 import { loadExpenseCategories } from '../agent/config/expenseCategories';
 import { loadPaymentAccounts, resolvePaymentMethod } from '../agent/config/paymentMethods';
 import { requireDb } from '../agent/db/client';
-import { expenses } from '../agent/db/schema';
+import { expenses, loanPayments } from '../agent/db/schema';
 import {
     appendExpense,
     getFixedExpensesDueOn,
@@ -21,7 +21,7 @@ import {
     getInterestSchedulesDueOn,
 } from '../agent/services/interestScheduleService';
 import { getInstrumentById } from '../agent/services/investmentPortfolioService';
-import { applyLoanPayment } from '../agent/services/loanService';
+import { applyLoanPayment, type AppliedLoanPayment } from '../agent/services/loanService';
 import { runNightlyCheckIn } from './nightlyCheckIn';
 import { sendTelegramReport } from './telegramNotify';
 
@@ -155,21 +155,87 @@ function dayLabel(date: string, today: string): string {
     return date === today ? 'today' : `${date} (a day the scheduler missed)`;
 }
 
-/** A bill's expense is already there: a retried or caught-up day, or the bot logged it before the move. */
-async function isBillExpenseLogged(exp: DueFixedExpense): Promise<boolean> {
-    const rows = await requireDb()
+/**
+ * The bill's expense when it is already there: a retried or caught-up day, the bot logged it before
+ * the move, or the user logged it by hand (description matched ignoring case). A loan installment
+ * logged by hand on another day of the same month counts too; an expense a loan payment already
+ * uses doesn't.
+ */
+async function findLoggedBillExpense(exp: DueFixedExpense): Promise<number | null> {
+    const [row] = await requireDb()
         .select({ id: expenses.id })
         .from(expenses)
+        .leftJoin(loanPayments, eq(loanPayments.expenseId, expenses.id))
         .where(
             and(
-                eq(expenses.date, exp.date),
+                exp.loan ? like(expenses.date, `${exp.date.slice(0, 7)}-%`) : eq(expenses.date, exp.date),
                 eq(expenses.category, exp.category),
-                eq(expenses.description, exp.description),
-                eq(expenses.amount, exp.amount.toFixed(2))
+                sql`lower(trim(${expenses.description})) = ${exp.description.trim().toLowerCase()}`,
+                eq(expenses.amount, exp.amount.toFixed(2)),
+                isNull(loanPayments.id)
             )
         )
         .limit(1);
-    return rows.length > 0;
+    return row?.id ?? null;
+}
+
+const inactiveAccountWarning = (name: string) =>
+    `'${name}' is not an active account: stored as text, fix the bill in Setup`;
+
+export interface LoggedLoanPayment {
+    expenseId: number;
+    /** The day's expense was already there (logged by hand): only the loan balance was lowered. */
+    linked: boolean;
+    payment: AppliedLoanPayment | null;
+    warnings: string[];
+}
+
+/**
+ * Logs a loan bill's expense and lowers the loan balance with it. An expense already logged for
+ * the day (by hand, or a run that stopped before the balance) is used instead of a second one.
+ * Throws only when nothing was written; a balance that could not be updated is a warning.
+ */
+async function recordLoanBill(exp: DueFixedExpense): Promise<LoggedLoanPayment> {
+    const warnings: string[] = [];
+    let expenseId = await findLoggedBillExpense(exp);
+    const linked = expenseId != null;
+    if (expenseId == null) {
+        expenseId = await appendExpense(
+            exp.date,
+            exp.amount,
+            exp.currency,
+            exp.category,
+            exp.description,
+            exp.paymentMethod,
+            undefined,
+            { keepRaw: true }
+        );
+        if (exp.paymentMethod && !resolvePaymentMethod(exp.paymentMethod)) {
+            warnings.push(inactiveAccountWarning(exp.paymentMethod));
+        }
+    }
+    let payment: AppliedLoanPayment | null = null;
+    try {
+        payment = await applyLoanPayment({ fixedExpenseId: exp.id, date: exp.date, expenseId });
+    } catch (error) {
+        warnings.push(`loan balance not updated: ${errorText(error)}`);
+    }
+    return { expenseId, linked, payment, warnings };
+}
+
+/**
+ * The Loans card's "Log payment": a payment day the 9am job will not catch up (more than
+ * CATCH_UP_DAYS back, failed three times, or the loan was added after that day's run), logged the
+ * way the job logs it. Null when there is nothing to log: not one of the loan's payment days, a
+ * future day, already paid that day, or paid off.
+ */
+export async function logMissedLoanPayment(
+    fixedExpenseId: number,
+    date: string
+): Promise<LoggedLoanPayment | null> {
+    if (date > klClock(new Date()).date) return null;
+    const exp = (await getFixedExpensesDueOn(date)).find((due) => due.id === fixedExpenseId && due.loan);
+    return exp ? recordLoanBill(exp) : null;
 }
 
 /**
@@ -186,6 +252,22 @@ async function logFixedBill(exp: DueFixedExpense): Promise<string | null> {
     const lineWithWarnings = (details: string) =>
         `\n- ${md(exp.description)} (${amount}${details})` +
         warnings.map((w) => `\n   ⚠️ ${md(w)}`).join('');
+
+    // Loan bills are Loan category: no holding buy or funding transfer, only the balance.
+    if (exp.loan) {
+        const logged = await recordLoanBill(exp);
+        warnings.push(...logged.warnings);
+        const via = logged.linked
+            ? ' · already logged'
+            : exp.paymentMethod
+              ? ` via ${md(exp.paymentMethod)}`
+              : '';
+        const p = logged.payment;
+        const loanNote = p
+            ? ` · interest ${p.interest.toFixed(2)} / principal ${p.principal.toFixed(2)} / left ${p.remainingAfter.toFixed(2)}`
+            : '';
+        return lineWithWarnings(`${via}${loanNote}`);
+    }
 
     // A unit trust bill records its expense, the holding buy and the funding transfer in one
     // transaction. The page-load contribution on Cashflow and Setup stays as the idempotent fallback.
@@ -215,7 +297,7 @@ async function logFixedBill(exp: DueFixedExpense): Promise<string | null> {
         );
     }
 
-    if (await isBillExpenseLogged(exp)) {
+    if ((await findLoggedBillExpense(exp)) != null) {
         return warnings.length ? lineWithWarnings(' · already logged') : null;
     }
 
@@ -243,7 +325,7 @@ async function logFixedBill(exp: DueFixedExpense): Promise<string | null> {
 
     const from = resolvePaymentMethod(exp.paymentMethod);
     if (exp.paymentMethod && !from) {
-        warnings.push(`'${exp.paymentMethod}' is not an active account: stored as text, fix the bill in Setup`);
+        warnings.push(inactiveAccountWarning(exp.paymentMethod));
     }
 
     // Investment bills and "Other" bills with a destination both get the linked transfer.
@@ -274,20 +356,8 @@ async function logFixedBill(exp: DueFixedExpense): Promise<string | null> {
         warnings.push('transfer skipped: the bill has no destination investment account, set it in Setup');
     }
 
-    let loanNote = '';
-    if (exp.loan) {
-        try {
-            const applied = await applyLoanPayment({ fixedExpenseId: exp.id, date: exp.date, expenseId });
-            if (applied) {
-                loanNote = ` · interest ${applied.interest.toFixed(2)} / principal ${applied.principal.toFixed(2)} / left ${applied.remainingAfter.toFixed(2)}`;
-            }
-        } catch (error) {
-            warnings.push(`loan balance not updated: ${errorText(error)}`);
-        }
-    }
-
     const via = exp.paymentMethod ? ` via ${md(exp.paymentMethod)}` : '';
-    return lineWithWarnings(`${via}${toFund}${loanNote}`);
+    return lineWithWarnings(`${via}${toFund}`);
 }
 
 async function runFixedBills(date: string, today: string): Promise<string> {

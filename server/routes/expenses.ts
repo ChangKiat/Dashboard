@@ -60,6 +60,7 @@ import {
     contributeFixedExpense,
     resolveContributionHolding,
 } from '../../agent/services/fixedContributionService';
+import { logMissedLoanPayment } from '../dailyJobs';
 
 const router = Router();
 
@@ -1203,6 +1204,26 @@ router.post('/fixed/:id/contribute', async (req, res) => {
         }
         console.error('POST /api/expenses/fixed/:id/contribute', err);
         res.status(500).json({ error: message });
+    }
+});
+
+/** A loan installment the 9am job missed, logged as the job would (body: { date }, a payment day). */
+router.post('/fixed/:id/loan-payment', async (req, res) => {
+    try {
+        const id = parseIdParam(req.params.id);
+        if (!id) return res.status(400).json({ error: 'Invalid id' });
+        const date = req.body?.date;
+        if (!isValidDate(date)) return res.status(400).json({ error: 'Invalid date' });
+        const logged = await logMissedLoanPayment(id, date);
+        if (!logged) {
+            return res.status(409).json({
+                error: `Nothing to log for ${date}: it is already paid, in the future, not a payment day of this loan, or the loan is paid off.`,
+            });
+        }
+        res.json({ ok: true, ...logged });
+    } catch (err) {
+        console.error('POST /api/expenses/fixed/:id/loan-payment', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
     }
 });
 

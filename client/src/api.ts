@@ -693,6 +693,24 @@ export function deleteFixedExpense(id: number) {
     return fetchJson<{ ok: true }>(`/api/expenses/fixed/${id}`, { method: 'DELETE' });
 }
 
+export interface LoggedLoanPayment {
+    ok: true;
+    expenseId: number;
+    /** An expense already logged by hand that month was used: only the balance was lowered. */
+    linked: boolean;
+    payment: { interest: number; principal: number; installment: number; remainingAfter: number } | null;
+    warnings: string[];
+}
+
+/** Logs a loan installment the daily job missed, on one of the loan's payment days. */
+export function logLoanPayment(id: number, date: string) {
+    return fetchJson<LoggedLoanPayment>(`/api/expenses/fixed/${id}/loan-payment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date }),
+    });
+}
+
 let dueContributionsPromise: Promise<{ ok: true; applied: number; skipped: number }> | null = null;
 
 export function applyDueFixedContributions() {

@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react';
 
 import type { FixedExpenseConfig, LoanMethod } from '../api';
-import { createFixedExpense, deleteFixedExpense, updateFixedExpense } from '../api';
+import { createFixedExpense, deleteFixedExpense, logLoanPayment, updateFixedExpense } from '../api';
+import { todayInKL } from '../utils/dateRange';
 import {
     computeInstallmentSplit,
     parseLoanMethod,
     suggestedInstallmentAmount,
 } from '../utils/loanInstallment';
+import { dueDatesBetween } from '../utils/recurring';
 import PaymentMethodSelect from './PaymentMethodSelect';
 import RecordModal from './RecordModal';
 import RowActions from './RowActions';
@@ -46,6 +48,21 @@ function nextSplit(row: FixedExpenseConfig) {
     });
 }
 
+/** The loan's payment days in the past year, newest first. */
+function recentPaymentDays(row: FixedExpenseConfig): string[] {
+    const today = todayInKL();
+    const yearAgo = `${parseInt(today.slice(0, 4), 10) - 1}${today.slice(4)}`;
+    return dueDatesBetween(row, yearAgo, today).reverse();
+}
+
+function formatDay(date: string): string {
+    return new Date(`${date}T00:00:00`).toLocaleDateString('en-MY', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+    });
+}
+
 export type LoansPanelMode = 'manage' | 'view';
 
 interface Props {
@@ -63,6 +80,11 @@ export default function LoansPanel({ rows, formatAmount, mode = 'manage', onChan
     const [saving, setSaving] = useState(false);
     const [modalError, setModalError] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
+    const [payingEntry, setPayingEntry] = useState<FixedExpenseConfig | null>(null);
+    const [payDate, setPayDate] = useState('');
+    const [paySaving, setPaySaving] = useState(false);
+    const [payError, setPayError] = useState<string | null>(null);
+    const [notice, setNotice] = useState<string | null>(null);
 
     const sortedRows = useMemo(
         () =>
@@ -228,6 +250,36 @@ export default function LoansPanel({ rows, formatAmount, mode = 'manage', onChan
         }
     };
 
+    const openLogPayment = (row: FixedExpenseConfig) => {
+        setPayingEntry(row);
+        setPayDate(recentPaymentDays(row)[0] ?? '');
+        setPayError(null);
+    };
+
+    const handleLogPayment = async () => {
+        if (!payingEntry || !payDate) {
+            setPayError('Pick a payment day.');
+            return;
+        }
+        setPaySaving(true);
+        setPayError(null);
+        try {
+            const result = await logLoanPayment(payingEntry.id, payDate);
+            const p = result.payment;
+            const logged = result.linked
+                ? `Used the expense you already logged for ${formatDay(payDate)}`
+                : `Logged ${formatAmount(p?.installment ?? payingEntry.amount)} for ${formatDay(payDate)}`;
+            const left = p ? `: ${formatAmount(p.remainingAfter)} left on ${payingEntry.description}.` : '.';
+            setNotice([`${logged}${left}`, ...result.warnings].join(' ⚠️ '));
+            setPayingEntry(null);
+            onChanged?.();
+        } catch (err) {
+            setPayError(err instanceof Error ? err.message : 'Failed to log payment');
+        } finally {
+            setPaySaving(false);
+        }
+    };
+
     const handleDelete = async (row: FixedExpenseConfig) => {
         setActionError(null);
         try {
@@ -251,6 +303,7 @@ export default function LoansPanel({ rows, formatAmount, mode = 'manage', onChan
                 </div>
             )}
             {actionError && <p className="error">{actionError}</p>}
+            {notice && <p className="muted">{notice}</p>}
             {sortedRows.length === 0 ? (
                 <p className="muted">No loans yet.</p>
             ) : (
@@ -305,7 +358,17 @@ export default function LoansPanel({ rows, formatAmount, mode = 'manage', onChan
                                         onEdit={() => openEdit(row)}
                                         onDelete={() => handleDelete(row)}
                                         deleteLabel={`"${row.description}"`}
-                                    />
+                                    >
+                                        {remaining > 0 && (
+                                            <button
+                                                type="button"
+                                                className="btn-link"
+                                                onClick={() => openLogPayment(row)}
+                                            >
+                                                Log payment
+                                            </button>
+                                        )}
+                                    </RowActions>
                                 )}
                             </li>
                         );
@@ -469,6 +532,48 @@ export default function LoansPanel({ rows, formatAmount, mode = 'manage', onChan
                     )}
                 </div>
             </RecordModal>
+            )}
+            {!isView && payingEntry && (
+                <RecordModal
+                    title={`Log payment: ${payingEntry.description}`}
+                    open
+                    saving={paySaving}
+                    error={payError}
+                    onClose={() => setPayingEntry(null)}
+                    onSave={handleLogPayment}
+                >
+                    <div className="form-field">
+                        <label htmlFor="loan-pay-date">Payment day</label>
+                        <select
+                            id="loan-pay-date"
+                            value={payDate}
+                            onChange={(e) => setPayDate(e.target.value)}
+                        >
+                            {recentPaymentDays(payingEntry).map((date) => (
+                                <option key={date} value={date}>
+                                    {formatDay(date)}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    {(() => {
+                        const split = nextSplit(payingEntry);
+                        return split ? (
+                            <p className="muted form-hint">
+                                Logs {formatAmount(split.installment)}
+                                {payingEntry.paymentMethod ? ` via ${payingEntry.paymentMethod}` : ''}{' '}
+                                (interest {formatAmount(split.interest)} · principal{' '}
+                                {formatAmount(split.principal)}) and leaves{' '}
+                                {formatAmount(split.remainingAfter)}.
+                            </p>
+                        ) : null;
+                    })()}
+                    <p className="muted form-hint">
+                        For a payment the daily job missed. If you already logged this payment by
+                        hand that month for the same amount, that expense is used instead of adding
+                        another one.
+                    </p>
+                </RecordModal>
             )}
         </div>
     );

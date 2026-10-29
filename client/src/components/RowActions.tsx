@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import ConfirmDialog from './ConfirmDialog';
 
@@ -8,6 +8,8 @@ interface Props {
     deleteLabel: string;
     confirmTitle?: string;
     confirmMessage?: string;
+    /** Extra row actions, shown above Edit. */
+    children?: ReactNode;
 }
 
 export default function RowActions({
@@ -16,6 +18,7 @@ export default function RowActions({
     deleteLabel,
     confirmTitle,
     confirmMessage,
+    children,
 }: Props) {
     const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -32,6 +35,7 @@ export default function RowActions({
     return (
         <>
             <div className="row-actions">
+                {children}
                 <button type="button" className="btn-link" onClick={onEdit}>
                     Edit
                 </button>
