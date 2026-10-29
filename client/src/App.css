@@ -1247,6 +1247,34 @@ div.payment-account-card-main:hover {
   font-size: 0.875rem;
 }
 
+/* .data-table is table-layout: fixed, so equal-width columns can't fit Reset + input */
+.rebate-summary-table .rebate-cashback-col {
+  width: 150px;
+}
+
+.rebate-amount-cell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.rebate-amount-cell .btn-link {
+  flex: none;
+}
+
+.rebate-amount-input {
+  flex: 0 1 84px;
+  min-width: 0;
+  padding: 3px 6px;
+  font-size: 0.8rem;
+  text-align: right;
+}
+
+.rebate-amount-input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
 .rebate-settings-fields {
   margin-top: 8px;
 }

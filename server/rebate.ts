@@ -30,6 +30,8 @@ export type RebateCategoryResult = {
     requirementMet: boolean;
     requirementNote?: string;
     isDefault?: boolean;
+    /** Amount already written as a Cashback income for this period, or null if none. */
+    generatedAmount?: number | null;
 };
 
 export type RebateEligibleExpense = {
@@ -480,7 +482,7 @@ export async function computeAccountRebate(
     const fundedExpenseIds = getFundedExpenseIds(incomeRows);
     const accountsByName = new Map(accounts.map((a) => [a.name.toLowerCase(), a]));
 
-    return computeRebate(
+    const summary = computeRebate(
         account,
         config,
         expenseRows,
@@ -489,11 +491,32 @@ export async function computeAccountRebate(
         fundedExpenseIds,
         accountsByName
     );
+
+    const generatedByCategory = new Map<string, number>();
+    for (const row of incomeDbRows) {
+        if (
+            row.rebateAccountId === account.id &&
+            row.rebatePeriodMonth === resolvedMonth &&
+            row.rebateCategory
+        ) {
+            generatedByCategory.set(row.rebateCategory, parseAmount(String(row.amount)));
+        }
+    }
+
+    return {
+        ...summary,
+        categories: summary.categories.map((c) => ({
+            ...c,
+            generatedAmount: generatedByCategory.get(c.category) ?? null,
+        })),
+    };
 }
 
+/** `amountOverrides` replaces the computed earned value per category (e.g. to match the bank statement). */
 export async function computeAndSyncRebate(
     accountId: number,
-    month?: string
+    month?: string,
+    amountOverrides: Map<string, number> = new Map()
 ): Promise<RebateSummary | null> {
     const summary = await computeAccountRebate(accountId, month);
     if (!summary) return null;
@@ -503,13 +526,18 @@ export async function computeAndSyncRebate(
 
     const resolvedMonth = month && /^\d{4}-\d{2}$/.test(month) ? month : parseMonth().month;
 
-    await upsertRebateIncomes(
-        account.id,
-        account.name,
-        resolvedMonth,
-        summary.periodEnd,
-        summary.categories.map((c) => ({ category: c.category, earned: c.earned }))
-    );
+    const amounts = summary.categories.map((c) => ({
+        category: c.category,
+        earned: roundMoney(amountOverrides.get(c.category) ?? c.earned),
+    }));
 
-    return summary;
+    await upsertRebateIncomes(account.id, account.name, resolvedMonth, summary.periodEnd, amounts);
+
+    return {
+        ...summary,
+        categories: summary.categories.map((c, i) => ({
+            ...c,
+            generatedAmount: amounts[i].earned > 0 ? amounts[i].earned : null,
+        })),
+    };
 }

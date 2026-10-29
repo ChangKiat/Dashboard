@@ -162,7 +162,21 @@ router.post('/:id/rebate/sync', async (req, res) => {
                 ? req.query.month
                 : parseMonth().month;
 
-        const summary = await computeAndSyncRebate(id, month);
+        const rawAmounts: unknown = req.body?.amounts;
+        const amounts = new Map<string, number>();
+        if (rawAmounts != null) {
+            if (typeof rawAmounts !== 'object' || Array.isArray(rawAmounts)) {
+                return res.status(400).json({ error: 'Invalid amounts' });
+            }
+            for (const [category, value] of Object.entries(rawAmounts)) {
+                if (!isNonNegativeNumber(value)) {
+                    return res.status(400).json({ error: `Invalid amount for ${category}` });
+                }
+                amounts.set(category, value);
+            }
+        }
+
+        const summary = await computeAndSyncRebate(id, month, amounts);
         if (!summary) {
             return res.status(404).json({ error: 'Rebate tracking not enabled for this account' });
         }

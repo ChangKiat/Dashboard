@@ -359,6 +359,8 @@ export interface RebateCategoryResult {
     requirementMet: boolean;
     requirementNote?: string;
     isDefault?: boolean;
+    /** Amount already written as a Cashback income for this period, or null if none. */
+    generatedAmount?: number | null;
 }
 
 export interface RebateEligibleExpense {
@@ -809,10 +811,11 @@ export function fetchAccountRebate(id: number, month: string) {
     return fetchJson<RebateSummary>(`/api/payment-accounts/${id}/rebate?month=${encodeURIComponent(month)}`);
 }
 
-export function syncAccountRebate(id: number, month: string) {
+/** `amounts` overrides the computed cashback per category before writing incomes. */
+export function syncAccountRebate(id: number, month: string, amounts?: Record<string, number>) {
     return fetchJson<RebateSummary>(
         `/api/payment-accounts/${id}/rebate/sync?month=${encodeURIComponent(month)}`,
-        { method: 'POST' }
+        { method: 'POST', body: JSON.stringify({ amounts }) }
     );
 }
 
