@@ -1,6 +1,6 @@
 import { requireDb } from '../agent/db/client';
 import { expenses, incomes } from '../agent/db/schema';
-import { isTripFundSpend } from '../agent/services/expenseService';
+import { addFundRepaymentsToExchanges, isTripFundSpend } from '../agent/services/expenseService';
 import { isAccountTransferCategory, parseStoredTransferFee } from '../agent/services/incomeService';
 import { enumerateDates } from './dateUtils';
 
@@ -66,12 +66,13 @@ async function cashflowBuckets(keys: string[], keyFor: (isoDate: string) => stri
         }
     }
 
+    const spendingReimbursed = addFundRepaymentsToExchanges(expenseRows, reimbursedByExpenseId);
     for (const row of expenseRows) {
         if (isTripFundSpend(row)) continue;
         const bucket = totals.get(keyFor(row.date));
         if (!bucket) continue;
         const gross = parseFloat(row.amount);
-        bucket.spending += Math.max(0, gross - (reimbursedByExpenseId.get(row.id) ?? 0));
+        bucket.spending += Math.max(0, gross - (spendingReimbursed.get(row.id) ?? 0));
     }
 
     return totals;

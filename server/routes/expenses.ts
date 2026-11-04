@@ -8,6 +8,7 @@ import {
     deactivateFixedExpenseById,
     deleteExpense,
     getActiveFixedExpenses,
+    getSpendingReimbursements,
     getSpendingSummary,
     updateExpense,
     updateFixedExpenseById,
@@ -22,7 +23,6 @@ import {
     deleteInvestmentFundingTransfer,
     fundingDestination,
     getIncomesByExpenseIds,
-    getReimbursementsByExpenseIds,
     isIncomeInputError,
     isInvestmentCategory,
     isOtherCategory,
@@ -422,8 +422,7 @@ router.get('/daily', async (req, res) => {
             .from(expenses)
             .where(and(gte(expenses.date, start), lte(expenses.date, end)));
 
-        const expenseIds = rows.map((r) => r.id);
-        const reimbursedByExpenseId = await getReimbursementsByExpenseIds(expenseIds);
+        const reimbursedByExpenseId = await getSpendingReimbursements(rows);
         const grouped = groupExpensesByDateNet(rows, reimbursedByExpenseId);
         const series = enumerateDates(start, end).map((date) => ({
             date,
@@ -455,7 +454,7 @@ router.get('/transactions', async (req, res) => {
 
         const expenseIds = rows.map((r) => r.id);
         const [reimbursedByExpenseId, incomeRows] = await Promise.all([
-            getReimbursementsByExpenseIds(expenseIds),
+            getSpendingReimbursements(rows),
             getIncomesByExpenseIds(expenseIds),
         ]);
         const reimbursementsByExpenseId = new Map<number, typeof incomeRows>();
