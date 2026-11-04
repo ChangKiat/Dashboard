@@ -4876,6 +4876,11 @@ div.payment-account-card-main:hover {
   color: var(--text-muted);
 }
 
+.trip-txn-reimbursed {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
 .trip-txn-action {
   display: inline-flex;
   align-items: center;

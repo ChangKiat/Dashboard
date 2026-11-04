@@ -708,10 +708,21 @@ export default function TripsPanel({
                             <span className="trips-summary-label">Linked</span>
                             <span className="trips-summary-value">{formatAmount(summary.linkedMyr)}</span>
                         </div>
+                        {summary.reimbursedMyr > 0 && (
+                            <div className="trips-summary-item">
+                                <span
+                                    className="trips-summary-label"
+                                    title="Money people paid back on this trip's transactions"
+                                >
+                                    Reimbursed
+                                </span>
+                                <span className="trips-summary-value">− {formatAmount(summary.reimbursedMyr)}</span>
+                            </div>
+                        )}
                         <div className="trips-summary-item trips-summary-item--total">
                             <span
                                 className="trips-summary-label"
-                                title="Exchanged + card + linked: MYR that left your accounts"
+                                title="Exchanged + card + linked − reimbursed: MYR that left your accounts and stayed out"
                             >
                                 Total cost
                             </span>
@@ -1062,6 +1073,14 @@ export default function TripsPanel({
                                                         </span>
                                                     </span>
                                                     <span className="trip-txn-figures">
+                                                        {row.reimbursed > 0 && (
+                                                            <span
+                                                                className="trip-txn-reimbursed"
+                                                                title={`Paid ${formatAmount(row.amount)}; the amount shown is what is left after this`}
+                                                            >
+                                                                {formatAmount(row.reimbursed)} reimbursed
+                                                            </span>
+                                                        )}
                                                         {row.fxAmount != null && (
                                                             <span className="trip-txn-fx">
                                                                 {formatFx(row.fxAmount, row.fxCurrency || summary.trip.tripCurrency)}
@@ -1076,7 +1095,7 @@ export default function TripsPanel({
                                                             }
                                                         >
                                                             {row.tripLeg === 'fund' ? '≈ ' : ''}
-                                                            {formatAmount(row.amount)}
+                                                            {formatAmount(row.netAmount)}
                                                         </span>
                                                     </span>
                                                     {row.tripLeg == null ? (

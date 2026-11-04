@@ -107,6 +107,8 @@ export interface TripExpense {
     id: number;
     date: string;
     amount: number;
+    reimbursed: number;
+    netAmount: number;
     category: string;
     description: string;
     paymentMethod: string | null;
@@ -125,6 +127,7 @@ export interface TripSummary {
     fundRemaining: number;
     cardMyr: number;
     linkedMyr: number;
+    reimbursedMyr: number;
     spentMyr: number;
     tripTotalMyr: number;
     days: number | null;
