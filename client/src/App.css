@@ -4881,6 +4881,19 @@ div.payment-account-card-main:hover {
   color: var(--text-muted);
 }
 
+/* Room for two buttons, so amounts line up on rows that only have one */
+.trip-txn-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 2px;
+  min-width: 62px;
+}
+
+.trip-txn-form {
+  grid-column: 1 / -1;
+  padding: 6px 8px 10px 0;
+}
+
 .trip-txn-action {
   display: inline-flex;
   align-items: center;
@@ -4944,6 +4957,10 @@ div.payment-account-card-main:hover {
     flex-direction: column;
     align-items: flex-end;
     gap: 0;
+  }
+
+  .trip-txn-actions {
+    min-width: 74px;
   }
 
   .trip-txn-action {

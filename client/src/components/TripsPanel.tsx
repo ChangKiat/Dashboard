@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { TripExpense, TripLeg, TripLinkCandidate, TripSummary, TripWithTotals } from '../api';
 import {
     createExpenseTransaction,
+    createIncomeTransaction,
     createTrip,
     deleteExpenseTransaction,
     deleteTrip,
@@ -16,7 +17,7 @@ import { useAmountVisibility } from '../hooks/useAmountVisibility';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
 import ConfirmDialog from './ConfirmDialog';
 import ExpenseCategorySelect from './ExpenseCategorySelect';
-import { ClockIcon, PlaneIcon, PlusIcon, TrashIcon, UnlinkIcon, WalletIcon } from './icons';
+import { ClockIcon, IncomeIcon, PlaneIcon, PlusIcon, TrashIcon, UnlinkIcon, WalletIcon } from './icons';
 import PaymentMethodSelect from './PaymentMethodSelect';
 import SummaryCard from './SummaryCard';
 
@@ -31,6 +32,15 @@ interface Props {
 }
 
 type FormMode = 'none' | 'create-trip' | 'exchange' | 'expense' | 'link';
+
+/** Money someone paid back for one trip entry; saved as a Transfer income linked to it. */
+type PaidBackForm = {
+    expenseId: number;
+    date: string;
+    source: string;
+    amount: string;
+    paymentMethod: string;
+};
 
 const EXPENSE_PREVIEW_COUNT = 10;
 
@@ -130,6 +140,8 @@ export default function TripsPanel({
     const [candSearch, setCandSearch] = useState('');
     const [candLoading, setCandLoading] = useState(false);
     const [picked, setPicked] = useState<Set<number>>(new Set());
+
+    const [paidBack, setPaidBack] = useState<PaidBackForm | null>(null);
 
     const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
     const [pendingDelete, setPendingDelete] = useState<
@@ -272,6 +284,7 @@ export default function TripsPanel({
         setCandidates([]);
         setCandSearch('');
         setPicked(new Set());
+        setPaidBack(null);
     }
 
     async function loadCandidates(id: number, range?: { start?: string; end?: string }) {
@@ -423,6 +436,46 @@ export default function TripsPanel({
         }
     }
 
+    function togglePaidBack(expenseId: number) {
+        setError(null);
+        setPaidBack((current) =>
+            current?.expenseId === expenseId
+                ? null
+                : { expenseId, date: todayKL(), source: '', amount: '', paymentMethod: '' }
+        );
+    }
+
+    function updatePaidBack(fields: Partial<PaidBackForm>) {
+        setPaidBack((current) => (current ? { ...current, ...fields } : current));
+    }
+
+    async function handlePaidBack(e: React.FormEvent) {
+        e.preventDefault();
+        if (selectedId == null || !paidBack) return;
+        setSaving(true);
+        setError(null);
+        try {
+            const source = paidBack.source.trim();
+            await createIncomeTransaction({
+                date: paidBack.date,
+                amount: parseFloat(paidBack.amount),
+                category: 'Transfer',
+                description: `Reimbursement from ${source}`,
+                source,
+                expenseId: paidBack.expenseId,
+                paymentMethod: paidBack.paymentMethod,
+            });
+            await reloadSelected(selectedId);
+            resetForms();
+            await refreshAccounts();
+            onChanged?.();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to save reimbursement');
+        } finally {
+            setSaving(false);
+        }
+    }
+
     async function handleDeleteExpense(id: number) {
         if (selectedId == null) return;
         try {
@@ -503,7 +556,8 @@ export default function TripsPanel({
                 </button>
             </div>
 
-            {error && <p className="error">{error}</p>}
+            {/* The paid-back form sits far down the list, so it shows its own error. */}
+            {error && !paidBack && <p className="error">{error}</p>}
 
             {formMode === 'create-trip' && (
                 <form className="card trips-form" onSubmit={handleCreateTrip}>
@@ -1098,26 +1152,99 @@ export default function TripsPanel({
                                                             {formatAmount(row.netAmount)}
                                                         </span>
                                                     </span>
-                                                    {row.tripLeg == null ? (
-                                                        <button
-                                                            type="button"
-                                                            className="trip-txn-action"
-                                                            aria-label={`Unlink ${row.description} from this trip`}
-                                                            title="Remove from this trip (keeps the transaction)"
-                                                            onClick={() => handleUnlink(row.id)}
-                                                        >
-                                                            <UnlinkIcon size={16} />
-                                                        </button>
-                                                    ) : (
-                                                        <button
-                                                            type="button"
-                                                            className="trip-txn-action trip-txn-action--danger"
-                                                            aria-label={`Delete ${row.description}`}
-                                                            title="Delete this trip entry"
-                                                            onClick={() => setPendingDelete({ kind: 'entry', id: row.id })}
-                                                        >
-                                                            <TrashIcon size={16} />
-                                                        </button>
+                                                    <span className="trip-txn-actions">
+                                                        {row.tripLeg !== 'exchange' && row.netAmount >= 0.01 && (
+                                                            <button
+                                                                type="button"
+                                                                className="trip-txn-action"
+                                                                aria-label={`Record money paid back for ${row.description}`}
+                                                                aria-expanded={paidBack?.expenseId === row.id}
+                                                                title="Someone paid you back for this"
+                                                                onClick={() => togglePaidBack(row.id)}
+                                                            >
+                                                                <IncomeIcon size={16} />
+                                                            </button>
+                                                        )}
+                                                        {row.tripLeg == null ? (
+                                                            <button
+                                                                type="button"
+                                                                className="trip-txn-action"
+                                                                aria-label={`Unlink ${row.description} from this trip`}
+                                                                title="Remove from this trip (keeps the transaction)"
+                                                                onClick={() => handleUnlink(row.id)}
+                                                            >
+                                                                <UnlinkIcon size={16} />
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                type="button"
+                                                                className="trip-txn-action trip-txn-action--danger"
+                                                                aria-label={`Delete ${row.description}`}
+                                                                title="Delete this trip entry"
+                                                                onClick={() => setPendingDelete({ kind: 'entry', id: row.id })}
+                                                            >
+                                                                <TrashIcon size={16} />
+                                                            </button>
+                                                        )}
+                                                    </span>
+                                                    {paidBack?.expenseId === row.id && (
+                                                        <form className="trips-form trip-txn-form" onSubmit={handlePaidBack}>
+                                                            <label>
+                                                                From
+                                                                <input
+                                                                    value={paidBack.source}
+                                                                    onChange={(e) => updatePaidBack({ source: e.target.value })}
+                                                                    placeholder="Person"
+                                                                    required
+                                                                />
+                                                            </label>
+                                                            <label>
+                                                                Amount (up to {formatAmount(row.netAmount)})
+                                                                <input
+                                                                    type="number"
+                                                                    min="0.01"
+                                                                    max={row.netAmount.toFixed(2)}
+                                                                    step="0.01"
+                                                                    value={paidBack.amount}
+                                                                    onChange={(e) => updatePaidBack({ amount: e.target.value })}
+                                                                    required
+                                                                />
+                                                            </label>
+                                                            <label>
+                                                                Received into
+                                                                <PaymentMethodSelect
+                                                                    id={`trip-paid-back-into-${row.id}`}
+                                                                    value={paidBack.paymentMethod}
+                                                                    onChange={(paymentMethod) => updatePaidBack({ paymentMethod })}
+                                                                />
+                                                            </label>
+                                                            <label>
+                                                                Date
+                                                                <input
+                                                                    type="date"
+                                                                    value={paidBack.date}
+                                                                    onChange={(e) => updatePaidBack({ date: e.target.value })}
+                                                                    required
+                                                                />
+                                                            </label>
+                                                            {error && <p className="error span-full">{error}</p>}
+                                                            <div className="trips-form-actions span-full">
+                                                                <button
+                                                                    type="submit"
+                                                                    className="btn-primary"
+                                                                    disabled={saving || !paidBack.source.trim() || !paidBack.paymentMethod}
+                                                                >
+                                                                    Save reimbursement
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    className="btn-secondary"
+                                                                    onClick={() => setPaidBack(null)}
+                                                                >
+                                                                    Cancel
+                                                                </button>
+                                                            </div>
+                                                        </form>
                                                     )}
                                                 </li>
                                             ))}
