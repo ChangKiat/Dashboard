@@ -3,12 +3,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { MealEntry } from '../api';
 import { createMeal, deleteMeal, updateMeal } from '../api';
 import { usePagination } from '../hooks/usePagination';
+import { toMealDisplayItems, type MealDisplayItem, type MealGroup } from '../utils/mealGroups';
 import {
     formatCell,
     parseOptionalNumber,
     parseRequiredNumber,
 } from '../utils/tableFormat';
 import HealthEntryDetailModal from './HealthEntryDetailModal';
+import { ChevronRightIcon } from './icons';
 import RecordModal from './RecordModal';
 import RowActions from './RowActions';
 import TablePagination from './TablePagination';
@@ -51,6 +53,7 @@ export default function MealHistoryTable({
     const [saving, setSaving] = useState(false);
     const [modalError, setModalError] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
+    const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
     const mealTypeOptions = useMemo(() => {
         const types = entries
@@ -72,7 +75,14 @@ export default function MealHistoryTable({
         return entries.filter((e) => e.mealType === mealTypeFilter);
     }, [entries, mealTypeFilter]);
 
-    const { page, setPage, pageItems, totalPages, totalItems } = usePagination(filteredEntries, {
+    const displayItems = useMemo(
+        () => (compact ? toMealDisplayItems(filteredEntries) : []),
+        [compact, filteredEntries]
+    );
+
+    const { page, setPage, pageItems, totalPages, totalItems } = usePagination<
+        MealEntry | MealDisplayItem
+    >(compact ? displayItems : filteredEntries, {
         pageSize: compact ? 5 : 10,
     });
 
@@ -166,7 +176,61 @@ export default function MealHistoryTable({
         return <p className="muted">{compact ? 'No meals logged this day.' : 'No meals logged in this range.'}</p>;
     }
 
-    const displayEntries = pageItems;
+    const toggleGroup = (key: string) => {
+        setExpandedGroups((prev) => {
+            const next = new Set(prev);
+            if (!next.delete(key)) next.add(key);
+            return next;
+        });
+    };
+
+    const renderMealRow = (entry: MealEntry, title: string, sub: string) => (
+        <li key={entry.id} className="day-entry-card">
+            <button
+                type="button"
+                className="day-entry-main day-entry-main--clickable"
+                onClick={() => setViewing(entry)}
+            >
+                <span className="day-entry-title">{title}</span>
+                <span className="day-entry-sub">{sub}</span>
+            </button>
+            <RowActions
+                onEdit={() => openEdit(entry)}
+                onDelete={() => handleDelete(entry)}
+                deleteLabel={`"${entry.description}"`}
+            />
+        </li>
+    );
+
+    const renderMealGroup = (group: MealGroup) => {
+        const expanded = expandedGroups.has(group.key);
+        return (
+            <li key={group.key} className="meal-group">
+                <button
+                    type="button"
+                    className="meal-group-toggle"
+                    aria-expanded={expanded}
+                    onClick={() => toggleGroup(group.key)}
+                >
+                    <span className="day-entry-main">
+                        <span className="day-entry-title">{group.title}</span>
+                        <span className="day-entry-sub">
+                            {group.mealType ? `${group.mealType} · ` : ''}
+                            {group.items.length} items · {group.calories} kcal · {group.proteinG}g protein
+                        </span>
+                    </span>
+                    <ChevronRightIcon size={16} className="meal-group-chevron" />
+                </button>
+                {expanded && (
+                    <ul className="day-entry-list meal-group-items">
+                        {group.items.map(({ entry, label }) =>
+                            renderMealRow(entry, label, formatMealSummary(entry))
+                        )}
+                    </ul>
+                )}
+            </li>
+        );
+    };
 
     const recordModal = (
         <RecordModal
@@ -273,26 +337,15 @@ export default function MealHistoryTable({
                 ) : (
                     <>
                         <ul className="day-entry-list">
-                            {displayEntries.map((entry) => (
-                                <li key={entry.id} className="day-entry-card">
-                                    <button
-                                        type="button"
-                                        className="day-entry-main day-entry-main--clickable"
-                                        onClick={() => setViewing(entry)}
-                                    >
-                                        <span className="day-entry-title">{entry.description}</span>
-                                        <span className="day-entry-sub">
-                                            {entry.mealType ? `${entry.mealType} · ` : ''}
-                                            {formatMealSummary(entry)}
-                                        </span>
-                                    </button>
-                                    <RowActions
-                                        onEdit={() => openEdit(entry)}
-                                        onDelete={() => handleDelete(entry)}
-                                        deleteLabel={`"${entry.description}"`}
-                                    />
-                                </li>
-                            ))}
+                            {(pageItems as MealDisplayItem[]).map((item) =>
+                                item.type === 'group'
+                                    ? renderMealGroup(item.group)
+                                    : renderMealRow(
+                                          item.entry,
+                                          item.entry.description,
+                                          `${item.entry.mealType ? `${item.entry.mealType} · ` : ''}${formatMealSummary(item.entry)}`
+                                      )
+                            )}
                         </ul>
                         {totalPages > 1 && (
                             <TablePagination
@@ -366,7 +419,7 @@ export default function MealHistoryTable({
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {pageItems.map((entry) => (
+                                    {(pageItems as MealEntry[]).map((entry) => (
                                         <tr key={entry.id}>
                                             <td>{entry.date}</td>
                                             <td>{formatCell(entry.mealType)}</td>

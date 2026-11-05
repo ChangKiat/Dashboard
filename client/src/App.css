@@ -3474,6 +3474,48 @@ div.payment-account-card-main:hover {
   color: var(--text-muted);
 }
 
+.meal-group {
+  border-bottom: 1px solid var(--border);
+}
+
+.meal-group-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 0;
+  background: none;
+  border: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.meal-group-toggle:hover .day-entry-title {
+  color: var(--text-heading);
+}
+
+.meal-group-chevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.meal-group-toggle[aria-expanded='true'] .meal-group-chevron {
+  transform: rotate(90deg);
+}
+
+.meal-group-items {
+  margin-bottom: 10px;
+  padding-left: 12px;
+  border-left: 2px solid var(--border);
+}
+
+.meal-group-items .day-entry-card:last-child {
+  border-bottom: none;
+}
+
 .table-pagination {
   display: flex;
   align-items: center;
