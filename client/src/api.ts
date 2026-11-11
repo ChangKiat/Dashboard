@@ -185,6 +185,9 @@ export interface FixedExpenseConfig {
     dayOfMonth: number;
     frequencyMonths: number;
     startMonth: number;
+    /** Set when the bill repeats every N days from intervalStartDate instead of on dayOfMonth. */
+    intervalDays?: number | null;
+    intervalStartDate?: string | null;
     currency: string;
     paymentMethod?: string | null;
     toInvestmentAccount?: string | null;
@@ -645,6 +648,8 @@ export function createFixedExpense(
         | 'frequencyMonths'
         | 'startMonth'
     > & {
+        intervalDays?: number | null;
+        intervalStartDate?: string | null;
         paymentMethod?: string | null;
         toInvestmentAccount?: string | null;
         instrumentId?: number | null;
@@ -673,6 +678,8 @@ export function updateFixedExpense(
             | 'amount'
             | 'dayOfMonth'
             | 'frequencyMonths'
+            | 'intervalDays'
+            | 'intervalStartDate'
             | 'paymentMethod'
             | 'toInvestmentAccount'
             | 'instrumentId'

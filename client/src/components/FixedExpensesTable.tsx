@@ -23,6 +23,10 @@ const EMPTY_FORM = {
     amount: '',
     dayOfMonth: '1',
     frequencyMonths: '1',
+    /** 'month' = on a day of the month; 'days' = every N days from a first payment date. */
+    repeat: 'month' as 'month' | 'days',
+    intervalDays: '30',
+    intervalStartDate: '',
 };
 
 function formatShortDate(iso: string) {
@@ -146,7 +150,7 @@ export default function FixedExpensesTable({
     const openCreate = () => {
         setModalMode('create');
         setEditingEntry(null);
-        setForm(EMPTY_FORM);
+        setForm({ ...EMPTY_FORM, intervalStartDate: today });
         setModalError(null);
     };
 
@@ -162,6 +166,9 @@ export default function FixedExpensesTable({
             amount: String(row.amount),
             dayOfMonth: String(row.dayOfMonth),
             frequencyMonths: String(row.frequencyMonths),
+            repeat: row.intervalDays ? 'days' : 'month',
+            intervalDays: String(row.intervalDays ?? 30),
+            intervalStartDate: row.intervalStartDate ?? today,
         });
         setModalError(null);
     };
@@ -174,8 +181,24 @@ export default function FixedExpensesTable({
 
     const handleSave = async () => {
         const amount = parseFloat(form.amount);
-        const dayOfMonth = parseInt(form.dayOfMonth, 10);
-        const frequencyMonths = parseInt(form.frequencyMonths, 10);
+        const everyDays = form.repeat === 'days';
+        const intervalDays = parseInt(form.intervalDays, 10);
+        const intervalStartDate = form.intervalStartDate;
+        if (everyDays) {
+            if (!Number.isInteger(intervalDays) || intervalDays < 1 || intervalDays > 3650) {
+                setModalError('Repeat every must be a whole number of days.');
+                return;
+            }
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(intervalStartDate)) {
+                setModalError('Pick the first payment date.');
+                return;
+            }
+        }
+        // An every-N-days bill keeps its first date's day in the day-of-month column.
+        const dayOfMonth = everyDays
+            ? parseInt(intervalStartDate.slice(8, 10), 10)
+            : parseInt(form.dayOfMonth, 10);
+        const frequencyMonths = everyDays ? 1 : parseInt(form.frequencyMonths, 10);
         if (
             !form.description.trim() ||
             !form.category.trim() ||
@@ -236,6 +259,8 @@ export default function FixedExpensesTable({
                 amount,
                 dayOfMonth,
                 frequencyMonths,
+                intervalDays: everyDays ? intervalDays : null,
+                intervalStartDate: everyDays ? intervalStartDate : null,
                 paymentMethod,
                 toInvestmentAccount: hasFundingTransfer ? toInvestmentAccount : null,
                 instrumentId,
@@ -338,7 +363,7 @@ export default function FixedExpensesTable({
                                 <span className="recurring-main">
                                     <span className="recurring-name">{row.description}</span>
                                     <span className="recurring-meta">
-                                        {frequencyLabel(row.frequencyMonths)}
+                                        {frequencyLabel(row)}
                                         {next && ` · next ${formatShortDate(next)}`}
                                         {row.paymentMethod && ` · ${row.paymentMethod}`}
                                         {destination && ` → ${destination}`}
@@ -503,26 +528,73 @@ export default function FixedExpensesTable({
                     />
                 </div>
                 <div className="form-field">
-                    <label htmlFor="fx-day">Day of month</label>
-                    <input
-                        id="fx-day"
-                        type="number"
-                        min="1"
-                        max="31"
-                        value={form.dayOfMonth}
-                        onChange={(e) => setForm((f) => ({ ...f, dayOfMonth: e.target.value }))}
-                    />
+                    <label htmlFor="fx-repeat">Repeats</label>
+                    <select
+                        id="fx-repeat"
+                        value={form.repeat}
+                        onChange={(e) =>
+                            setForm((f) => ({ ...f, repeat: e.target.value === 'days' ? 'days' : 'month' }))
+                        }
+                    >
+                        <option value="month">On a day of the month</option>
+                        <option value="days">Every number of days</option>
+                    </select>
                 </div>
-                <div className="form-field">
-                    <label htmlFor="fx-frequency">Frequency (months)</label>
-                    <input
-                        id="fx-frequency"
-                        type="number"
-                        min="1"
-                        value={form.frequencyMonths}
-                        onChange={(e) => setForm((f) => ({ ...f, frequencyMonths: e.target.value }))}
-                    />
-                </div>
+                {form.repeat === 'month' ? (
+                    <>
+                        <div className="form-field">
+                            <label htmlFor="fx-day">Day of month</label>
+                            <input
+                                id="fx-day"
+                                type="number"
+                                min="1"
+                                max="31"
+                                value={form.dayOfMonth}
+                                onChange={(e) => setForm((f) => ({ ...f, dayOfMonth: e.target.value }))}
+                            />
+                        </div>
+                        <div className="form-field">
+                            <label htmlFor="fx-frequency">Frequency (months)</label>
+                            <input
+                                id="fx-frequency"
+                                type="number"
+                                min="1"
+                                value={form.frequencyMonths}
+                                onChange={(e) =>
+                                    setForm((f) => ({ ...f, frequencyMonths: e.target.value }))
+                                }
+                            />
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <div className="form-field">
+                            <label htmlFor="fx-interval-days">Repeat every (days)</label>
+                            <input
+                                id="fx-interval-days"
+                                type="number"
+                                min="1"
+                                value={form.intervalDays}
+                                onChange={(e) => setForm((f) => ({ ...f, intervalDays: e.target.value }))}
+                            />
+                        </div>
+                        <div className="form-field">
+                            <label htmlFor="fx-interval-start">First payment date</label>
+                            <input
+                                id="fx-interval-start"
+                                type="date"
+                                value={form.intervalStartDate}
+                                onChange={(e) =>
+                                    setForm((f) => ({ ...f, intervalStartDate: e.target.value }))
+                                }
+                            />
+                            <span className="muted form-hint">
+                                Logged on this date, then every {form.intervalDays || 'N'} days after it. If
+                                you renew on a different day, set this to that day.
+                            </span>
+                        </div>
+                    </>
+                )}
             </RecordModal>
         </div>
     );

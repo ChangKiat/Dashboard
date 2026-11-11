@@ -68,6 +68,20 @@ function isLoanCategory(category: string): boolean {
     return category.trim().toLowerCase() === 'loan';
 }
 
+const INTERVAL_DAYS_ERROR = 'Repeat every must be a whole number of days from 1 to 3650';
+const INTERVAL_START_ERROR = 'Pick the first payment date for a bill that repeats every N days';
+
+function isIntervalDays(value: unknown): value is number {
+    return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 3650;
+}
+
+/** Loan installments and unit trust buys are worked out per month, so they stay on a day of the month. */
+function intervalNotAllowedError(category: string, instrumentId: number | null): string | null {
+    if (isLoanCategory(category)) return 'A Loan bill repeats monthly, not every N days';
+    if (instrumentId != null) return 'A bill linked to a unit trust holding repeats monthly, not every N days';
+    return null;
+}
+
 function parseLoanFields(
     body: Record<string, unknown>
 ): { loan?: FixedExpenseLoanFields | null; error?: string } {
@@ -687,19 +701,30 @@ router.post('/fixed', async (req, res) => {
         if (!isPositiveNumber(body.amount)) {
             return res.status(400).json({ error: 'Amount must be a positive number' });
         }
-        if (!isDayOfMonth(body.dayOfMonth)) {
+        // Every-N-days bill: the day, frequency and start month columns are filled from its first date.
+        let interval: { days: number; startDate: string } | null = null;
+        if (body.intervalDays != null) {
+            if (!isIntervalDays(body.intervalDays)) {
+                return res.status(400).json({ error: INTERVAL_DAYS_ERROR });
+            }
+            if (!isValidDate(body.intervalStartDate)) {
+                return res.status(400).json({ error: INTERVAL_START_ERROR });
+            }
+            interval = { days: body.intervalDays, startDate: body.intervalStartDate };
+        }
+        const dayOfMonth = interval ? parseInt(interval.startDate.slice(8, 10), 10) : body.dayOfMonth;
+        const frequencyMonths = interval ? 1 : body.frequencyMonths;
+        if (!isDayOfMonth(dayOfMonth)) {
             return res.status(400).json({ error: 'Day of month must be 1–31' });
         }
-        if (
-            !isPositiveNumber(body.frequencyMonths) ||
-            !Number.isInteger(body.frequencyMonths)
-        ) {
+        if (!isPositiveNumber(frequencyMonths) || !Number.isInteger(frequencyMonths)) {
             return res.status(400).json({ error: 'Frequency must be a positive integer' });
         }
-        const startMonth =
-            body.startMonth != null && Number.isInteger(body.startMonth) && body.startMonth >= 1 && body.startMonth <= 12
-                ? body.startMonth
-                : new Date().getMonth() + 1;
+        const startMonth = interval
+            ? parseInt(interval.startDate.slice(5, 7), 10)
+            : body.startMonth != null && Number.isInteger(body.startMonth) && body.startMonth >= 1 && body.startMonth <= 12
+              ? body.startMonth
+              : new Date().getMonth() + 1;
         const currency =
             body.currency != null && isNonEmptyString(body.currency)
                 ? body.currency.trim()
@@ -754,19 +779,24 @@ router.post('/fixed', async (req, res) => {
         if (loanParsed.loan && !isLoanCategory(category)) {
             return res.status(400).json({ error: 'Loan fields are only valid for the Loan category' });
         }
+        if (interval) {
+            const intervalError = intervalNotAllowedError(category, holding.instrumentId);
+            if (intervalError) return res.status(400).json({ error: intervalError });
+        }
 
         await addFixedExpense(
-            body.dayOfMonth,
+            dayOfMonth,
             body.amount,
             currency,
             category,
             body.description.trim(),
-            body.frequencyMonths,
+            frequencyMonths,
             startMonth,
             paymentMethod,
             holding.toInvestmentAccount,
             isLoanCategory(category) ? loanParsed.loan ?? null : null,
-            holding.instrumentId
+            holding.instrumentId,
+            interval
         );
         res.json({ ok: true });
     } catch (err) {
@@ -1005,6 +1035,8 @@ router.patch('/fixed/:id', async (req, res) => {
             amount?: number;
             dayOfMonth?: number;
             frequencyMonths?: number;
+            intervalDays?: number | null;
+            intervalStartDate?: string | null;
             paymentMethod?: string | null;
             toInvestmentAccount?: string | null;
             instrumentId?: number | null;
@@ -1040,6 +1072,21 @@ router.patch('/fixed/:id', async (req, res) => {
                 return res.status(400).json({ error: 'Frequency must be a positive integer' });
             }
             fields.frequencyMonths = body.frequencyMonths;
+        }
+        // intervalDays: null goes back to a day of the month; a number repeats every N days.
+        if (body.intervalDays === null) {
+            fields.intervalDays = null;
+        } else if (body.intervalDays !== undefined) {
+            if (!isIntervalDays(body.intervalDays)) {
+                return res.status(400).json({ error: INTERVAL_DAYS_ERROR });
+            }
+            fields.intervalDays = body.intervalDays;
+        }
+        if (body.intervalStartDate != null && body.intervalDays !== null) {
+            if (!isValidDate(body.intervalStartDate)) {
+                return res.status(400).json({ error: INTERVAL_START_ERROR });
+            }
+            fields.intervalStartDate = body.intervalStartDate;
         }
         if (body.paymentMethod !== undefined) {
             if (body.paymentMethod === null || body.paymentMethod === '') {
@@ -1138,6 +1185,19 @@ router.patch('/fixed/:id', async (req, res) => {
         }
         if (loanParsed.loan !== undefined) {
             fields.loan = isLoanCategory(nextCategory) ? loanParsed.loan : null;
+        }
+
+        const nextIntervalDays =
+            fields.intervalDays !== undefined ? fields.intervalDays : (existing?.intervalDays ?? null);
+        if (nextIntervalDays != null) {
+            if (!(fields.intervalStartDate ?? existing?.intervalStartDate)) {
+                return res.status(400).json({ error: INTERVAL_START_ERROR });
+            }
+            const intervalError = intervalNotAllowedError(
+                nextCategory,
+                fields.instrumentId !== undefined ? fields.instrumentId : (existing?.instrumentId ?? null)
+            );
+            if (intervalError) return res.status(400).json({ error: intervalError });
         }
 
         if (Object.keys(fields).length === 0) {
