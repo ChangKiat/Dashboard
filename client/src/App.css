@@ -5431,6 +5431,11 @@ div.payment-account-card-main:hover {
   color: var(--text-heading);
 }
 
+/* After .variable-txn-amount so money-in keeps its green. */
+.variable-txn-amount.account-activity-in {
+  color: var(--ok);
+}
+
 .variable-txn-net {
   font-size: 0.75rem;
   color: var(--text-muted);
