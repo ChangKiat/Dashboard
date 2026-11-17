@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react';
+import { useState } from 'react';
 
 import type { WorkoutEntry, WorkoutSession } from '../api';
 import {
@@ -12,6 +12,7 @@ import {
     getWorkoutEntryMetrics,
 } from '../utils/workoutSessions';
 import DetailModal from './DetailModal';
+import { ChevronRightIcon, PlusIcon, TrashIcon } from './icons';
 import RowActions from './RowActions';
 
 interface Props {
@@ -100,6 +101,7 @@ export default function WorkoutSessionDetailModal({
     const [label, setLabel] = useState(session.sessionLabel ?? '');
     const [date, setDate] = useState(session.date);
     const [rows, setRows] = useState<EditRow[]>(() => session.exercises.map(entryToRow));
+    const [expandedRow, setExpandedRow] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -108,6 +110,7 @@ export default function WorkoutSessionDetailModal({
     const title = session.sessionLabel || 'Workout';
 
     const startEdit = () => {
+        setExpandedRow(null);
         setLabel(session.sessionLabel ?? '');
         setDate(session.date);
         setRows(session.exercises.map(entryToRow));
@@ -216,162 +219,201 @@ export default function WorkoutSessionDetailModal({
         }
     };
 
+    const closeSessionView = () => {
+        if (deleting) return;
+        if (confirmDeleteSession) {
+            setConfirmDeleteSession(false);
+            return;
+        }
+        onClose();
+    };
+
     if (editing) {
         return (
             <DetailModal
                 title={`Edit · ${title}`}
                 open
-                className="workout-session-modal"
+                className="workout-session-modal workout-session-editor"
                 onClose={saving || deleting ? () => {} : cancelEdit}
             >
-                {error && <p className="error">{error}</p>}
-                <div className="form-field">
-                    <label htmlFor="session-edit-label">Session label</label>
-                    <input
-                        id="session-edit-label"
-                        type="text"
-                        value={label}
-                        onChange={(e) => setLabel(e.target.value)}
-                        disabled={saving || deleting}
-                    />
-                </div>
-                <div className="form-field">
-                    <label htmlFor="session-edit-date">Date</label>
-                    <input
-                        id="session-edit-date"
-                        type="date"
-                        value={date}
-                        onChange={(e) => setDate(e.target.value)}
-                        disabled={saving || deleting}
-                    />
-                </div>
-                <div className="workout-session-edit-table-wrap">
-                    <table className="workout-session-edit-table">
-                        <thead>
-                            <tr>
-                                <th className="col-exercise">Exercise</th>
-                                <th className="col-num">Sets</th>
-                                <th className="col-num">Reps</th>
-                                <th className="col-weight">Weight</th>
-                                <th className="col-num">SS</th>
-                                <th className="col-num">Min</th>
-                                <th className="col-actions" aria-label="Actions" />
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {rows.map((row) => (
-                                <Fragment key={row.key}>
-                                    <tr>
-                                        <td className="col-exercise">
-                                            <input
-                                                type="text"
-                                                placeholder="Exercise"
-                                                value={row.exercise}
-                                                onChange={(e) =>
-                                                    updateRow(row.key, { exercise: e.target.value })
-                                                }
-                                                disabled={saving || deleting}
-                                            />
-                                        </td>
-                                        <td className="col-num">
+                <div className="workout-session-edit-scroll">
+                    <div className="workout-session-edit-meta">
+                    <div className="form-field">
+                        <label htmlFor="session-edit-label">Session label</label>
+                        <input
+                            id="session-edit-label"
+                            type="text"
+                            value={label}
+                            onChange={(e) => setLabel(e.target.value)}
+                            disabled={saving || deleting}
+                        />
+                    </div>
+                    <div className="form-field">
+                        <label htmlFor="session-edit-date">Date</label>
+                        <input
+                            id="session-edit-date"
+                            type="date"
+                            value={date}
+                            onChange={(e) => setDate(e.target.value)}
+                            disabled={saving || deleting}
+                        />
+                    </div>
+                    </div>
+                    <div className="workout-session-edit-rows">
+                        <div className="workout-session-edit-head" aria-hidden="true">
+                            <span>Exercise</span><span>Sets</span><span>Reps</span><span>Weight (kg)</span>
+                        </div>
+                        {rows.map((row, index) => (
+                            <div className="workout-session-edit-row" key={row.key}>
+                                <div className="workout-session-edit-fields">
+                                    <label className="form-field workout-session-exercise-field">
+                                        <span>Exercise</span>
+                                        <input
+                                            type="text"
+                                            value={row.exercise}
+                                            onChange={(e) => updateRow(row.key, { exercise: e.target.value })}
+                                            disabled={saving || deleting}
+                                        />
+                                    </label>
+                                    {(['sets', 'reps'] as const).map((field) => (
+                                        <label className="form-field" key={field}>
+                                            <span>{field === 'sets' ? 'Sets' : 'Reps'}</span>
                                             <input
                                                 type="number"
                                                 min="0"
-                                                value={row.sets}
-                                                onChange={(e) =>
-                                                    updateRow(row.key, { sets: e.target.value })
-                                                }
+                                                value={row[field]}
+                                                onChange={(e) => updateRow(row.key, { [field]: e.target.value })}
                                                 disabled={saving || deleting}
                                             />
-                                        </td>
-                                        <td className="col-num">
+                                        </label>
+                                    ))}
+                                    <label className="form-field">
+                                        <span>Weight (kg)</span>
+                                        <input
+                                            type="text"
+                                            placeholder="e.g. 10/20/30"
+                                            value={rowWeightDisplay(row)}
+                                            onChange={(e) => updateRow(row.key, applyRowWeight(e.target.value))}
+                                            disabled={saving || deleting}
+                                        />
+                                    </label>
+                                </div>
+                                <div className="workout-session-edit-options">
+                                    <button
+                                        type="button"
+                                        className="workout-editor-button workout-editor-extras"
+                                        aria-expanded={expandedRow === row.key}
+                                        onClick={() => setExpandedRow(expandedRow === row.key ? null : row.key)}
+                                    >
+                                        <ChevronRightIcon size={14} />
+                                        Extras{(row.notes || row.supersetGroup || row.durationMin) && ' •'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="workout-editor-button workout-editor-danger"
+                                        title="Remove exercise"
+                                        aria-label={`Remove ${row.exercise || `exercise ${index + 1}`}`}
+                                        disabled={saving || deleting}
+                                        onClick={() => setRows((prev) => prev.filter((item) => item.key !== row.key))}
+                                    >
+                                        <TrashIcon size={16} />
+                                    </button>
+                                </div>
+                                {expandedRow === row.key && (
+                                    <div className="workout-session-extra-fields">
+                                        <label className="form-field">
+                                            Notes
                                             <input
-                                                type="number"
-                                                min="0"
-                                                value={row.reps}
-                                                onChange={(e) =>
-                                                    updateRow(row.key, { reps: e.target.value })
-                                                }
+                                                value={row.notes}
+                                                onChange={(e) => updateRow(row.key, { notes: e.target.value })}
                                                 disabled={saving || deleting}
                                             />
-                                        </td>
-                                        <td className="col-weight">
-                                            <input
-                                                type="text"
-                                                placeholder="kg or 10/20/30"
-                                                value={rowWeightDisplay(row)}
-                                                onChange={(e) =>
-                                                    updateRow(row.key, applyRowWeight(e.target.value))
-                                                }
-                                                disabled={saving || deleting}
-                                            />
-                                        </td>
-                                        <td className="col-num">
+                                        </label>
+                                        <label className="form-field">
+                                            Superset group
                                             <input
                                                 type="number"
                                                 min="1"
-                                                placeholder="1"
                                                 value={row.supersetGroup}
-                                                onChange={(e) =>
-                                                    updateRow(row.key, { supersetGroup: e.target.value })
-                                                }
+                                                onChange={(e) => updateRow(row.key, { supersetGroup: e.target.value })}
                                                 disabled={saving || deleting}
                                             />
-                                        </td>
-                                        <td className="col-num">
+                                        </label>
+                                        <label className="form-field">
+                                            Duration (min)
                                             <input
                                                 type="number"
                                                 min="0"
                                                 step="0.5"
                                                 value={row.durationMin}
-                                                onChange={(e) =>
-                                                    updateRow(row.key, { durationMin: e.target.value })
-                                                }
+                                                onChange={(e) => updateRow(row.key, { durationMin: e.target.value })}
                                                 disabled={saving || deleting}
                                             />
-                                        </td>
-                                        <td className="col-actions">
-                                            <button
-                                                type="button"
-                                                className="btn-danger-link"
-                                                disabled={saving || deleting}
-                                                onClick={() =>
-                                                    setRows((prev) =>
-                                                        prev.filter((r) => r.key !== row.key)
-                                                    )
-                                                }
-                                            >
-                                                ×
-                                            </button>
-                                        </td>
-                                    </tr>
-                                    <tr className="row-notes">
-                                        <td colSpan={7}>
-                                            <input
-                                                type="text"
-                                                placeholder="Notes (optional)"
-                                                value={row.notes}
-                                                onChange={(e) =>
-                                                    updateRow(row.key, { notes: e.target.value })
-                                                }
-                                                disabled={saving || deleting}
-                                            />
-                                        </td>
-                                    </tr>
-                                </Fragment>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-                <button
-                    type="button"
-                    className="btn-secondary"
-                    disabled={saving || deleting}
-                    onClick={() => setRows((prev) => [...prev, emptyRow()])}
-                >
-                    + Add exercise
-                </button>
+                                        </label>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                    <button
+                        type="button"
+                        className="workout-editor-button"
+                        disabled={saving || deleting}
+                        onClick={() => setRows((prev) => [...prev, emptyRow()])}
+                    >
+                        <PlusIcon size={16} /> Add exercise
+                    </button>
 
+                </div>
+                {error && <p className="error" role="alert">{error}</p>}
+                <div className="record-modal-actions">
+                    <button
+                        type="button"
+                        className="btn-secondary"
+                        disabled={saving || deleting}
+                        onClick={cancelEdit}
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        className="btn-primary"
+                        disabled={saving || deleting}
+                        onClick={handleSaveAll}
+                    >
+                        {saving ? 'Saving…' : 'Save session'}
+                    </button>
+                </div>
+            </DetailModal>
+        );
+    }
+
+    return (
+        <DetailModal title={title} open className="workout-session-modal workout-session-view" onClose={closeSessionView}>
+            <p className="workout-session-count">
+                {session.exercises.length} {session.exercises.length === 1 ? 'exercise' : 'exercises'}
+            </p>
+            <ul className="workout-session-modal-list">
+                {session.exercises.map((entry) => (
+                    <li key={entry.id} className="day-entry-card workout-session-modal-item">
+                        <div className="day-entry-main">
+                            <span className="day-entry-title">{entry.exercise}</span>
+                            <span className="health-entry-metrics">
+                                {getWorkoutEntryMetrics(entry).map((metric) => <span key={metric}>{metric}</span>)}
+                            </span>
+                        </div>
+                        <RowActions
+                            onEdit={() => onEdit(entry)}
+                            onDelete={() => onDelete(entry)}
+                            deleteLabel={entry.exercise}
+                            confirmTitle="Remove from session?"
+                            confirmMessage={`"${entry.exercise}" will be removed from ${title}.`}
+                        />
+                    </li>
+                ))}
+            </ul>
+            <div>
+                {error && <p className="error" role="alert">{error}</p>}
                 {confirmDeleteSession ? (
                     <div className="confirm-dialog workout-session-delete-confirm">
                         <h4>Delete entire session?</h4>
@@ -403,65 +445,19 @@ export default function WorkoutSessionDetailModal({
                     <div className="record-modal-actions">
                         <button
                             type="button"
-                            className="btn-danger-link"
-                            disabled={saving || deleting}
+                            className="workout-editor-button workout-editor-danger workout-session-delete-button"
                             onClick={() => setConfirmDeleteSession(true)}
                         >
-                            Delete session
+                            <TrashIcon size={16} /> Delete session
                         </button>
-                        <button
-                            type="button"
-                            className="btn-secondary"
-                            disabled={saving || deleting}
-                            onClick={cancelEdit}
-                        >
-                            Cancel
+                        <button type="button" className="btn-secondary" onClick={onClose}>
+                            Close
                         </button>
-                        <button
-                            type="button"
-                            className="btn-primary"
-                            disabled={saving || deleting}
-                            onClick={handleSaveAll}
-                        >
-                            {saving ? 'Saving…' : 'Save session'}
+                        <button type="button" className="btn-primary" onClick={startEdit}>
+                            Edit session
                         </button>
                     </div>
                 )}
-            </DetailModal>
-        );
-    }
-
-    return (
-        <DetailModal title={title} open className="workout-session-modal workout-session-view" onClose={onClose}>
-            <p className="workout-session-count">
-                {session.exercises.length} {session.exercises.length === 1 ? 'exercise' : 'exercises'}
-            </p>
-            <ul className="workout-session-modal-list">
-                {session.exercises.map((entry) => (
-                    <li key={entry.id} className="day-entry-card workout-session-modal-item">
-                        <div className="day-entry-main">
-                            <span className="day-entry-title">{entry.exercise}</span>
-                            <span className="health-entry-metrics">
-                                {getWorkoutEntryMetrics(entry).map((metric) => <span key={metric}>{metric}</span>)}
-                            </span>
-                        </div>
-                        <RowActions
-                            onEdit={() => onEdit(entry)}
-                            onDelete={() => onDelete(entry)}
-                            deleteLabel={entry.exercise}
-                            confirmTitle="Remove from session?"
-                            confirmMessage={`"${entry.exercise}" will be removed from ${title}.`}
-                        />
-                    </li>
-                ))}
-            </ul>
-            <div className="record-modal-actions">
-                <button type="button" className="btn-secondary" onClick={onClose}>
-                    Close
-                </button>
-                <button type="button" className="btn-primary" onClick={startEdit}>
-                    Edit session
-                </button>
             </div>
         </DetailModal>
     );

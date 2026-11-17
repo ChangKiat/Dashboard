@@ -2596,12 +2596,14 @@ div.payment-account-card-main:hover {
   font-size: 0.875rem;
 }
 
-.workout-session-view {
+.workout-session-view,
+.workout-session-editor {
   display: flex;
   flex-direction: column;
 }
 
-.workout-session-view .detail-modal-header h4 {
+.workout-session-view .detail-modal-header h4,
+.workout-session-editor .detail-modal-header h4 {
   color: var(--text-heading);
   font-size: 1.125rem;
 }
@@ -2625,25 +2627,173 @@ div.payment-account-card-main:hover {
 }
 
 .workout-session-edit-rows {
+  --exercise-columns: minmax(0, 1fr) 4rem 4rem minmax(5.5rem, 0.35fr);
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.workout-session-edit-row,
+.workout-session-edit-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 7rem;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
 }
 
 .workout-session-edit-row {
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.workout-session-edit-head {
+  grid-template-columns: var(--exercise-columns) 7rem;
+}
+
+.workout-session-edit-head,
+.workout-session-extra-fields > label {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.workout-session-editor .detail-modal-body {
   display: flex;
   flex-direction: column;
+  min-height: 0;
+}
+
+.workout-session-edit-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px 6px 4px 2px;
+}
+
+.workout-session-edit-meta,
+.workout-session-edit-fields,
+.workout-session-extra-fields {
+  display: grid;
   gap: 8px;
 }
 
-.workout-session-edit-row-header {
+.workout-session-edit-meta {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  margin-bottom: 12px;
+}
+
+.workout-session-edit-fields {
+  grid-template-columns: var(--exercise-columns);
+  gap: 6px;
+}
+
+.workout-session-edit-fields label > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.workout-session-extra-fields {
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr));
+  padding: 4px 0;
+}
+
+.workout-session-editor input {
+  min-width: 0;
+  width: 100%;
+  padding: 5px 8px;
+  min-height: 32px;
+  border-radius: 6px;
+}
+
+.workout-session-edit-options {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.workout-editor-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 32px;
+  min-width: 32px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent-text);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.workout-editor-button:hover:not(:disabled) {
+  background: var(--surface);
+  border-color: currentColor;
+}
+
+.workout-editor-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.workout-editor-danger {
+  color: var(--danger);
+}
+
+.workout-session-delete-button {
+  margin-right: auto;
+}
+
+.workout-session-view .record-modal-actions {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.workout-editor-extras[aria-expanded='true'] svg {
+  transform: rotate(90deg);
+}
+
+.workout-session-editor .record-modal-actions {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+@media (max-width: 580px) {
+  .workout-session-edit-head {
+    display: none;
+  }
+
+  .workout-session-edit-fields label > span {
+    position: static;
+    width: auto;
+    height: auto;
+    clip-path: none;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+  }
+
+  .workout-session-edit-fields,
+  .workout-session-extra-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workout-session-exercise-field,
+  .workout-session-extra-fields > :first-child {
+    grid-column: 1 / -1;
+  }
+
+  .workout-session-edit-fields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .form-row-inline {
@@ -3579,6 +3729,11 @@ div.payment-account-card-main:hover {
   flex-direction: row;
   align-items: center;
   margin-left: auto;
+  gap: 10px;
+}
+
+.workout-session-modal-item .row-actions .btn-link {
+  padding-inline: 4px;
 }
 
 .day-detail-section .meal-group-toggle {
