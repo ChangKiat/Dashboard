@@ -145,7 +145,7 @@ export default function TripsPanel({
 
     const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
     const [pendingDelete, setPendingDelete] = useState<
-        { kind: 'trip' } | { kind: 'entry'; id: number } | null
+        { kind: 'trip' } | { kind: 'entry'; id: number } | { kind: 'unlink'; id: number; description: string } | null
     >(null);
 
     const categories = useMemo(() => {
@@ -506,15 +506,19 @@ export default function TripsPanel({
         setPendingDelete(null);
         if (!target) return;
         if (target.kind === 'trip') void handleDeleteTrip();
+        else if (target.kind === 'unlink') void handleUnlink(target.id);
         else void handleDeleteExpense(target.id);
     }
 
     const confirmDialog = (
         <ConfirmDialog
             open={pendingDelete != null}
-            title={pendingDelete?.kind === 'trip' ? 'Delete trip' : 'Delete trip entry'}
+            title={pendingDelete?.kind === 'unlink' ? 'Remove from trip?' : pendingDelete?.kind === 'trip' ? 'Delete trip' : 'Delete trip entry'}
+            confirmLabel={pendingDelete?.kind === 'unlink' ? 'Remove from trip' : 'Delete'}
             message={
-                pendingDelete?.kind === 'trip'
+                pendingDelete?.kind === 'unlink'
+                    ? `Remove "${pendingDelete.description}" from this trip? The transaction will stay in your account.`
+                    : pendingDelete?.kind === 'trip'
                     ? `Delete "${summary?.trip.name ?? 'this trip'}"? Linked transactions are kept and just removed from the trip. Exchange / fund / card entries must be deleted first.`
                     : 'Delete this trip entry? This removes the transaction and updates account balances.'
             }
@@ -1171,7 +1175,7 @@ export default function TripsPanel({
                                                                 className="trip-txn-action"
                                                                 aria-label={`Unlink ${row.description} from this trip`}
                                                                 title="Remove from this trip (keeps the transaction)"
-                                                                onClick={() => handleUnlink(row.id)}
+                                                                onClick={() => setPendingDelete({ kind: 'unlink', id: row.id, description: row.description })}
                                                             >
                                                                 <UnlinkIcon size={16} />
                                                             </button>
