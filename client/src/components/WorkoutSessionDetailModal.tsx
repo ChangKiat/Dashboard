@@ -9,10 +9,7 @@ import {
 } from '../api';
 import { parseOptionalInt, parseOptionalNumber } from '../utils/tableFormat';
 import {
-    formatExerciseLine,
-    formatSessionExerciseLines,
-    formatSessionSetsReps,
-    formatWorkoutEntrySummary,
+    getWorkoutEntryMetrics,
 } from '../utils/workoutSessions';
 import DetailModal from './DetailModal';
 import RowActions from './RowActions';
@@ -108,9 +105,7 @@ export default function WorkoutSessionDetailModal({
     const [error, setError] = useState<string | null>(null);
     const [confirmDeleteSession, setConfirmDeleteSession] = useState(false);
 
-    const setsReps = formatSessionSetsReps(session.exercises);
     const title = session.sessionLabel || 'Workout';
-    const exerciseLines = formatSessionExerciseLines(session.exercises);
 
     const startEdit = () => {
         setLabel(session.sessionLabel ?? '');
@@ -437,17 +432,18 @@ export default function WorkoutSessionDetailModal({
     }
 
     return (
-        <DetailModal title={title} open className="workout-session-modal" onClose={onClose}>
-            {setsReps && <p className="day-detail-stat">{setsReps}</p>}
-            {exerciseLines.length > 0 && (
-                <p className="muted workout-session-superset-preview">{exerciseLines.join(' · ')}</p>
-            )}
+        <DetailModal title={title} open className="workout-session-modal workout-session-view" onClose={onClose}>
+            <p className="workout-session-count">
+                {session.exercises.length} {session.exercises.length === 1 ? 'exercise' : 'exercises'}
+            </p>
             <ul className="workout-session-modal-list">
                 {session.exercises.map((entry) => (
                     <li key={entry.id} className="day-entry-card workout-session-modal-item">
                         <div className="day-entry-main">
-                            <span className="day-entry-title">{formatExerciseLine(entry)}</span>
-                            <span className="day-entry-sub">{formatWorkoutEntrySummary(entry)}</span>
+                            <span className="day-entry-title">{entry.exercise}</span>
+                            <span className="health-entry-metrics">
+                                {getWorkoutEntryMetrics(entry).map((metric) => <span key={metric}>{metric}</span>)}
+                            </span>
                         </div>
                         <RowActions
                             onEdit={() => onEdit(entry)}

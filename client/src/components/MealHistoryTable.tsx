@@ -3,7 +3,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { MealEntry } from '../api';
 import { createMeal, deleteMeal, updateMeal } from '../api';
 import { usePagination } from '../hooks/usePagination';
-import { toMealDisplayItems, type MealDisplayItem, type MealGroup } from '../utils/mealGroups';
+import {
+    getMealCategory,
+    MEAL_CATEGORIES,
+    toMealDisplayItems,
+    type MealDisplayItem,
+    type MealGroup,
+} from '../utils/mealGroups';
 import {
     formatCell,
     parseOptionalNumber,
@@ -26,17 +32,13 @@ interface Props {
 
 const UNCATEGORIZED_FILTER = '__uncategorized__';
 
-function formatMealSummary(entry: MealEntry): string {
-    const cal = entry.calories != null ? `${entry.calories} kcal` : '— kcal';
-    return `${cal} · ${entry.proteinG}g protein`;
-}
-
 export default function MealHistoryTable({
     entries,
     onChanged,
     compact = false,
     defaultDate,
 }: Props) {
+    const categorize = compact && defaultDate != null;
     const [mealTypeFilter, setMealTypeFilter] = useState('all');
     const [viewing, setViewing] = useState<MealEntry | null>(null);
     const [modalMode, setModalMode] = useState<ModalMode>('closed');
@@ -76,14 +78,14 @@ export default function MealHistoryTable({
     }, [entries, mealTypeFilter]);
 
     const displayItems = useMemo(
-        () => (compact ? toMealDisplayItems(filteredEntries) : []),
-        [compact, filteredEntries]
+        () => (compact ? toMealDisplayItems(filteredEntries, categorize) : []),
+        [compact, categorize, filteredEntries]
     );
 
     const { page, setPage, pageItems, totalPages, totalItems } = usePagination<
         MealEntry | MealDisplayItem
     >(compact ? displayItems : filteredEntries, {
-        pageSize: compact ? 5 : 10,
+        pageSize: categorize ? MEAL_CATEGORIES.length : compact ? 5 : 10,
     });
 
     useEffect(() => {
@@ -95,7 +97,7 @@ export default function MealHistoryTable({
         setEditingEntry(null);
         setForm({
             date: defaultDate ?? '',
-            mealType: '',
+            mealType: categorize ? 'others' : '',
             description: '',
             proteinG: '',
             carbsG: '',
@@ -184,7 +186,7 @@ export default function MealHistoryTable({
         });
     };
 
-    const renderMealRow = (entry: MealEntry, title: string, sub: string) => (
+    const renderMealRow = (entry: MealEntry, title: string, showType = false) => (
         <li key={entry.id} className="day-entry-card">
             <button
                 type="button"
@@ -192,7 +194,11 @@ export default function MealHistoryTable({
                 onClick={() => setViewing(entry)}
             >
                 <span className="day-entry-title">{title}</span>
-                <span className="day-entry-sub">{sub}</span>
+                <span className="health-entry-metrics">
+                    {showType && entry.mealType && <span>{entry.mealType}</span>}
+                    {entry.calories != null && <span>{entry.calories} kcal</span>}
+                    <span>{entry.proteinG} g protein</span>
+                </span>
             </button>
             <RowActions
                 onEdit={() => openEdit(entry)}
@@ -214,9 +220,11 @@ export default function MealHistoryTable({
                 >
                     <span className="day-entry-main">
                         <span className="day-entry-title">{group.title}</span>
-                        <span className="day-entry-sub">
-                            {group.mealType ? `${group.mealType} · ` : ''}
-                            {group.items.length} items · {group.calories} kcal · {group.proteinG}g protein
+                        <span className="health-entry-metrics">
+                            {group.mealType && <span>{group.mealType}</span>}
+                            <span>{group.items.length} {group.items.length === 1 ? 'item' : 'items'}</span>
+                            <span>{group.calories} kcal</span>
+                            <span>{group.proteinG} g protein</span>
                         </span>
                     </span>
                     <ChevronRightIcon size={16} className="meal-group-chevron" />
@@ -224,7 +232,7 @@ export default function MealHistoryTable({
                 {expanded && (
                     <ul className="day-entry-list meal-group-items">
                         {group.items.map(({ entry, label }) =>
-                            renderMealRow(entry, label, formatMealSummary(entry))
+                            renderMealRow(entry, label)
                         )}
                     </ul>
                 )}
@@ -252,13 +260,23 @@ export default function MealHistoryTable({
             </div>
             <div className="form-field">
                 <label htmlFor="meal-type">Meal type</label>
-                <input
+                {categorize ? (
+                    <select
+                        id="meal-type"
+                        value={form.mealType ? getMealCategory(form.mealType).value : 'others'}
+                        onChange={(e) => setForm((f) => ({ ...f, mealType: e.target.value }))}
+                    >
+                        {MEAL_CATEGORIES.map(({ value, label }) => (
+                            <option key={value} value={value}>{label}</option>
+                        ))}
+                    </select>
+                ) : <input
                     id="meal-type"
                     type="text"
                     placeholder="e.g. breakfast, lunch"
                     value={form.mealType}
                     onChange={(e) => setForm((f) => ({ ...f, mealType: e.target.value }))}
-                />
+                />}
             </div>
             <div className="form-field">
                 <label htmlFor="meal-description">Description</label>
@@ -343,7 +361,7 @@ export default function MealHistoryTable({
                                     : renderMealRow(
                                           item.entry,
                                           item.entry.description,
-                                          `${item.entry.mealType ? `${item.entry.mealType} · ` : ''}${formatMealSummary(item.entry)}`
+                                          true
                                       )
                             )}
                         </ul>

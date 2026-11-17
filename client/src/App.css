@@ -2590,9 +2590,38 @@ div.payment-account-card-main:hover {
   margin: 0;
 }
 
-.workout-session-superset-preview {
-  margin: 0 0 12px;
-  font-size: 0.9rem;
+.workout-session-count {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.workout-session-view {
+  display: flex;
+  flex-direction: column;
+}
+
+.workout-session-view .detail-modal-header h4 {
+  color: var(--text-heading);
+  font-size: 1.125rem;
+}
+
+.workout-session-view .detail-modal-body {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  min-height: 0;
+}
+
+.workout-session-view .workout-session-modal-list {
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0;
+  gap: 6px;
+}
+
+.workout-session-view .record-modal-actions {
+  margin-top: 0;
 }
 
 .workout-session-edit-rows {
@@ -3514,6 +3543,76 @@ div.payment-account-card-main:hover {
 
 .meal-group-items .day-entry-card:last-child {
   border-bottom: none;
+}
+
+.day-detail-section .day-entry-list {
+  gap: 8px;
+}
+
+.day-detail-section .day-entry-card,
+.day-detail-section .meal-group,
+.workout-session-view .workout-session-modal-item {
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.day-detail-section .meal-group {
+  padding: 0;
+}
+
+.workout-session-view .workout-session-modal-item {
+  align-items: center;
+  padding: 6px 10px;
+  flex-wrap: wrap;
+}
+
+.workout-session-modal-item .day-entry-main {
+  flex: 1 1 230px;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  column-gap: 10px;
+}
+
+.workout-session-modal-item .row-actions {
+  flex-direction: row;
+  align-items: center;
+  margin-left: auto;
+}
+
+.day-detail-section .meal-group-toggle {
+  padding: 10px;
+}
+
+.day-detail-section .meal-group-items {
+  margin: 0 8px 8px;
+  padding: 0;
+  border: 0;
+}
+
+.day-detail-section .meal-group-items .day-entry-card:last-child {
+  border-bottom: 1px solid var(--border);
+}
+
+.health-entry-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.health-entry-metrics > span {
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.day-detail-section .row-actions button,
+.workout-session-view .row-actions button {
+  min-height: 24px;
 }
 
 .table-pagination {

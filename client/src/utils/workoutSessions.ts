@@ -23,16 +23,16 @@ export function formatSessionSetsReps(exercises: WorkoutEntry[]): string | null 
     return parts.length > 0 ? parts.join(' · ') : null;
 }
 
-export function formatWorkoutEntrySummary(entry: WorkoutEntry): string {
+export function getWorkoutEntryMetrics(entry: WorkoutEntry): string[] {
     const parts: string[] = [];
     if (entry.sets != null) parts.push(`${entry.sets} sets`);
     if (entry.reps != null) parts.push(`${entry.reps} reps`);
     const weight = formatWeightDisplay(entry);
     if (weight) parts.push(weight);
-    if (entry.supersetGroup != null) parts.push(`SS${entry.supersetGroup}`);
+    if (entry.supersetGroup != null) parts.push(`Superset ${entry.supersetGroup}`);
     if (entry.caloriesBurned != null) parts.push(`${entry.caloriesBurned} kcal`);
     if (entry.fatBurnG != null) parts.push(`${entry.fatBurnG}g fat`);
-    return parts.length > 0 ? parts.join(' · ') : '—';
+    return parts;
 }
 
 /** Format session exercises with supersets joined by " + ". */

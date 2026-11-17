@@ -5,9 +5,8 @@ import { createWorkout, deleteWorkout, updateWorkout } from '../api';
 import { usePagination } from '../hooks/usePagination';
 import { formatCell, parseOptionalInt, parseOptionalNumber } from '../utils/tableFormat';
 import {
-    formatExerciseLine,
     formatSessionSummary,
-    formatWorkoutEntrySummary,
+    getWorkoutEntryMetrics,
     listSameDaySessions,
     toWorkoutDisplayItems,
     type WorkoutDisplayItem,
@@ -288,8 +287,10 @@ export default function WorkoutHistoryTable({
                 className="day-entry-main day-entry-main--clickable"
                 onClick={() => setViewing(entry)}
             >
-                <span className="day-entry-title">{formatExerciseLine(entry)}</span>
-                <span className="day-entry-sub">{formatWorkoutEntrySummary(entry)}</span>
+                <span className="day-entry-title">{entry.exercise}</span>
+                <span className="health-entry-metrics">
+                    {getWorkoutEntryMetrics(entry).map((metric) => <span key={metric}>{metric}</span>)}
+                </span>
             </button>
             <RowActions
                 onEdit={() => openEdit(entry)}

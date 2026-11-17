@@ -17,7 +17,22 @@ export type MealDisplayItem =
 /** The bot names receipt items "Restaurant: item"; the colon must be followed by a space, so "8:30" is safe. */
 const RESTAURANT_PREFIX = /^([^:]+):\s+(.+)$/;
 
-function buildGroup(key: string, rows: MealEntry[]): MealGroup {
+export const MEAL_CATEGORIES = [
+    { value: 'breakfast', label: 'Breakfast' },
+    { value: 'lunch', label: 'Lunch' },
+    { value: 'tea', label: 'Tea' },
+    { value: 'dinner', label: 'Dinner' },
+    { value: 'supper', label: 'Supper' },
+    { value: 'others', label: 'Others' },
+] as const;
+
+export function getMealCategory(mealType: string | null) {
+    const value = mealType?.trim().toLowerCase();
+    return MEAL_CATEGORIES.find((category) => category.value === value) ??
+        MEAL_CATEGORIES[MEAL_CATEGORIES.length - 1];
+}
+
+function buildGroup(key: string, rows: MealEntry[], categoryLabel?: string): MealGroup {
     const parts = rows.map((row) => row.description.match(RESTAURANT_PREFIX));
     const first = parts[0]?.[1].trim();
     const restaurant = first && parts.every((p) => p?.[1].trim() === first) ? first : null;
@@ -26,9 +41,10 @@ function buildGroup(key: string, rows: MealEntry[]): MealGroup {
     return {
         key,
         title:
+            (categoryLabel && restaurant ? `${categoryLabel} · ${restaurant}` : categoryLabel) ??
             restaurant ??
             (mealType ? mealType.charAt(0).toUpperCase() + mealType.slice(1) : 'Other'),
-        mealType: restaurant ? mealType : null,
+        mealType: restaurant && !categoryLabel ? mealType : null,
         items: rows.map((entry, i) => ({
             entry,
             label: restaurant ? parts[i]![2] : entry.description,
@@ -45,15 +61,25 @@ function buildGroup(key: string, rows: MealEntry[]): MealGroup {
  * Ceiling: two receipts at the same meal share a row. Upgrade path: a receipt id column set by
  * the bot, like workouts.session_id.
  */
-export function toMealDisplayItems(entries: MealEntry[]): MealDisplayItem[] {
+export function toMealDisplayItems(entries: MealEntry[], categorize = false): MealDisplayItem[] {
     const byMeal = new Map<string, MealEntry[]>();
     for (const entry of entries) {
-        const key = `${entry.date}|${entry.mealType?.trim().toLowerCase() ?? ''}`;
+        const type = categorize
+            ? getMealCategory(entry.mealType).value
+            : entry.mealType?.trim().toLowerCase() ?? '';
+        const key = `${entry.date}|${type}`;
         byMeal.set(key, [...(byMeal.get(key) ?? []), entry]);
     }
-    return [...byMeal].map(([key, rows]) =>
-        rows.length === 1
-            ? { type: 'single', entry: rows[0] }
-            : { type: 'group', group: buildGroup(key, rows) }
-    );
+    const groups = [...byMeal];
+    if (categorize) {
+        groups.sort(([, left], [, right]) =>
+            MEAL_CATEGORIES.indexOf(getMealCategory(left[0].mealType)) -
+            MEAL_CATEGORIES.indexOf(getMealCategory(right[0].mealType))
+        );
+    }
+    return groups.map(([key, rows]) => {
+        if (!categorize && rows.length === 1) return { type: 'single', entry: rows[0] };
+        const label = categorize ? getMealCategory(rows[0].mealType).label : undefined;
+        return { type: 'group', group: buildGroup(key, rows, label) };
+    });
 }
