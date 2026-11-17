@@ -97,6 +97,7 @@ export default function WorkoutsSection() {
                         date: d.date,
                         sessions: d.sessionCount,
                         sets: d.totalSets,
+                        trainingLoadKg: d.trainingLoadKg,
                     }))}
                     topExercises={data.topExercises}
                     weightTrend={data.weightTrend}

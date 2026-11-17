@@ -394,6 +394,7 @@ export interface RebateSummary {
 }
 
 export interface WorkoutDailyPoint {
+    trainingLoadKg: number | null;
     date: string;
     sessionCount: number;
     totalSets: number;

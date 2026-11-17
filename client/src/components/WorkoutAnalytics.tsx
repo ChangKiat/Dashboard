@@ -1,11 +1,11 @@
 import type { PersonalRecord } from '../api';
 import ExerciseBarChart from '../charts/ExerciseBarChart';
 import WeightTrendChart from '../charts/WeightTrendChart';
-import WorkoutVolumeChart from '../charts/WorkoutVolumeChart';
+import WorkoutVolumeChart, { type WorkoutVolumePoint } from '../charts/WorkoutVolumeChart';
 import PersonalRecordsTable from './PersonalRecordsTable';
 
 interface Props {
-    volumeData: { date: string; sessions: number; sets: number }[];
+    volumeData: WorkoutVolumePoint[];
     topExercises: { exercise: string; count: number }[];
     weightTrend: Record<string, { date: string; weightKg: number }[]>;
     prs: PersonalRecord[];

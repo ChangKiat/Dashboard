@@ -56,10 +56,24 @@ router.get('/daily', async (req, res) => {
         const history = await getWorkoutHistory(userId, start, end);
         const grouped = groupWorkoutsByDate(history);
 
+        const loadByDate = new Map<string, number>();
+        for (const row of history) {
+            if (row.reps == null || row.reps <= 0) continue;
+
+            const weights = row.weightsKgText?.split('/').map(Number);
+            const setWeight = weights?.every((weight) => Number.isFinite(weight) && weight > 0)
+                ? weights.reduce((sum, weight) => sum + weight, 0)
+                : (row.sets ?? 0) * (row.weightKg ?? 0);
+            if (setWeight > 0) {
+                loadByDate.set(row.date, (loadByDate.get(row.date) ?? 0) + setWeight * row.reps);
+            }
+        }
+
         const series = enumerateDates(start, end).map((date) => ({
             date,
             sessionCount: grouped[date]?.sessionCount ?? 0,
             totalSets: grouped[date]?.totalSets ?? 0,
+            trainingLoadKg: loadByDate.get(date) ?? null,
             exercises: grouped[date]?.exercises ?? [],
         }));
 
