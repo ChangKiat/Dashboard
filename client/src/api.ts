@@ -1571,6 +1571,34 @@ export function fetchTaxReliefOverview(year: number) {
     return fetchJson<TaxReliefOverview>(`/api/tax-relief?year=${year}`);
 }
 
+export type TaxReliefDocumentKind = 'ea' | 'lhdn';
+
+export interface TaxReliefDocument {
+    id: number;
+    kind: TaxReliefDocumentKind;
+    fileName: string;
+}
+
+export function taxReliefDocumentUrl(year: number, id: number) {
+    return `/api/tax-relief/documents/${year}/${id}`;
+}
+
+export function fetchTaxReliefDocuments(year: number) {
+    return fetchJson<TaxReliefDocument[]>(`/api/tax-relief/documents/${year}`);
+}
+
+export function uploadTaxReliefDocument(year: number, kind: TaxReliefDocumentKind, file: File) {
+    return fetchJson<TaxReliefDocument>(`/api/tax-relief/documents/${year}/${kind}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/pdf', 'X-File-Name': encodeURIComponent(file.name) },
+        body: file,
+    });
+}
+
+export function deleteTaxReliefDocument(year: number, id: number) {
+    return fetchJson<{ ok: true }>(taxReliefDocumentUrl(year, id), { method: 'DELETE' });
+}
+
 export function createTaxReliefClaim(fields: TaxReliefClaimFields) {
     return fetchJson<{ ok: true; id: number }>('/api/tax-relief/claims', {
         method: 'POST',

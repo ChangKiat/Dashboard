@@ -1,14 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { TaxReliefCategory, TaxReliefClaim, TaxReliefOverview, TaxReliefReceipt } from '../api';
+import type { TaxReliefDocument, TaxReliefDocumentKind } from '../api';
 import {
     createTaxReliefClaim,
     deleteTaxReliefClaim,
+    deleteTaxReliefDocument,
     deleteTaxReliefReceipt,
     fetchTaxReliefOverview,
+    fetchTaxReliefDocuments,
+    taxReliefDocumentUrl,
     taxReliefReceiptUrl,
     updateTaxReliefClaim,
     uploadTaxReliefReceipt,
+    uploadTaxReliefDocument,
 } from '../api';
 import { useFormatMYR } from '../hooks/useAmountVisibility';
 import { useRefreshSignal } from '../hooks/useRefreshSignal';
@@ -65,9 +70,126 @@ function validateFiles(files: File[]): string | null {
     return null;
 }
 
+const DOCUMENT_KINDS = [
+    { id: 'ea', label: 'EA Form' },
+    { id: 'lhdn', label: 'Official LHDN PDF' },
+] as const;
+
+function TaxReliefDocuments({ year }: { year: number }) {
+    const [documents, setDocuments] = useState<TaxReliefDocument[] | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [busy, setBusy] = useState<TaxReliefDocumentKind | 'delete' | null>(null);
+    const [documentToDelete, setDocumentToDelete] = useState<TaxReliefDocument | null>(null);
+    const [attempt, setAttempt] = useState(0);
+
+    useEffect(() => {
+        let active = true;
+        fetchTaxReliefDocuments(year).then((files) => {
+            if (active) setDocuments(files);
+        }).catch((err: Error) => {
+            if (active) setError(err.message);
+        });
+        return () => { active = false; };
+    }, [year, attempt]);
+
+    async function upload(kind: TaxReliefDocumentKind, file: File) {
+        setError(null);
+        if (file.size > MAX_RECEIPT_BYTES) {
+            setError('Choose a PDF up to 10 MB.');
+            return;
+        }
+        setBusy(kind);
+        try {
+            const document = await uploadTaxReliefDocument(year, kind, file);
+            setDocuments((files) => [...(files ?? []), document]);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to upload PDF');
+        } finally {
+            setBusy(null);
+        }
+    }
+
+    async function remove(document: TaxReliefDocument) {
+        setDocumentToDelete(null);
+        setError(null);
+        setBusy('delete');
+        try {
+            await deleteTaxReliefDocument(year, document.id);
+            setDocuments((files) => files?.filter((file) => file.id !== document.id) ?? null);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to delete PDF');
+        } finally {
+            setBusy(null);
+        }
+    }
+
+    return (
+        <section className="tax-relief-block tax-documents" aria-labelledby="tax-documents-title">
+            <div className="tax-relief-block-header">
+                <h3 id="tax-documents-title">Tax documents for {year}</h3>
+                <span className="muted tax-documents-limit">PDF · Up to 10 MB per file</span>
+            </div>
+            {error && (
+                <div className="tax-document-card tax-document-header">
+                    <p className="error" role="alert">{error}</p>
+                    {!documents && (
+                        <button type="button" className="btn-secondary" onClick={() => {
+                            setError(null);
+                            setAttempt((previous) => previous + 1);
+                        }}>Retry</button>
+                    )}
+                </div>
+            )}
+            {!documents && !error && <p className="muted" role="status">Loading tax documents…</p>}
+            {documents && (
+                <div className="tax-documents-grid">
+                    {DOCUMENT_KINDS.map(({ id, label }) => {
+                        const files = documents.filter((file) => file.kind === id);
+                        return (
+                            <div className="tax-document-card" key={id}>
+                                <div className="tax-document-header">
+                                    <h4>{label}</h4>
+                                    <label className="tax-document-upload">
+                                        <input type="file" accept=".pdf,application/pdf" disabled={busy !== null}
+                                            aria-label={`Upload ${label}`} onChange={(event) => {
+                                                const file = event.currentTarget.files?.[0];
+                                                event.currentTarget.value = '';
+                                                if (file) void upload(id, file);
+                                            }} />
+                                        <span className="btn-secondary">{busy === id ? 'Uploading…' : 'Upload PDF'}</span>
+                                    </label>
+                                </div>
+                                {files.length === 0 ? <p className="muted">No PDFs uploaded</p> : (
+                                    <ul className="tax-document-list">
+                                        {files.map((file) => (
+                                            <li key={file.id}>
+                                                <a href={taxReliefDocumentUrl(year, file.id)} title={file.fileName}
+                                                    aria-label={`Download ${file.fileName}`}>{file.fileName}</a>
+                                                <button type="button" className="tax-relief-receipt-remove"
+                                                    disabled={busy !== null} aria-label={`Delete ${file.fileName}`}
+                                                    onClick={() => setDocumentToDelete(file)}>Delete</button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+            {documentToDelete && (
+                <ConfirmDialog open title="Delete tax document?"
+                    message={`Remove ${documentToDelete.fileName} from assessment year ${year}?`}
+                    onConfirm={() => void remove(documentToDelete)} onCancel={() => setDocumentToDelete(null)} />
+            )}
+        </section>
+    );
+}
+
 export default function TaxReliefSection() {
     const formatMYR = useFormatMYR();
     const [year, setYear] = useState(() => parseInt(todayIsoKl().slice(0, 4), 10));
+    const selectedYear = useRef(year);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [data, setData] = useState<TaxReliefOverview | null>(null);
@@ -84,11 +206,14 @@ export default function TaxReliefSection() {
     const [attachClaimId, setAttachClaimId] = useState<number | null>(null);
 
     const loadData = useCallback(async () => {
-        setData(await fetchTaxReliefOverview(year));
+        const overview = await fetchTaxReliefOverview(year);
+        if (selectedYear.current === year) setData(overview);
     }, [year]);
 
     useRefreshSignal(() =>
-        loadData().catch((err) => setError(err instanceof Error ? err.message : 'Failed to refresh'))
+        loadData().catch((err) => {
+            if (selectedYear.current === year) setError(err instanceof Error ? err.message : 'Failed to refresh');
+        })
     );
 
     useEffect(() => {
@@ -134,7 +259,9 @@ export default function TaxReliefSection() {
 
     const yearOptions = useMemo(() => {
         const current = parseInt(todayIsoKl().slice(0, 4), 10);
-        return [...new Set([current, current - 1, ...(data?.years ?? []), year])].sort((a, b) => b - a);
+        const calendarYears = Array.from({ length: current - 2023 + 1 }, (_, index) => current - index);
+        const savedYears = (data?.years ?? []).filter((savedYear) => savedYear >= 2023);
+        return [...new Set([...calendarYears, ...savedYears, year])].sort((a, b) => b - a);
     }, [data?.years, year]);
 
     const closeForm = () => {
@@ -270,7 +397,14 @@ export default function TaxReliefSection() {
         <div className="car-service-toolbar">
             <label className="tax-relief-year">
                 <span className="muted">Year of assessment</span>
-                <select value={year} onChange={(e) => setYear(parseInt(e.target.value, 10))} disabled={saving}>
+                <select value={year} onChange={(e) => {
+                    closeForm();
+                    setActionError(null);
+                    setCategoryFilter(null);
+                    setLoading(true);
+                    selectedYear.current = Number(e.target.value);
+                    setYear(selectedYear.current);
+                }} disabled={saving || loading}>
                     {yearOptions.map((y) => (
                         <option key={y} value={y}>
                             {y}
@@ -279,7 +413,7 @@ export default function TaxReliefSection() {
                 </select>
             </label>
             <div className="car-service-toolbar-actions">
-                <button type="button" className="btn-primary" onClick={openCreate} disabled={saving}>
+                <button type="button" className="btn-primary" onClick={openCreate} disabled={saving || loading}>
                     Add claim
                 </button>
             </div>
@@ -296,11 +430,17 @@ export default function TaxReliefSection() {
         );
     }
 
+    if (loading || data.year !== year) return <section className="panel">{toolbar}<p>Loading tax relief…</p></section>;
+
     const { summary } = data;
 
     return (
         <section className="panel car-service-section tax-relief-section">
             {toolbar}
+            <TaxReliefDocuments key={year} year={year} />
+            {year !== 2025 && year !== 2026 && (
+                <p className="muted">Relief estimates use the {year < 2025 ? 2025 : 2026} rules for reference.</p>
+            )}
 
             <div className="trips-summary-strip">
                 <div className="trips-summary-item trips-summary-item--spent">

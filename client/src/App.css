@@ -4371,6 +4371,105 @@ div.payment-account-card-main:hover {
   color: var(--text-heading);
 }
 
+.tax-documents {
+  margin: 16px 0;
+}
+
+.tax-documents .tax-relief-block-header {
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.tax-documents-limit,
+.tax-document-card p {
+  font-size: 0.82rem;
+}
+
+.tax-documents-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  align-items: start;
+  gap: 10px;
+}
+
+.tax-document-card {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.tax-document-header,
+.tax-document-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.tax-document-header {
+  flex-wrap: wrap;
+}
+
+.tax-document-card h4,
+.tax-documents p {
+  margin: 0;
+}
+
+.tax-document-card h4 {
+  color: var(--text-heading);
+  font-size: 0.88rem;
+}
+
+.tax-document-upload {
+  position: relative;
+  display: inline-flex;
+}
+
+.tax-document-upload input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.tax-document-upload input:focus-visible + span {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.tax-document-upload input:disabled + span {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.tax-document-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tax-document-list li {
+  padding: 6px 8px;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+  font-size: 0.82rem;
+}
+
+.tax-document-list a {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--accent);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .tax-relief-categories {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));

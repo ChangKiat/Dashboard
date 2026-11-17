@@ -1,4 +1,9 @@
 import express, { Router } from 'express';
+import { and, asc, eq } from 'drizzle-orm';
+import { requireDb } from '../../agent/db/client';
+import { taxReliefDocuments } from '../../agent/db/schema';
+import type { Request } from 'express';
+import { getSessionEmail, SESSION_COOKIE } from '../auth';
 import {
     addReceipt,
     createClaim,
@@ -14,6 +19,75 @@ import {
 import { isNonEmptyString, isPositiveNumber, isValidDate, parseIdParam } from '../validation';
 
 const router = Router();
+const documents = taxReliefDocuments;
+const documentMeta = { id: documents.id, kind: documents.kind, fileName: documents.fileName };
+
+/** The signed-in Google email that owns these documents. requireAuth runs first, so a session is always there. */
+function sessionEmail(req: Request): string {
+    const email = getSessionEmail(req.cookies?.[SESSION_COOKIE]);
+    if (!email) throw new Error('Tax relief documents need a signed-in session');
+    return email;
+}
+
+router.get('/documents/:year', async (req, res) => {
+    const year = Number(req.params.year);
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+        return res.status(400).json({ error: 'Invalid assessment year' });
+    }
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.json(await requireDb().select(documentMeta).from(documents)
+        .where(and(eq(documents.ownerEmail, sessionEmail(req)), eq(documents.year, year)))
+        .orderBy(asc(documents.id)));
+});
+
+router.post('/documents/:year/:kind', express.raw({ type: 'application/pdf', limit: MAX_RECEIPT_BYTES }), async (req, res) => {
+    const year = Number(req.params.year);
+    const { kind } = req.params;
+    if (!Number.isInteger(year) || year < 2000 || year > 2100 || (kind !== 'ea' && kind !== 'lhdn')) {
+        return res.status(400).json({ error: 'Invalid assessment year or document type' });
+    }
+    if (!Buffer.isBuffer(req.body) || req.body.subarray(0, 5).toString() !== '%PDF-') {
+        return res.status(400).json({ error: 'Choose a valid PDF' });
+    }
+    let fileName: string;
+    try {
+        fileName = decodeURIComponent(req.get('X-File-Name') ?? '').trim().slice(0, 200) || 'document.pdf';
+    } catch {
+        return res.status(400).json({ error: 'Invalid file name' });
+    }
+    const [document] = await requireDb().insert(documents)
+        .values({ ownerEmail: sessionEmail(req), year, kind, fileName, data: req.body })
+        .returning(documentMeta);
+    res.status(201).json(document);
+});
+
+router.get('/documents/:year/:id', async (req, res) => {
+    const id = parseIdParam(req.params.id);
+    const year = Number(req.params.year);
+    if (!id || !Number.isInteger(year) || year < 2000 || year > 2100) {
+        return res.status(400).json({ error: 'Invalid document or assessment year' });
+    }
+    const [file] = await requireDb().select({ fileName: documents.fileName, data: documents.data })
+        .from(documents)
+        .where(and(eq(documents.ownerEmail, sessionEmail(req)), eq(documents.id, id), eq(documents.year, year)));
+    if (!file) return res.status(404).json({ error: 'Document not found' });
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.attachment(file.fileName).type('application/pdf').send(file.data);
+});
+
+router.delete('/documents/:year/:id', async (req, res) => {
+    const id = parseIdParam(req.params.id);
+    const year = Number(req.params.year);
+    if (!id || !Number.isInteger(year) || year < 2000 || year > 2100) {
+        return res.status(400).json({ error: 'Invalid document or assessment year' });
+    }
+    const [deleted] = await requireDb().delete(documents)
+        .where(and(eq(documents.ownerEmail, sessionEmail(req)), eq(documents.id, id), eq(documents.year, year)))
+        .returning({ id: documents.id });
+    if (!deleted) return res.status(404).json({ error: 'Document not found' });
+    res.json({ ok: true });
+});
 
 function parseAmount(value: unknown): number {
     return typeof value === 'number' ? value : parseFloat(String(value ?? ''));

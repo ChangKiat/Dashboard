@@ -295,3 +295,12 @@ export const taxReliefReceipts = pgTable('tax_relief_receipts', {
     data: bytea('data').notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+export const taxReliefDocuments = pgTable('tax_relief_documents', {
+    id: serial('id').primaryKey(),
+    ownerEmail: text('owner_email').notNull(),
+    year: integer('year').notNull(),
+    kind: text('kind').notNull(),
+    fileName: text('file_name').notNull(),
+    data: bytea('data').notNull(),
+});
