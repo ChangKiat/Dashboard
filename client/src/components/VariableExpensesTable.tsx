@@ -1,6 +1,8 @@
 import { useMemo, useRef, useState } from 'react';
 
-import type { ExpenseTransaction, IncomeTransaction } from '../api';
+import type { ExpenseOverviewResponse, ExpenseTransaction, IncomeTransaction } from '../api';
+import { expenseReport } from '../utils/dashboardReports';
+import ExportPdfButton from './ExportPdfButton';
 import {
     BUDGET_STATUS_LABELS,
     getBudgetStatus,
@@ -19,6 +21,7 @@ interface Row {
 }
 
 interface Props {
+    overview: ExpenseOverviewResponse;
     rows: Row[];
     transactions: ExpenseTransaction[];
     incomes?: IncomeTransaction[];
@@ -36,6 +39,7 @@ interface Props {
 }
 
 export default function VariableExpensesTable({
+    overview,
     rows,
     transactions,
     incomes = [],
@@ -91,6 +95,7 @@ export default function VariableExpensesTable({
                     {subtitle && <p className="variable-expenses-sub">{subtitle}</p>}
                 </div>
                 <div className="variable-expenses-stats">
+                    <ExportPdfButton sensitive build={() => expenseReport(overview, transactions, incomes, formatAmount)} />
                     {amountCanUse != null && (
                         <div className="mini-stat">
                             <span className="mini-stat-label">Amount can use</span>

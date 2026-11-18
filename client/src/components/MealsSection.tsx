@@ -10,6 +10,8 @@ import { BoltIcon, FlameIcon, TargetIcon, UtensilsIcon } from './icons';
 import MonthPicker from './MonthPicker';
 import NutritionAnalytics from './NutritionAnalytics';
 import SummaryCard from './SummaryCard';
+import ExportPdfButton from './ExportPdfButton';
+import { healthReport } from '../utils/dashboardReports';
 
 /** Eating for the month: calories and protein against the Meal goals targets. */
 export default function MealsSection() {
@@ -20,6 +22,8 @@ export default function MealsSection() {
         <div className="page-toolbar">
             <div className="page-toolbar-group">
                 <MonthPicker month={month} onChange={setMonth} />
+                <ExportPdfButton disabled={loading || !!error || !data || !stats || data.month !== month}
+                    build={() => healthReport(data!, stats!, true)} />
             </div>
         </div>
     );

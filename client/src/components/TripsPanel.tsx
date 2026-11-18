@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import ExportPdfButton from './ExportPdfButton';
+import { tripReport } from '../utils/dashboardReports';
 
 import type { TripExpense, TripLeg, TripLinkCandidate, TripSummary, TripWithTotals } from '../api';
 import {
@@ -685,6 +687,7 @@ export default function TripsPanel({
                             </p>
                         </div>
                         <div className="trip-detail-actions">
+                            <ExportPdfButton sensitive build={() => tripReport(summary, formatAmount)} />
                             <button
                                 type="button"
                                 className="btn-secondary"

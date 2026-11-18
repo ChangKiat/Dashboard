@@ -139,6 +139,7 @@ export default function VariableExpensesSection() {
         <section className="panel">
             {toolbar}
             <VariableExpensesTable
+                overview={data}
                 rows={rows}
                 transactions={transactions}
                 incomes={incomes}

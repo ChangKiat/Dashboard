@@ -261,6 +261,7 @@ export default function CashflowSection() {
                     </div>
                     {trendPoints.length > 0 ? (
                         <CashflowTrendChart
+                            reportYear={periodEndMonth.slice(0, 4)}
                             data={trendPoints}
                             formatValue={formatMYR}
                             formatAxis={formatChartAxis}

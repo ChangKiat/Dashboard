@@ -4,6 +4,8 @@ import BodyAnalytics from './BodyAnalytics';
 import { DumbbellIcon, FlameIcon, ScaleIcon, UtensilsIcon } from './icons';
 import MonthPicker from './MonthPicker';
 import SummaryCard from './SummaryCard';
+import ExportPdfButton from './ExportPdfButton';
+import { healthReport } from '../utils/dashboardReports';
 
 /** The month at a glance: weight, training, eating and burn. */
 export default function HealthSection() {
@@ -14,6 +16,8 @@ export default function HealthSection() {
         <div className="page-toolbar">
             <div className="page-toolbar-group">
                 <MonthPicker month={month} onChange={setMonth} />
+                <ExportPdfButton disabled={loading || !!error || !data || !stats || data.month !== month}
+                    build={() => healthReport(data!, stats!, false)} />
             </div>
         </div>
     );

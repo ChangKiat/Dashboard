@@ -12,6 +12,9 @@ import {
 import type { DailyCashflowPoint, MonthlyCashflowPoint } from '../api';
 import { formatMonthLabel } from '../hooks/useMonth';
 import { niceTicks } from '../utils/chartTicks';
+import { fetchMonthlyCashflow } from '../api';
+import { cashflowReport } from '../utils/dashboardReports';
+import ExportPdfButton from '../components/ExportPdfButton';
 
 /** One group of bars: a month or a day. */
 export interface TrendPoint {
@@ -27,6 +30,7 @@ export interface TrendPoint {
 }
 
 interface Props {
+    reportYear: string;
     data: TrendPoint[];
     /** Tooltip values. */
     formatValue: (value: number) => string;
@@ -79,7 +83,7 @@ export function dayTrendPoints(series: DailyCashflowPoint[], lastDay: string): T
     });
 }
 
-export default function CashflowTrendChart({ data, formatValue, formatAxis, netName }: Props) {
+export default function CashflowTrendChart({ data, formatValue, formatAxis, netName, reportYear }: Props) {
     const ticks = niceTicks(data.flatMap((p) => (p.net == null ? [p.income, p.spending] : [p.income, p.spending, p.net])));
     // Non-breaking space so "RM 10k" stays on one line.
     const axisLabel = (value: number) => formatAxis(value).replace(/ /g, ' ');
@@ -87,6 +91,11 @@ export default function CashflowTrendChart({ data, formatValue, formatAxis, netN
     const dense = data.length > 16;
 
     return (
+        <>
+        <ExportPdfButton sensitive label={`Export ${reportYear} PDF`} build={async () => {
+            const { series } = await fetchMonthlyCashflow(`${reportYear}-12`, 12);
+            return cashflowReport(reportYear, series, formatValue);
+        }} />
         <ResponsiveContainer width="100%" height={300}>
             <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barGap={dense ? 1 : 4}>
                 <CartesianGrid vertical={false} stroke="var(--border)" />
@@ -134,5 +143,6 @@ export default function CashflowTrendChart({ data, formatValue, formatAxis, netN
                 />
             </ComposedChart>
         </ResponsiveContainer>
+        </>
     );
 }
