@@ -1,3 +1,4 @@
+import YearlyPdfButton from './YearlyPdfButton';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { DailyCashflowPoint, ExpenseOverviewResponse, MonthlyCashflowPoint } from '../api';
@@ -162,6 +163,7 @@ export default function CashflowSection() {
                     firstDataMonth={firstDataMonth}
                     allEndMonth={periodEndMonth}
                 />
+                <YearlyPdfButton month={periodEndMonth} disabled={loading || !!error} />
             </div>
         </div>
     );
@@ -261,7 +263,6 @@ export default function CashflowSection() {
                     </div>
                     {trendPoints.length > 0 ? (
                         <CashflowTrendChart
-                            reportYear={periodEndMonth.slice(0, 4)}
                             data={trendPoints}
                             formatValue={formatMYR}
                             formatAxis={formatChartAxis}

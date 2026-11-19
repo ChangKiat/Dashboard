@@ -1,3 +1,4 @@
+import YearlyPdfButton from './YearlyPdfButton';
 import { useMemo } from 'react';
 import type { ExpenseDailyPoint, ExpenseTransaction, IncomeDailyPoint } from '../api';
 import { useAmountVisibility } from '../hooks/useAmountVisibility';
@@ -78,6 +79,7 @@ export default function CashflowCalendar({
             <div className="activity-calendar-header">
                 <h3>Cashflow calendar</h3>
                 <MonthPicker month={month} onChange={onMonthChange} />
+                <YearlyPdfButton month={month} />
                 <div className="activity-calendar-legend">
                     <span className="legend-item">
                         <span className="legend-dot income" aria-hidden="true" />

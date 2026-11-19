@@ -22,7 +22,7 @@ export default function MealsSection() {
         <div className="page-toolbar">
             <div className="page-toolbar-group">
                 <MonthPicker month={month} onChange={setMonth} />
-                <ExportPdfButton disabled={loading || !!error || !data || !stats || data.month !== month}
+                <ExportPdfButton label="Export meals & workouts PDF" disabled={loading || !!error || !data || !stats || data.month !== month}
                     build={() => healthReport(data!, stats!, true)} />
             </div>
         </div>

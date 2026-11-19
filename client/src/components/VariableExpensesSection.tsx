@@ -1,3 +1,5 @@
+import ExportPdfButton from './ExportPdfButton';
+import { expenseReport } from '../utils/dashboardReports';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type {
@@ -103,6 +105,7 @@ export default function VariableExpensesSection() {
                     firstDataMonth={firstDataMonth}
                     allEndMonth={periodEndMonth}
                 />
+                <ExportPdfButton sensitive disabled={loading || !!error || !data} build={() => expenseReport(data!, transactions, incomes, formatMYR, budgetMonths)} />
             </div>
         </div>
     );
@@ -139,7 +142,6 @@ export default function VariableExpensesSection() {
         <section className="panel">
             {toolbar}
             <VariableExpensesTable
-                overview={data}
                 rows={rows}
                 transactions={transactions}
                 incomes={incomes}

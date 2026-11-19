@@ -1,14 +1,15 @@
+import { categoryExpenseChart, fixedExpensePie } from './expenseReportCharts';
 import type { ExpenseOverviewResponse, ExpenseTransaction, IncomeTransaction, MonthlyCashflowPoint, TripSummary } from '../api';
 import type { HealthData, HealthStats } from '../hooks/useHealthData';
 import { transferFeesToExpenseEntries } from './bankCharges';
-import { bars, cards, escapeHtml, note, table, type Report } from './pdfReport';
+import { bars, cards, comboChart, columnChart, comparisonBars, escapeHtml, note, table, type Report } from './pdfReport';
 
 type Money = (value: number) => string;
 const sum = <T,>(rows: T[], pick: (row: T) => number) => rows.reduce((total, row) => total + pick(row), 0);
 const byDate = <T extends { date: string }>(rows: T[]) => [...rows].sort((a, b) => a.date.localeCompare(b.date));
 const net = (e: ExpenseTransaction) => e.netAmount ?? Math.max(0, (e.grossAmount ?? e.amount) - (e.reimbursed ?? 0));
 
-export function expenseReport(overview: ExpenseOverviewResponse, transactions: ExpenseTransaction[], incomes: IncomeTransaction[], money: Money): Report {
+export function expenseReport(overview: ExpenseOverviewResponse, transactions: ExpenseTransaction[], incomes: IncomeTransaction[], money: Money, budgetMonths = 1): Report {
     const entries = byDate([...transactions.filter((t) => t.tripLeg !== 'fund'), ...transferFeesToExpenseEntries(incomes)]);
     const fixed = new Set(overview.fixed.map((r) => r.category));
     const earned = incomes.filter((i) => i.expenseId == null && i.category !== 'Account transfer');
@@ -20,7 +21,14 @@ export function expenseReport(overview: ExpenseOverviewResponse, transactions: E
     for (const e of entries) categoryTotals.set(e.category, (categoryTotals.get(e.category) ?? 0) + net(e));
     let body = cards([['Income', money(income)], ['Recorded spending', money(spent)], ['Net cashflow', money(income - spent)], ['Transactions', entries.length]]);
     body += note('All records in the selected period are included, regardless of the on-screen category filter. Spending is net of reimbursements and includes transfer fees. Trip-fund purchases are excluded because the exchange is already counted.');
-    body += bars('Spending by category', [...categoryTotals].sort((a, b) => b[1] - a[1]), money);
+    const categoryNames = [...new Set([...overview.variable.map(v => v.category), ...[...categoryTotals.keys()].filter(category => !fixed.has(category))])];
+    body += categoryExpenseChart(categoryNames.map(category => ({
+        category,
+        expenses: categoryTotals.get(category) ?? 0,
+        budget: overview.variable.find(v => v.category === category)?.monthlyBudget == null ? null : overview.variable.find(v => v.category === category)!.monthlyBudget * budgetMonths,
+    })), money);
+    body += note('Blue columns show category budgets; the red line shows recorded expenses. Budget amounts appear below each category. Categories without budgets are marked No budget set.');
+    body += fixedExpensePie(overview.fixed, money);
     body += table('Monthly summary', ['Month', 'Income', 'Fixed-category spend', 'Other spend', 'Net'], months.map((month) => {
         const rows = entries.filter((e) => e.date.startsWith(month));
         const incoming = sum(earned.filter((i) => i.date.startsWith(month)), (i) => i.amount);
@@ -46,9 +54,13 @@ export function cashflowReport(year: string, series: MonthlyCashflowPoint[], mon
     return { title: 'Yearly cashflow report', subtitle: `${year} / January to December / recorded activity`, body:
         cards([['Income', money(income)], ['Spending', money(spending)], ['Net cashflow', money(income - spending)], ['Savings rate', income > 0 ? `${((income - spending) / income * 100).toFixed(1)}%` : 'N/A']]) +
         note('Recorded activity as of generation time; future months are not forecasts. Income excludes transfers and reimbursements. Spending is after reimbursements and includes transfer fees; trip-fund purchases are counted at exchange.') +
-        bars('Monthly income', rows.map((p) => [p.month, p.income]), money) +
-        bars('Monthly spending', rows.map((p) => [p.month, p.spending]), money) +
-        bars('Monthly net cashflow', rows.map((p) => [p.month, p.net]), money) +
+        columnChart('Income and spending by month (MYR)', rows.map(p => ({ label: p.month.slice(5), first: p.income, second: p.spending })), 'Income', 'Spending') +
+        columnChart('Quarterly income and spending (MYR)', [1,2,3,4].map(q => {
+            const quarter = rows.filter(p => Math.ceil(Number(p.month.slice(5)) / 3) === q);
+            return { label: `Q${q}`, first: sum(quarter,p=>p.income), second: sum(quarter,p=>p.spending) };
+        }), 'Income', 'Spending') +
+        bars('Savings rate by month', rows.filter(p=>p.income>0).map(p=>[p.month,(p.income-p.spending)/p.income*100]), n=>`${n.toFixed(1)}%`) +
+        note('Savings rate = (income - spending) / income. Months with no income are omitted from this chart. Negative rates indicate spending above income.') +
         table('Monthly details', ['Month', 'Income', 'Spending', 'Net'], rows.map((p) => [p.month, money(p.income), money(p.spending), money(p.net)])) };
 }
 
@@ -64,24 +76,58 @@ export function tripReport(s: TripSummary, money: Money): Report {
 }
 
 export function healthReport(data: HealthData, stats: HealthStats, mealsOnly: boolean): Report {
+    if (mealsOnly) return nutritionWorkoutReport(data, stats);
     const logged = data.nutritionSeries.filter((d) => d.mealCount > 0 || d.calories > 0 || d.protein > 0);
     const avg = (pick: (d: typeof logged[number]) => number) => logged.length ? Math.round(sum(logged, pick) / logged.length) : null;
     const averageCalories = avg((d) => d.calories), averageProtein = avg((d) => d.protein);
     let body = mealsOnly
         ? cards([['Meals logged', data.meals.length], ['Days logged', logged.length], ['Average calories', averageCalories == null ? 'N/A' : `${averageCalories} kcal/day`], ['Average protein', averageProtein == null ? 'N/A' : `${averageProtein} g/day`]])
         : cards([['Latest weight', data.latestWeight ? `${data.latestWeight.weightKg} kg (${data.latestWeight.date})` : 'N/A'], ['Training days', stats.trainingDays], ['Workout sessions', stats.sessions], ['Average steps', stats.steps.loggedDays ? stats.steps.avg : 'N/A']]);
-    body += note('Only logged records are detailed. Missing days are not treated as zero intake or zero activity. Averages use logged days.');
+    body += note('Figures use logged records. Missing days are not treated as zero intake or zero activity. Averages use logged days.');
     if (mealsOnly) {
-        body += bars('Daily calories (kcal)', byDate(logged).map((d) => [d.date, d.calories]), (n) => `${n.toLocaleString('en-MY')} kcal`);
-        body += table('Daily nutrition and targets', ['Date', 'Meals', 'Calories / target', 'Protein / target (g)', 'Carbs (g)', 'Fat (g)'], byDate(logged).map((d) => [d.date, d.mealCount, `${d.calories} / ${d.targets.calories}`, `${d.protein} / ${d.targets.protein}`, d.carbs, d.fat]));
-        body += table('Meal details', ['Date', 'Meal / description', 'Calories (kcal)', 'Protein (g)', 'Carbs (g)', 'Fat (g)'], byDate(data.meals).map((m) => [m.date, `${m.mealType ?? 'Meal'}: ${m.description}`, m.calories, m.proteinG, m.carbsG, m.fatG]));
+        body += comboChart('Daily calories vs target', byDate(logged).map(d=>({label:d.date.slice(8),actual:d.calories,target:d.targets.calories})), 'Calories (kcal)', 'Target (kcal)');
+        body += comboChart('Daily protein vs target', byDate(logged).map(d=>({label:d.date.slice(8),actual:d.protein,target:d.targets.protein})), 'Protein (g)', 'Target (g)');
+        body += bars('Macro totals', [['Protein',sum(logged,d=>d.protein)],['Carbs',sum(logged,d=>d.carbs)],['Fat',sum(logged,d=>d.fat)]],n=>`${Math.round(n)} g`);
     } else {
-        body += bars('Daily steps', byDate(data.dailyActivity).map((d) => [d.date, d.steps]), (n) => n.toLocaleString('en-MY'));
-        body += table('Body weight', ['Date', 'Weight (kg)'], byDate(data.bodyWeightLogs).map((d) => [d.date, d.weightKg]));
-        body += table('Daily activity', ['Date', 'Steps'], byDate(data.dailyActivity).map((d) => [d.date, d.steps]));
-        body += table('Workout details', ['Date', 'Exercise', 'Sets / reps', 'Weight (kg)', 'Minutes', 'Burn (kcal)'], byDate(data.history).map((w) => [w.date, w.exercise, `${w.sets ?? '-'} / ${w.reps ?? '-'}`, w.weightsKg ?? w.weightKg, w.durationMin, w.caloriesBurned]));
-        body += cards([['Meal days logged', logged.length], ['Average calories', averageCalories == null ? 'N/A' : `${averageCalories} kcal/day`], ['Protein hit rate', stats.adherence.loggedDays ? `${stats.adherence.proteinHitPct}%` : 'N/A']]);
-        body += note('Workout calorie burn is an estimate. Latest weight may predate the selected month; its date is shown.');
+        body += bars('Daily steps',byDate(data.dailyActivity).map(d=>[d.date,d.steps]),n=>n.toLocaleString('en-MY'));
+        body += bars('Body weight trend',byDate(data.bodyWeightLogs).map(d=>[d.date,d.weightKg]),n=>`${n} kg`);
+        body += workoutFigures(data,stats);
     }
     return { title: mealsOnly ? 'Monthly meal report' : 'Monthly health report', subtitle: data.month, body };
+}
+
+function workoutFigures(data: HealthData, stats: HealthStats) {
+    const burn = new Map<string, number>();
+    for (const w of data.history) if (w.caloriesBurned != null) burn.set(w.date, (burn.get(w.date) ?? 0) + w.caloriesBurned);
+    return cards([['Sessions',stats.sessions],['Total sets',stats.sets ?? 0],['Training days',stats.trainingDays],['Best streak',`${stats.streak?.best ?? 0} days`]]) +
+        comboChart('Daily training volume',byDate(data.workoutSeries).map(d=>({label:d.date.slice(8),actual:d.totalSets,target:d.sessionCount})),'Sets','Sessions') +
+        bars('Most trained exercises',data.topExercises.map(e=>[e.exercise,e.count]),n=>`${n} entries`) +
+        bars('Workout burn by date (estimate)',[...burn.entries()].sort((a,b)=>a[0].localeCompare(b[0])),n=>`${Math.round(n)} kcal`);
+}
+export function workoutReport(data: HealthData, stats: HealthStats): Report {
+    return nutritionWorkoutReport(data, stats);
+}
+
+/** Shared export for both the Meals and Workouts tabs. */
+export function nutritionWorkoutReport(data: HealthData, stats: HealthStats): Report {
+    const logged = byDate(data.nutritionSeries.filter(d=>d.mealCount>0 || d.calories>0 || d.protein>0));
+    const average = (rows: typeof logged, pick: (d: typeof logged[number]) => number) => rows.length ? Math.round(sum(rows,pick)/rows.length) : null;
+    const trainingDates = new Set(data.workoutSeries.filter(d=>d.sessionCount>0).map(d=>d.date));
+    const trainingMeals = logged.filter(d=>trainingDates.has(d.date));
+    const restMeals = logged.filter(d=>!trainingDates.has(d.date));
+    const avgCalories = average(logged,d=>d.calories), avgProtein = average(logged,d=>d.protein);
+    let body = cards([['Meals logged',data.meals.length],['Meal days logged',logged.length],['Average calories',avgCalories == null ? 'N/A' : `${avgCalories} kcal/day`],['Average protein',avgProtein == null ? 'N/A' : `${avgProtein} g/day`]]);
+    body += cards([['Protein target hit',stats.adherence.loggedDays ? `${stats.adherence.proteinHitPct}%` : 'N/A'],['Calories in target band',stats.adherence.loggedDays ? `${stats.adherence.calorieHitPct}%` : 'N/A'],['Training meal days',trainingMeals.length],['Other meal days',restMeals.length]]);
+    body += note('Nutrition averages use logged meal days. Other meal days have no logged workout; missing workout logs do not prove a rest day. Missing nutrition days are excluded, not treated as zero.');
+    body += comboChart('Daily calories vs target',logged.map(d=>({label:d.date.slice(8),actual:d.calories,target:d.targets.calories})),'Calories (kcal)','Target (kcal)');
+    body += comboChart('Daily protein vs target',logged.map(d=>({label:d.date.slice(8),actual:d.protein,target:d.targets.protein})),'Protein (g)','Target (g)');
+    if (trainingMeals.length && restMeals.length) {
+        body += comparisonBars('Nutrition on training vs other logged days', [{label:'Average calories (kcal/day)',first:average(trainingMeals,d=>d.calories)!,second:average(restMeals,d=>d.calories)!}], 'Training days','Other days',n=>`${n} kcal`);
+        body += comparisonBars('Protein on training vs other logged days', [{label:'Average protein (g/day)',first:average(trainingMeals,d=>d.protein)!,second:average(restMeals,d=>d.protein)!}], 'Training days','Other days',n=>`${n} g`);
+    } else body += note('Training-day nutrition comparisons need meal logs on both training days and days without a logged workout.');
+    body += bars('Macro energy from logged meals', [['Protein',sum(logged,d=>d.protein)*4],['Carbs',sum(logged,d=>d.carbs)*4],['Fat',sum(logged,d=>d.fat)*9]],n=>`${Math.round(n).toLocaleString('en-MY')} kcal`);
+    body += note('Macro energy is estimated at 4 kcal/g for protein and carbs, and 9 kcal/g for fat; totals depend on macro logging completeness.');
+    body += workoutFigures(data,stats);
+    body += note('Workout burn is an estimate and excludes baseline metabolism and steps. This report summarizes logged activity; no individual meal or workout detail tables are included.');
+    return { title:'Monthly nutrition and workout report',subtitle:data.month,body };
 }

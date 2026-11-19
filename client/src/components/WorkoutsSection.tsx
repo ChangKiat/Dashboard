@@ -1,3 +1,5 @@
+import ExportPdfButton from './ExportPdfButton';
+import { workoutReport } from '../utils/dashboardReports';
 import { plural, useHealthData } from '../hooks/useHealthData';
 import { useMonth } from '../hooks/useMonth';
 import { CalendarCheckIcon, DumbbellIcon, FlameIcon, TrophyIcon } from './icons';
@@ -18,6 +20,7 @@ export default function WorkoutsSection() {
         <div className="page-toolbar">
             <div className="page-toolbar-group">
                 <MonthPicker month={month} onChange={setMonth} />
+                <ExportPdfButton label="Export meals & workouts PDF" disabled={loading || !!error || !data || !stats || data.month !== month} build={() => workoutReport(data!, stats!)} />
             </div>
         </div>
     );

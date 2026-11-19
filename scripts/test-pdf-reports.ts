@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { expenseReport, cashflowReport, healthReport, tripReport } from '../client/src/utils/dashboardReports';
+import { expenseReport, cashflowReport, healthReport, tripReport, workoutReport } from '../client/src/utils/dashboardReports';
 import { reportHtml } from '../client/src/utils/pdfReport';
+import { categoryExpenseChart } from '../client/src/utils/expenseReportCharts';
 import type { ExpenseOverviewResponse, ExpenseTransaction, IncomeTransaction, TripSummary } from '../client/src/api';
 import type { HealthData, HealthStats } from '../client/src/hooks/useHealthData';
 
@@ -57,18 +58,46 @@ health.latestWeight = health.bodyWeightLogs[0];
 health.history = [{ id: 1, date: '2026-11-01', exercise: 'Bench press', sets: 3, reps: 10, weightKg: 40, weightsKg: null, durationMin: null, notes: null, caloriesBurned: 80, fatBurnG: null, sessionId: 'test', sessionLabel: null, supersetGroup: null }];
 const mealBody = healthReport(health, stats, true).body;
 assert.match(mealBody, /370 kcal\/day/);
-assert.ok(mealBody.indexOf('Eggs &amp; toast') < mealBody.indexOf('Chicken and rice'));
-assert.match(healthReport(health, stats, false).body, /Bench press/);
+assert.ok(!mealBody.includes('Chicken and rice'), 'Meal reports show summary charts, not individual records');
+assert.match(mealBody, /Daily protein vs target/);
+assert.ok(!healthReport(health, stats, false).body.includes('Workout details'));
+assert.match(healthReport(health, stats, false).body, /Daily training volume/);
 const trip: TripSummary = { trip: { id: 1, name: '日本 / Japan', startDate: '2026-11-01', endDate: '2026-11-05', tripCurrency: 'JPY', notes: 'A trip with family' }, exchangedMyr: 1000, fundReceived: 30000, fundSpent: 15000, fundSpentMyr: 500, fundRemaining: 15000, cardMyr: 200, linkedMyr: 100, reimbursedMyr: 50, spentMyr: 750, tripTotalMyr: 1250, days: 5, byCategory: [{ category: 'Dining', amountMyr: 750, count: 1 }], latestExchangeRate: 1 / 30, expenses: [] };
 assert.match(tripReport(trip, money).body, /RM 1250\.00/);
 assert.match(tripReport(trip, money).body, /JPY 15,000/);
+
+assert.match(yearly.body, /Quarterly income and spending/);
+assert.ok(!yearly.body.includes('Budget vs recorded expenses'));
+assert.ok(!yearly.body.includes('%3Cpolyline'));
+const categoryOverview = { ...overview, variable: [
+    { category: 'Food', monthlyBudget: 300, spending: 110, overBudget: false },
+    { category: 'Unused category', monthlyBudget: 50, spending: 0, overBudget: false },
+] };
+const categoryBody = expenseReport(categoryOverview, expenses, incomes, money, 2).body;
+const categorySvg = [...categoryBody.matchAll(/src="data:image\/svg\+xml;charset=utf-8,([^"]+)"/g)].map(m=>decodeURIComponent(m[1])).join('');
+assert.match(categorySvg.replace(/<[^>]+>/g, ' '), /Unused\s+category/);
+assert.match(categorySvg, /RM 600.00/);
+assert.match(categoryBody, /No budget set/);
+assert.match(categoryBody, /Fixed-expense plan breakdown/);
+assert.ok(categoryBody.includes('%3Cpolyline'));
+assert.ok(!categoryBody.includes('Spending by category'));
+assert.equal(workoutReport(health, stats).body, healthReport(health, stats, true).body);
+assert.match(workoutReport(health, stats).title, /nutrition and workout/);
+assert.match(mealBody, /Protein target hit/);
+assert.match(mealBody, /Daily training volume/);
+assert.ok(!mealBody.includes('<table>'));
+const manyCategories = Array.from({ length: 12 }, (_, i) => ({ category: `Category ${i + 1}`, budget: 100 + i * 30, expenses: 80 + i * 25 }));
+const singleChart = categoryExpenseChart(manyCategories, money);
+assert.equal((singleChart.match(/<img /g) ?? []).length, 1, 'All categories must fit in one chart');
+assert.ok(singleChart.includes('Category%2012'));
 
 // Optional deterministic fixtures for print layout QA, including a multi-page table.
 if (process.env.REPORT_QA_DIR) {
     const dir = process.env.REPORT_QA_DIR;
     mkdirSync(dir, { recursive: true });
     const longExpenses = Array.from({ length: 90 }, (_, i) => ({ id: i + 20, date: `2026-11-${String(i % 28 + 1).padStart(2, '0')}`, amount: i + 1, category: 'Food', description: `Meal ${i + 1} / 日本 / A longer description to check wrapping and pagination in the detailed transaction table.` }));
-    const fixtures = { expenses: expenseReport(overview, [...expenses, ...longExpenses], incomes, money), yearly, trip: tripReport(trip, money), meals: healthReport(health, stats, true), health: healthReport(health, stats, false) };
+    const fixtures = { expenses: expenseReport(categoryOverview, [...expenses, ...longExpenses], incomes, money), yearly, trip: tripReport(trip, money), meals: healthReport(health, stats, true), health: healthReport(health, stats, false) };
     for (const [name, fixture] of Object.entries(fixtures)) writeFileSync(join(dir, `${name}.html`), reportHtml(fixture));
+    writeFileSync(join(dir, 'all-categories.html'), reportHtml({ title: 'Expense graph', subtitle: '12-category layout check', body: singleChart }));
 }
 console.log('PDF report checks passed (accounting, sorting, escaping, year scope, empty data, trip currency).');

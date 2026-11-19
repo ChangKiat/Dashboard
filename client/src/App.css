@@ -6181,3 +6181,8 @@ div.payment-account-card-main:hover {
   color: var(--warn);
   font-weight: 600;
 }
+
+.export-pdf-control { display: inline-flex; flex-direction: column; gap: 4px; }
+.export-pdf-button { background: var(--surface-2); color: var(--accent-text); border-color: var(--border); white-space: nowrap; font-weight: 600; }
+.export-pdf-button:hover:not(:disabled) { background: var(--surface-hover); border-color: var(--accent); }
+.export-pdf-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
