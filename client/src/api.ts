@@ -1661,3 +1661,12 @@ export function taxReliefReceiptUrl(id: number, download = false) {
 export function deleteTaxReliefReceipt(id: number) {
     return fetchJson<{ ok: true }>(`/api/tax-relief/receipts/${id}`, { method: 'DELETE' });
 }
+
+export interface SchedulerJob { name: string; label: string; enabled: boolean; time: string }
+export interface SchedulerSettings { ready: boolean; serverEnabled: boolean; timezone: string; jobs: SchedulerJob[] }
+export function fetchSchedulerSettings() { return fetchJson<SchedulerSettings>('/api/scheduler/settings'); }
+export function saveSchedulerSettings(jobs: SchedulerJob[]) {
+    return fetchJson<{ ok: true }>('/api/scheduler/settings', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jobs }),
+    });
+}

@@ -1,3 +1,4 @@
+import SchedulerSection from './components/SchedulerSection';
 import { useCallback, useEffect, useState } from 'react';
 import { fetchHealth, getAuthMe, logoutAuth } from './api';
 import AppHeader from './components/AppHeader';
@@ -113,6 +114,7 @@ export default function App() {
                                 {activeTab === 'interest' && <SetupSection view="interest" />}
                                 {activeTab === 'mealGoals' && <SetupSection view="mealGoals" />}
                                 {activeTab === 'accounts' && <SetupSection view="accounts" />}
+                                {activeTab === 'scheduler' && <SchedulerSection />}
                                 {activeTab === 'trips' && <TripsSection />}
                             </main>
                         </div>

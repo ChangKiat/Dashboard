@@ -2,7 +2,27 @@ import { createHash, timingSafeEqual } from 'crypto';
 import { Router, type Request } from 'express';
 import { isSchedulerEnabled, runDueJobs } from '../dailyJobs';
 
+import { requireAuth } from '../auth';
+import { loadJobSettings, parseJobSettings, saveJobSettings } from '../schedulerSettings';
+
 const router = Router();
+
+router.get('/settings', requireAuth, async (_req, res) => {
+    const settings = await loadJobSettings();
+    res.json({ ...settings, serverEnabled: isSchedulerEnabled(), timezone: 'Asia/Kuala_Lumpur' });
+});
+
+router.put('/settings', requireAuth, async (req, res) => {
+    let jobs;
+    try { jobs = parseJobSettings(req.body?.jobs); }
+    catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
+    if (!(await loadJobSettings()).ready) {
+        res.status(503).json({ error: 'Scheduler settings are not installed yet. Run the scheduler settings migration.' });
+        return;
+    }
+    await saveJobSettings(jobs);
+    res.json({ ok: true });
+});
 
 function schedulerSecret(): string | null {
     const secret = process.env.SCHEDULER_SECRET;

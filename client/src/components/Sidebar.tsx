@@ -37,6 +37,7 @@ const TAB_ICONS: Record<TabId, ReactNode> = {
     mealGoals: <TargetIcon />,
     accounts: <CardIcon />,
     trips: <PlaneIcon />,
+    scheduler: <CalendarCheckIcon />,
 };
 
 interface Props {

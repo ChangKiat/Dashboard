@@ -1,3 +1,4 @@
+import { loadJobSettings } from './schedulerSettings';
 import { and, eq, gte, isNull, like, min, sql } from 'drizzle-orm';
 import { integer, pgTable, primaryKey, text, timestamp } from 'drizzle-orm/pg-core';
 import { loadExpenseCategories } from '../agent/config/expenseCategories';
@@ -554,7 +555,14 @@ async function runDueJobsOnce(triggeredBy: string): Promise<JobRunResult[]> {
     const results: JobRunResult[] = [];
     let cachesReloaded = false;
 
-    for (const job of JOBS) {
+    let settings;
+    try { settings = await loadJobSettings(); }
+    catch (error) { console.error('Cannot read scheduler settings; skipping this tick:', error); return []; }
+    for (const definition of JOBS) {
+        const setting = settings.jobs.find(j => j.name === definition.name)!;
+        if (!setting.enabled) continue;
+        const [hours, minutes] = setting.time.split(':').map(Number);
+        const job = { ...definition, at: hours * 60 + minutes };
         try {
             const ledger = await loadLedger(job.name, addDays(today, -CATCH_UP_DAYS));
             for (const date of pendingRunDates(job, now, ledger.firstRunDate, ledger.rows)) {
@@ -577,6 +585,7 @@ let inFlight: Promise<JobRunResult[]> | null = null;
 
 /** Runs every job that is due and not yet done. Never throws; concurrent callers share one run. */
 export function runDueJobs(triggeredBy: string): Promise<JobRunResult[]> {
+    if (!isSchedulerEnabled()) return Promise.resolve([]);
     if (!inFlight) {
         inFlight = runDueJobsOnce(triggeredBy).finally(() => {
             inFlight = null;
@@ -597,7 +606,7 @@ export function startScheduler(): void {
     }
     void runDueJobs('startup');
     setInterval(() => void runDueJobs('timer'), TICK_MS).unref();
-    console.log('Scheduler on: 9:00 fixed bills and interest, 21:30 check-in (Asia/Kuala_Lumpur)');
+    console.log('Scheduler on: using Dashboard job settings (Asia/Kuala_Lumpur)');
 }
 
 // ponytail self-check: pure date math, no DB: npx tsx server/dailyJobs.ts

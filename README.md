@@ -158,3 +158,19 @@ Details:
 - Daily macros chart (no monthly meal log table)
 - Workout entries include `caloriesBurned` and `fatBurnG` when set via the bot
 - Nutrition targets include `bodyWeightKg` from `user_settings`
+### Configure job times in Dashboard
+
+Open **Organize > Scheduler** to set each job's Malaysia time and on/off state.
+Install `scripts/migrate-scheduler-settings.sql` before using Save. Until that
+migration is installed, the existing 09:00 / 21:30 defaults continue to work.
+Settings persist in the database and are read on each check; no restart is needed.
+`SCHEDULER_ENABLED=1` remains the server master switch, shown on the settings page.
+Disabling a job does not interrupt an in-progress run. Re-enabling bills/interest
+can catch up the existing seven-day window. Completed days are never repeated
+merely because the time changed. On a sleeping host, update external wake-up
+pings to cover the new times too.
+
+Regression checks: `npx tsx server/dailyJobs.ts` and
+`npx tsx scripts/test-scheduler-settings.ts` (the latter requires local Postgres
+on port 5433, read from `DEV_DATABASE_URL`, and uses a disposable schema with
+synthetic data only).

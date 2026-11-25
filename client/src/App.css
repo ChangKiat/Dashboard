@@ -6111,6 +6111,13 @@ div.payment-account-card-main:hover {
   font-weight: 600;
 }
 
+.scheduler-settings { max-width: 760px; }
+.scheduler-fields { border: 0; padding: 0; margin: 20px 0; min-width: 0; }
+.scheduler-job { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--border, #ddd); }
+.scheduler-time { display: flex; align-items: center; gap: 10px; }
+.scheduler-fields > button { margin-top: 20px; }
+@media (max-width: 480px) { .scheduler-job { align-items: flex-start; flex-direction: column; } }
+
 .export-pdf-control { display: inline-flex; flex-direction: column; gap: 4px; }
 .export-pdf-button { background: var(--surface-2); color: var(--accent-text); border-color: var(--border); white-space: nowrap; font-weight: 600; }
 .export-pdf-button:hover:not(:disabled) { background: var(--surface-hover); border-color: var(--accent); }

@@ -16,7 +16,8 @@ export type TabId =
     | 'interest'
     | 'mealGoals'
     | 'accounts'
-    | 'trips';
+    | 'trips'
+    | 'scheduler';
 
 const STORAGE_KEY = 'dashboard-active-tab';
 
@@ -25,7 +26,7 @@ export const TAB_GROUPS: { label: string | null; tabs: TabId[] }[] = [
     { label: null, tabs: ['cashflow', 'calendar', 'variable', 'car', 'tax'] },
     { label: 'Health', tabs: ['health', 'healthCalendar', 'workouts', 'meals'] },
     { label: 'Planning', tabs: ['budgets', 'recurring', 'loans', 'interest', 'mealGoals'] },
-    { label: 'Organize', tabs: ['accounts', 'trips'] },
+    { label: 'Organize', tabs: ['accounts', 'trips', 'scheduler'] },
 ];
 
 const VALID_TABS: TabId[] = TAB_GROUPS.flatMap((group) => group.tabs);
@@ -65,6 +66,7 @@ export const TAB_LABELS: Record<TabId, string> = {
     mealGoals: 'Meal goals',
     accounts: 'Accounts',
     trips: 'Trips',
+    scheduler: 'Scheduler',
 };
 
 export const TAB_SUBTITLES: Record<TabId, string> = {
@@ -84,6 +86,7 @@ export const TAB_SUBTITLES: Record<TabId, string> = {
     mealGoals: 'Daily nutrition targets and body stats',
     accounts: 'Balances and activity for your accounts, cards and investments',
     trips: 'What each trip cost, in money and workdays',
+    scheduler: 'Choose when your daily jobs run',
 };
 
 export function useSectionTab() {
