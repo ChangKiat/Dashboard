@@ -13,6 +13,7 @@ import {
     recordBuy,
     recordDividend,
     recordFundInvest,
+    recordFundValues,
     recordFundWithdraw,
     recordInterest,
     recordPriceMark,
@@ -468,6 +469,41 @@ router.post('/events/price-mark', async (req, res) => {
         res.status(message.includes('FD') || message.includes('Invalid') || message.includes('not found') ? 400 : 500).json({
             error: message,
         });
+    }
+});
+
+router.post('/accounts/:accountId/fund-values', async (req, res) => {
+    try {
+        const accountId = parseIdParam(req.params.accountId);
+        if (!accountId) return res.status(400).json({ error: 'Invalid account id' });
+        const body = req.body ?? {};
+        if (!isValidDate(body.date)) return res.status(400).json({ error: 'Invalid date' });
+        if (!Array.isArray(body.values) || body.values.length === 0) {
+            return res.status(400).json({ error: 'Enter at least one value' });
+        }
+        const values: { instrumentId: number; value: number }[] = [];
+        for (const entry of body.values) {
+            if (!Number.isInteger(entry?.instrumentId) || !isNonNegativeNumber(entry?.value)) {
+                return res
+                    .status(400)
+                    .json({ error: 'Each value needs an instrumentId and a non-negative value' });
+            }
+            values.push({ instrumentId: entry.instrumentId, value: entry.value });
+        }
+
+        const result = await recordFundValues({ paymentAccountId: accountId, date: body.date, values });
+        res.status(201).json({ ok: true, ...result });
+    } catch (err) {
+        console.error('POST /api/investments/accounts/:accountId/fund-values', err);
+        const message = err instanceof Error ? err.message : 'Server error';
+        const status = message.includes('not found')
+            ? 404
+            : message.includes('Invalid') ||
+                message.includes('at least one') ||
+                message.includes('only available')
+              ? 400
+              : 500;
+        res.status(status).json({ error: message });
     }
 });
 

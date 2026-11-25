@@ -7,6 +7,7 @@ import {
     deleteInstrument,
     fetchPortfolio,
     recordFundInvest,
+    recordFundValues,
     recordFundWithdraw,
     recordPortfolioBuy,
     recordPortfolioDividend,
@@ -43,10 +44,22 @@ type FormMode =
     | 'price'
     | 'accrue'
     | 'fund-invest'
-    | 'fund-withdraw';
+    | 'fund-withdraw'
+    | 'fund-values';
 
 function today(): string {
     return new Date().toISOString().slice(0, 10);
+}
+
+/** "updated today" / "updated 23 days ago" for a YYYY-MM-DD date; "never updated" when unset. */
+function updatedLabel(date: string | null): string {
+    if (!date) return 'never updated';
+    const days = Math.round(
+        (new Date(`${today()}T00:00:00Z`).getTime() - new Date(`${date}T00:00:00Z`).getTime()) /
+            86_400_000
+    );
+    if (!Number.isFinite(days) || days <= 0) return 'updated today';
+    return days === 1 ? 'updated yesterday' : `updated ${days} days ago`;
 }
 
 function kindLabel(kind: InstrumentKind): string {
@@ -105,6 +118,9 @@ export default function PortfolioModal({
         toPaymentMethod: '',
         syncCash: true,
     });
+
+    /** Update values form: instrument id → the new value typed for it (blank = leave as is). */
+    const [fundValues, setFundValues] = useState<Record<number, string>>({});
 
     const paymentMethodOptions = useMemo(
         () =>
@@ -246,6 +262,16 @@ export default function PortfolioModal({
         setFormMode(mode);
     };
 
+    const fundHoldings = (summary?.holdings ?? []).filter((h) => h.instrument.kind === 'fund');
+
+    const openFundValues = () => {
+        setSelected(null);
+        setFundValues({});
+        setTradeForm((f) => ({ ...f, date: today() }));
+        setFormError(null);
+        setFormMode('fund-values');
+    };
+
     const closeForm = () => {
         setFormMode('closed');
         setSelected(null);
@@ -340,6 +366,25 @@ export default function PortfolioModal({
                         fromPaymentMethod: account.name,
                     });
                 }
+            } else if (formMode === 'fund-values') {
+                const values: { instrumentId: number; value: number }[] = [];
+                for (const holding of fundHoldings) {
+                    const raw = (fundValues[holding.instrument.id] ?? '').trim();
+                    if (!raw) continue;
+                    const value = parseFloat(raw);
+                    if (!Number.isFinite(value) || value < 0) {
+                        setFormError(`Value for ${holding.instrument.name} must be zero or more.`);
+                        setSaving(false);
+                        return;
+                    }
+                    values.push({ instrumentId: holding.instrument.id, value });
+                }
+                if (values.length === 0) {
+                    setFormError('Enter the current value of at least one unit trust.');
+                    setSaving(false);
+                    return;
+                }
+                await recordFundValues(account.id, { date: tradeForm.date, values });
             } else if (selected) {
                 const id = selected.instrument.id;
                 if (formMode === 'buy') {
@@ -529,6 +574,8 @@ export default function PortfolioModal({
                 return `Invest — ${selected?.instrument.name ?? ''}`;
             case 'fund-withdraw':
                 return `Withdraw — ${selected?.instrument.name ?? ''}`;
+            case 'fund-values':
+                return `Update values — ${account.name}`;
             default:
                 return '';
         }
@@ -554,6 +601,15 @@ export default function PortfolioModal({
                                 <button type="button" className="btn-add" onClick={openAdd}>
                                     + Add
                                 </button>
+                                {fundHoldings.length > 0 && (
+                                    <button
+                                        type="button"
+                                        className="btn-secondary"
+                                        onClick={openFundValues}
+                                    >
+                                        Update values
+                                    </button>
+                                )}
                                 {onOpenCashActivity && (
                                     <button
                                         type="button"
@@ -629,7 +685,7 @@ export default function PortfolioModal({
                                                                       : ''
                                                               }`
                                                             : isFund
-                                                              ? 'Unit trust'
+                                                              ? `Unit trust · ${updatedLabel(inst.lastPriceAt)}`
                                                               : `${holding.quantity}${
                                                                     holding.lastPrice != null
                                                                         ? ` @ ${holding.lastPrice}`
@@ -1267,10 +1323,77 @@ export default function PortfolioModal({
                             />
                             {formMode === 'fund-withdraw' && selected && (
                                 <span className="portfolio-trade-hint">
-                                    Cannot exceed invested {formatAmount(selected.costBasis)}
+                                    Up to the current value {formatAmount(selected.marketValue)}.
+                                    Invested goes down by the same share.
                                 </span>
                             )}
                         </div>
+                    </>
+                )}
+
+                {formMode === 'fund-values' && (
+                    <>
+                        <p className="portfolio-trade-cash">
+                            Type each fund&apos;s current value in RM, as your statement or app shows
+                            it. Leave a fund blank to keep its value.
+                        </p>
+                        <div className="form-field">
+                            <label htmlFor="pf-v-date">As of</label>
+                            <input
+                                id="pf-v-date"
+                                type="date"
+                                value={tradeForm.date}
+                                onChange={(e) =>
+                                    setTradeForm((f) => ({ ...f, date: e.target.value }))
+                                }
+                            />
+                        </div>
+                        {fundHoldings.map((holding) => {
+                            const inst = holding.instrument;
+                            const raw = (fundValues[inst.id] ?? '').trim();
+                            const typed = raw ? parseFloat(raw) : NaN;
+                            const gain = Number.isFinite(typed)
+                                ? roundMoney(typed - holding.costBasis)
+                                : null;
+                            return (
+                                <div className="form-field" key={inst.id}>
+                                    <label htmlFor={`pf-v-${inst.id}`}>{inst.name} (RM)</label>
+                                    <input
+                                        id={`pf-v-${inst.id}`}
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={fundValues[inst.id] ?? ''}
+                                        onChange={(e) =>
+                                            setFundValues((v) => ({
+                                                ...v,
+                                                [inst.id]: e.target.value,
+                                            }))
+                                        }
+                                        placeholder={String(holding.marketValue)}
+                                    />
+                                    <span className="portfolio-trade-hint">
+                                        Invested {formatAmount(holding.costBasis)} · now{' '}
+                                        {formatAmount(holding.marketValue)} ·{' '}
+                                        {updatedLabel(inst.lastPriceAt)}
+                                        {gain != null && (
+                                            <>
+                                                {' · new P&L '}
+                                                <span
+                                                    className={
+                                                        gain >= 0
+                                                            ? 'account-activity-in'
+                                                            : 'account-activity-out'
+                                                    }
+                                                >
+                                                    {formatAmount(gain)}
+                                                </span>
+                                            </>
+                                        )}
+                                    </span>
+                                </div>
+                            );
+                        })}
                     </>
                 )}
 

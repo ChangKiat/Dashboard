@@ -1101,12 +1101,17 @@ export async function recordFundWithdraw(fields: {
     }
     const amount = roundMoney(fields.amount);
     const principal = roundMoney(instrument.principal ?? 0);
-    if (amount > principal + 0.005) {
-        throw new Error(`Amount cannot exceed invested (${principal.toFixed(2)})`);
+    const currentValue = roundMoney(instrument.lastPrice ?? principal);
+    if (amount > currentValue + 0.005) {
+        throw new Error(`Amount cannot exceed current value (${currentValue.toFixed(2)})`);
     }
-    const newPrincipal = roundMoney(principal - amount);
-    const currentValue = instrument.lastPrice ?? principal;
+    // Average cost: the withdrawal takes the same share of the invested amount as it takes of the
+    // value, and the rest of it is realized gain (or loss). Withdrawing everything clears both.
     const newValue = roundMoney(Math.max(0, currentValue - amount));
+    const costShare =
+        newValue <= 0 ? principal : Math.min(principal, roundMoney((principal * amount) / currentValue));
+    const newPrincipal = roundMoney(principal - costShare);
+    const realizedGain = roundMoney(amount - costShare);
     const account = await requireInvestmentAccount(instrument.paymentAccountId);
     const creditTo = fields.toPaymentMethod?.trim() || account.name;
 
@@ -1138,6 +1143,7 @@ export async function recordFundWithdraw(fields: {
             eventType: 'sell',
             date: fields.date,
             amount: String(amount),
+            realizedGain: String(realizedGain),
             notes: fields.notes?.trim() || null,
             linkedIncomeId,
         })
@@ -1264,6 +1270,50 @@ export async function recordPriceMark(fields: {
         })
         .returning({ id: investmentEvents.id });
     return eventRow.id;
+}
+
+/**
+ * Sets the current value (RM) of several unit trusts on one investment account in one transaction:
+ * each gets its value, the date as last-updated, and a price_mark event. All or nothing.
+ */
+export async function recordFundValues(fields: {
+    paymentAccountId: number;
+    date: string;
+    values: { instrumentId: number; value: number }[];
+}): Promise<{ updated: number }> {
+    await requireInvestmentAccount(fields.paymentAccountId);
+    if (fields.values.length === 0) throw new Error('Enter at least one value');
+    const funds = new Map(
+        (await listInstrumentsForAccount(fields.paymentAccountId))
+            .filter((instrument) => instrument.kind === 'fund')
+            .map((instrument) => [instrument.id, instrument])
+    );
+    const seen = new Set<number>();
+    for (const entry of fields.values) {
+        if (!funds.has(entry.instrumentId)) throw new Error('Unit trust not found on this account');
+        if (seen.has(entry.instrumentId)) throw new Error('Invalid values: a unit trust is listed twice');
+        seen.add(entry.instrumentId);
+        if (!Number.isFinite(entry.value) || entry.value < 0) {
+            throw new Error(`Invalid value for ${funds.get(entry.instrumentId)!.name}`);
+        }
+    }
+
+    await requireDb().transaction(async (tx) => {
+        for (const entry of fields.values) {
+            const value = String(roundMoney(entry.value));
+            await tx
+                .update(investmentInstruments)
+                .set({ lastPrice: value, lastPriceAt: fields.date })
+                .where(eq(investmentInstruments.id, entry.instrumentId));
+            await tx.insert(investmentEvents).values({
+                instrumentId: entry.instrumentId,
+                eventType: 'price_mark',
+                date: fields.date,
+                unitPrice: value,
+            });
+        }
+    });
+    return { updated: fields.values.length };
 }
 
 /** Simple interest: principal × rate% × days/365 from start (or last interest) to toDate. */

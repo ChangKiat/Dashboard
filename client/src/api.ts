@@ -1403,6 +1403,21 @@ export function recordPortfolioPriceMark(fields: {
     });
 }
 
+/** Sets the current value (RM) of several unit trusts on one investment account at once. */
+export function recordFundValues(
+    accountId: number,
+    fields: { date: string; values: { instrumentId: number; value: number }[] }
+) {
+    return fetchJson<{ ok: true; updated: number }>(
+        `/api/investments/accounts/${accountId}/fund-values`,
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(fields),
+        }
+    );
+}
+
 export function accrueFdInterest(
     instrumentId: number,
     fields: {
