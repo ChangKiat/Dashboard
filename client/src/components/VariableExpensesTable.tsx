@@ -9,6 +9,7 @@ import {
 import { BANK_CHARGES_CATEGORY, transferFeesToExpenseEntries } from '../utils/bankCharges';
 import CategoryIcon from './CategoryIcon';
 import ExpenseRecordModal from './ExpenseRecordModal';
+import TransactionDetailModal from './TransactionDetailModal';
 import VariableTransactionsList from './VariableTransactionsList';
 
 interface Row {
@@ -50,6 +51,7 @@ export default function VariableExpensesTable({
     // The card picked to filter the list below; null lists every variable expense.
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
     const [editing, setEditing] = useState<ExpenseTransaction | null>(null);
+    const [viewing, setViewing] = useState<ExpenseTransaction | null>(null);
     const listRef = useRef<HTMLElement>(null);
 
     // Every variable-category expense (trip-fund spends are already counted in the exchange),
@@ -188,8 +190,23 @@ export default function VariableExpensesTable({
                 onClear={() => setSelectedCategory(null)}
                 formatAmount={formatAmount}
                 periodText={periodLabel ? `in ${periodLabel}` : 'this month'}
-                onEdit={setEditing}
+                onOpen={setViewing}
             />
+            {viewing && (
+                <TransactionDetailModal
+                    tx={viewing}
+                    formatAmount={formatAmount}
+                    onClose={() => setViewing(null)}
+                    onEdit={
+                        viewing.id > 0
+                            ? () => {
+                                  setEditing(viewing);
+                                  setViewing(null);
+                              }
+                            : undefined
+                    }
+                />
+            )}
             {editing && (
                 <ExpenseRecordModal
                     entry={editing}

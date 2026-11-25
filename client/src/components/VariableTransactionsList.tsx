@@ -13,8 +13,8 @@ interface Props {
     formatAmount: (amount: number) => string;
     /** "this month" or "in Aug – Oct 2026". */
     periodText: string;
-    /** Opens a logged expense for editing. Transfer fees (negative ids) come from incomes and aren't editable here. */
-    onEdit: (tx: ExpenseTransaction) => void;
+    /** Opens a transaction's detail popout (with its linked transactions). */
+    onOpen: (tx: ExpenseTransaction) => void;
 }
 
 const isEditable = (tx: ExpenseTransaction) => tx.id > 0;
@@ -31,7 +31,7 @@ function formatDayHeading(iso: string) {
 
 /** Variable expenses for the period, newest day first, under the category cards. */
 const VariableTransactionsList = forwardRef<HTMLElement, Props>(function VariableTransactionsList(
-    { transactions, category, onClear, formatAmount, periodText, onEdit },
+    { transactions, category, onClear, formatAmount, periodText, onOpen },
     ref
 ) {
     const [query, setQuery] = useState('');
@@ -151,18 +151,14 @@ const VariableTransactionsList = forwardRef<HTMLElement, Props>(function Variabl
                                 }`;
                                 return (
                                     <li key={tx.id}>
-                                        {isEditable(tx) ? (
-                                            <button
-                                                type="button"
-                                                className={`${className} variable-txn--clickable`}
-                                                title="Edit transaction"
-                                                onClick={() => onEdit(tx)}
-                                            >
-                                                {content}
-                                            </button>
-                                        ) : (
-                                            <div className={className}>{content}</div>
-                                        )}
+                                        <button
+                                            type="button"
+                                            className={`${className} variable-txn--clickable`}
+                                            title="View transaction details"
+                                            onClick={() => onOpen(tx)}
+                                        >
+                                            {content}
+                                        </button>
                                     </li>
                                 );
                             })}

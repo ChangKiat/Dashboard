@@ -473,12 +473,14 @@ router.get('/transactions', async (req, res) => {
         ]);
         const reimbursementsByExpenseId = new Map<number, typeof incomeRows>();
         const fundingToByExpenseId = new Map<number, string>();
+        const transferByExpenseId = new Map<number, (typeof incomeRows)[number]>();
         for (const income of incomeRows) {
             if (income.expenseId == null) continue;
             if (income.category === 'Account transfer') {
                 if (income.paymentMethod) {
                     fundingToByExpenseId.set(income.expenseId, income.paymentMethod);
                 }
+                transferByExpenseId.set(income.expenseId, income);
                 continue;
             }
             const list = reimbursementsByExpenseId.get(income.expenseId) || [];
@@ -494,7 +496,8 @@ router.get('/transactions', async (req, res) => {
                 rows,
                 reimbursedByExpenseId,
                 reimbursementsByExpenseId,
-                fundingToByExpenseId
+                fundingToByExpenseId,
+                transferByExpenseId
             ),
         });
     } catch (err) {

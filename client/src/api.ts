@@ -50,6 +50,22 @@ export interface ExpenseReimbursement {
     id: number;
     source: string | null;
     amount: number;
+    date?: string | null;
+    category?: string | null;
+    description?: string | null;
+    /** Account the money was received into. */
+    paymentMethod?: string | null;
+}
+
+/** The Account transfer income an expense created (e.g. funding an investment account). */
+export interface ExpenseLinkedTransfer {
+    id: number;
+    date: string;
+    amount: number;
+    description: string;
+    paymentMethod: string | null;
+    fromPaymentMethod: string | null;
+    transferFee: number | null;
 }
 
 export type TripLeg = 'exchange' | 'fund' | 'card';
@@ -67,6 +83,7 @@ export interface ExpenseTransaction {
     reimbursed?: number;
     netAmount?: number;
     reimbursements?: ExpenseReimbursement[];
+    linkedTransfer?: ExpenseLinkedTransfer | null;
     tripId?: number | null;
     tripLeg?: TripLeg | null;
     fxAmount?: number | null;

@@ -38,13 +38,29 @@ export type ExpenseReimbursementRow = {
     id: number;
     source: string | null;
     amount: string;
+    date?: string;
+    category?: string;
+    description?: string;
+    paymentMethod?: string | null;
+};
+
+/** The Account transfer income an expense created (investment funding / moving money between accounts). */
+export type ExpenseLinkedTransferRow = {
+    id: number;
+    date: string;
+    amount: string;
+    description: string;
+    paymentMethod: string | null;
+    fromPaymentMethod: string | null;
+    transferFee: string | null;
 };
 
 export function enrichExpenseTransactions(
     rows: ExpenseTransactionRow[],
     reimbursedByExpenseId: Map<number, number>,
     reimbursementsByExpenseId: Map<number, ExpenseReimbursementRow[]>,
-    fundingToByExpenseId?: Map<number, string>
+    fundingToByExpenseId?: Map<number, string>,
+    transferByExpenseId?: Map<number, ExpenseLinkedTransferRow>
 ) {
     return rows.map((row) => {
         const grossAmount = parseFloat(row.amount);
@@ -54,7 +70,23 @@ export function enrichExpenseTransactions(
             id: r.id,
             source: r.source,
             amount: parseFloat(r.amount),
+            date: r.date ?? null,
+            category: r.category ?? null,
+            description: r.description ?? null,
+            paymentMethod: r.paymentMethod ?? null,
         }));
+        const transfer = transferByExpenseId?.get(row.id);
+        const linkedTransfer = transfer
+            ? {
+                  id: transfer.id,
+                  date: transfer.date,
+                  amount: parseFloat(transfer.amount),
+                  description: transfer.description,
+                  paymentMethod: transfer.paymentMethod,
+                  fromPaymentMethod: transfer.fromPaymentMethod,
+                  transferFee: transfer.transferFee != null ? parseFloat(transfer.transferFee) : null,
+              }
+            : null;
         return {
             id: row.id,
             date: row.date,
@@ -67,6 +99,7 @@ export function enrichExpenseTransactions(
             paymentMethod: row.paymentMethod ?? null,
             toInvestmentAccount: fundingToByExpenseId?.get(row.id) ?? null,
             reimbursements,
+            linkedTransfer,
             tripId: row.tripId ?? null,
             tripLeg: row.tripLeg ?? null,
             fxAmount: row.fxAmount != null ? parseFloat(row.fxAmount) : null,
