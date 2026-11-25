@@ -126,7 +126,7 @@ To turn it on:
 
 Date params use `YYYY-MM-DD`. Defaults to the last 30 days (Asia/Kuala_Lumpur).
 
-The bot and the Dashboard share one database, and its schema and every migration live in [`AI Agent/scripts/`](../AI%20Agent/scripts). A new database runs `init-db.sql`; an existing one runs the missing `migrate-*.sql` files in the order listed in the AI Agent README (step 3, "Upgrading an existing database"). The Car tab requires `AI Agent/scripts/migrate-car-service.sql`. [`scripts/seed-car-service-visits.sql`](scripts/seed-car-service-visits.sql) is an optional seed of past car service visits: run it once, after that migration (a re-run skips visits that already exist).
+The bot and the Dashboard share one database, and its schema and every migration live in [`AI Agent/scripts/`](../AI%20Agent/scripts). A new database runs `init-db.sql`; an existing one runs the missing `migrate-*.sql` files in the order listed in the AI Agent README (step 3, "Upgrading an existing database"). The Car tab requires `AI Agent/scripts/migrate-car-service.sql` followed by `AI Agent/scripts/migrate-car-service-visit-type.sql` and `AI Agent/scripts/migrate-car-repair-odometer.sql`. [`scripts/seed-car-service-visits.sql`](scripts/seed-car-service-visits.sql) is an optional seed of past car service visits: run it once, after that migration (a re-run skips visits that already exist).
 
 ## Expenses tab layout
 

@@ -32,10 +32,13 @@ export type CarServiceItem = {
     amount: number;
 };
 
+export type CarVisitType = typeof carServiceVisits.$inferSelect.visitType;
+
 export type CarServiceVisit = {
+    visitType: CarVisitType;
     id: number;
     date: string;
-    odometerKm: number;
+    odometerKm: number | null;
     notes: string | null;
     total: number;
     items: CarServiceItem[];
@@ -106,7 +109,7 @@ function daysBetweenIso(start: string, end: string): number {
     return (parseIsoDate(end).getTime() - parseIsoDate(start).getTime()) / (1000 * 60 * 60 * 24);
 }
 
-function computeNextService(visits: CarServiceVisit[]): NextServiceSummary | null {
+function computeNextService(visits: (CarServiceVisit & { odometerKm: number })[]): NextServiceSummary | null {
     if (visits.length === 0) return null;
 
     const last = visits[visits.length - 1];
@@ -183,22 +186,25 @@ export async function getCarServiceOverview(): Promise<CarServiceOverview> {
         itemsByVisit.set(item.visitId, list);
     }
 
-    const visits: CarServiceVisit[] = visitRows.map((row, index) => {
+    let latestReading: number | null = null;
+    const visits: CarServiceVisit[] = visitRows.map((row) => {
         const items = (itemsByVisit.get(row.id) ?? []).sort((a, b) =>
             a.category === b.category
                 ? a.description.localeCompare(b.description)
                 : a.category.localeCompare(b.category)
         );
         const total = items.reduce((sum, item) => sum + item.amount, 0);
-        const prev = index > 0 ? visitRows[index - 1] : null;
+        const kmSincePrev: number | null = row.odometerKm != null && latestReading != null ? row.odometerKm - latestReading : null;
+        if (row.odometerKm != null) latestReading = row.odometerKm;
         return {
             id: row.id,
+            visitType: row.visitType,
             date: row.date,
             odometerKm: row.odometerKm,
             notes: row.notes ?? null,
             total,
             items,
-            kmSincePrev: prev != null ? row.odometerKm - prev.odometerKm : null,
+            kmSincePrev,
         };
     });
 
@@ -248,68 +254,81 @@ export async function getCarServiceOverview(): Promise<CarServiceOverview> {
         summary: {
             visitCount: visits.length,
             lifetimeTotal,
-            latestOdometerKm: latest?.odometerKm ?? null,
+            latestOdometerKm: latestReading,
             latestDate: latest?.date ?? null,
             avgCostPerVisit: visits.length > 0 ? lifetimeTotal / visits.length : 0,
             avgKmBetweenVisits,
-            nextService: computeNextService(visits),
+            nextService: computeNextService(visits.filter((visit): visit is CarServiceVisit & { odometerKm: number } =>
+                visit.visitType === 'Normal service' && visit.odometerKm != null
+            )),
         },
     };
 }
 
-export async function createVisit(fields: {
-    date: string;
-    odometerKm: number;
-    notes?: string | null;
-    items?: { category: string; description: string; amount: number }[];
-}): Promise<CarServiceVisit> {
-    const db = requireDb();
-    const [row] = await db
-        .insert(carServiceVisits)
-        .values({
+export type VisitItemInput = { id?: number; category: string; description: string; amount: number };
+export type VisitChanges = { visitType?: CarVisitType; date?: string; odometerKm?: number | null; notes?: string | null; items?: VisitItemInput[] };
+
+function itemValues(visitId: number, item: VisitItemInput) {
+    return {
+        visitId,
+        category: resolveCategory(item.category),
+        description: item.description.trim(),
+        amount: item.amount.toFixed(2),
+    };
+}
+
+export async function createVisit(fields: VisitChanges & { date: string }): Promise<CarServiceVisit> {
+    const id = await requireDb().transaction(async (tx) => {
+        const [visit] = await tx.insert(carServiceVisits).values({
+            visitType: fields.visitType,
             date: fields.date,
             odometerKm: fields.odometerKm,
             notes: fields.notes?.trim() || null,
-        })
-        .returning();
-
-    const items = fields.items?.filter((i) => i.description.trim() && i.amount > 0) ?? [];
-    if (items.length > 0) {
-        await db.insert(carServiceItems).values(
-            items.map((item) => ({
-                visitId: row.id,
-                category: resolveCategory(item.category),
-                description: item.description.trim(),
-                amount: item.amount.toFixed(2),
-            }))
-        );
-    }
-
-    const overview = await getCarServiceOverview();
-    const visit = overview.visits.find((v) => v.id === row.id);
+        }).returning();
+        if (fields.items?.length) {
+            await tx.insert(carServiceItems).values(fields.items.map((item) => itemValues(visit.id, item)));
+        }
+        return visit.id;
+    });
+    const visit = (await getCarServiceOverview()).visits.find((v) => v.id === id);
     if (!visit) throw new Error('Failed to load created visit');
     return visit;
 }
 
-export async function updateVisit(
-    id: number,
-    fields: { date?: string; odometerKm?: number; notes?: string | null }
-): Promise<CarServiceVisit | null> {
-    const db = requireDb();
-    const set: Partial<typeof carServiceVisits.$inferInsert> = {};
-    if (fields.date != null) set.date = fields.date;
-    if (fields.odometerKm != null) set.odometerKm = fields.odometerKm;
-    if (fields.notes !== undefined) set.notes = fields.notes?.trim() || null;
+export class MissingOdometerError extends Error {}
 
-    if (Object.keys(set).length === 0) {
-        const overview = await getCarServiceOverview();
-        return overview.visits.find((v) => v.id === id) ?? null;
-    }
+export class StaleVisitItemError extends Error {}
 
-    const [row] = await db.update(carServiceVisits).set(set).where(eq(carServiceVisits.id, id)).returning();
-    if (!row) return null;
-    const overview = await getCarServiceOverview();
-    return overview.visits.find((v) => v.id === id) ?? null;
+export async function updateVisit(id: number, fields: VisitChanges): Promise<CarServiceVisit | null> {
+    const found = await requireDb().transaction(async (tx) => {
+        const [visit] = await tx.select().from(carServiceVisits).where(eq(carServiceVisits.id, id)).for('update');
+        if (!visit) return false;
+        const odometerKm = fields.odometerKm === undefined ? visit.odometerKm : fields.odometerKm;
+        if ((fields.visitType ?? visit.visitType) === 'Normal service' && odometerKm == null) {
+            throw new MissingOdometerError('Enter an odometer reading for normal service.');
+        }
+        const { items, ...metadata } = fields;
+        if (Object.keys(metadata).length) {
+            await tx.update(carServiceVisits).set(metadata).where(eq(carServiceVisits.id, id));
+        }
+        if (items) {
+            const existing = await tx.select().from(carServiceItems).where(eq(carServiceItems.visitId, id));
+            const remaining = new Set(existing.map((item) => item.id));
+            for (const item of items) {
+                const values = itemValues(id, item);
+                if (item.id === undefined) {
+                    await tx.insert(carServiceItems).values(values);
+                } else {
+                    if (!remaining.delete(item.id)) throw new StaleVisitItemError('This item has changed. Reload the visit and try again.');
+                    await tx.update(carServiceItems).set(values).where(eq(carServiceItems.id, item.id));
+                }
+            }
+            if (remaining.size) await tx.delete(carServiceItems).where(inArray(carServiceItems.id, [...remaining]));
+        }
+        return true;
+    });
+    if (!found) return null;
+    return (await getCarServiceOverview()).visits.find((v) => v.id === id) ?? null;
 }
 
 export async function deleteVisit(id: number): Promise<boolean> {
