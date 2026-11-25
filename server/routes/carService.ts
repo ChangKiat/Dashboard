@@ -1,6 +1,9 @@
 import { Router } from 'express';
 import {
-    CAR_SERVICE_CATEGORIES,
+    type VisitChanges,
+    type VisitItemInput,
+    StaleVisitItemError,
+    MissingOdometerError,
     createVisit,
     deleteItem,
     deleteVisit,
@@ -18,6 +21,30 @@ import {
 
 const router = Router();
 
+function validVisitType(value: unknown) {
+    return value === 'Normal service' || value === 'Accessory repair';
+}
+
+function parseItems(rawItems: unknown): VisitItemInput[] | string {
+    if (!Array.isArray(rawItems)) return 'Invalid service items';
+    const items: VisitItemInput[] = [];
+    for (const item of rawItems) {
+        if (!isNonEmptyString(item?.description)) return 'Enter an item name';
+        const amount = typeof item.amount === 'number' ? item.amount : typeof item.amount === 'string' ? Number(item.amount) : NaN;
+        if (!isNonNegativeNumber(amount) || amount <= 0) {
+            return 'Item amount must be greater than zero';
+        }
+        if (item.id !== undefined && (!Number.isSafeInteger(item.id) || item.id < 1)) return 'Invalid item id';
+        items.push({
+            id: item.id,
+            category: isNonEmptyString(item.category) ? item.category : 'Material',
+            description: item.description.trim(),
+            amount,
+        });
+    }
+    return items;
+}
+
 router.get('/', async (_req, res) => {
     try {
         const overview = await getCarServiceOverview();
@@ -34,24 +61,19 @@ router.post('/visits', async (req, res) => {
         if (!isValidDate(body.date)) {
             return res.status(400).json({ error: 'Invalid date' });
         }
-        if (!isNonNegativeInteger(body.odometerKm)) {
+        const needsReading = body.visitType !== 'Accessory repair' || body.odometerKm != null;
+        if (needsReading && !isNonNegativeInteger(body.odometerKm)) {
             return res.status(400).json({ error: 'Invalid odometer' });
         }
 
-        const rawItems = Array.isArray(body.items) ? body.items : [];
-        const items: { category: string; description: string; amount: number }[] = [];
-        for (const item of rawItems) {
-            if (!isNonEmptyString(item?.description)) continue;
-            const amount = typeof item.amount === 'number' ? item.amount : parseFloat(item.amount);
-            if (!isNonNegativeNumber(amount) || amount <= 0) continue;
-            items.push({
-                category: isNonEmptyString(item.category) ? item.category : 'Material',
-                description: item.description.trim(),
-                amount,
-            });
+        if (body.visitType !== undefined && !validVisitType(body.visitType)) {
+            return res.status(400).json({ error: 'Invalid visit type' });
         }
+        const items = parseItems(body.items === undefined ? [] : body.items);
+        if (typeof items === 'string') return res.status(400).json({ error: items });
 
         const visit = await createVisit({
+            visitType: body.visitType,
             date: body.date,
             odometerKm: body.odometerKm,
             notes: isNonEmptyString(body.notes) ? body.notes.trim() : null,
@@ -70,14 +92,23 @@ router.patch('/visits/:id', async (req, res) => {
         if (!id) return res.status(400).json({ error: 'Invalid id' });
 
         const body = req.body ?? {};
-        const fields: { date?: string; odometerKm?: number; notes?: string | null } = {};
+        const fields: VisitChanges = {};
+        if (body.visitType !== undefined && !validVisitType(body.visitType)) {
+            return res.status(400).json({ error: 'Invalid visit type' });
+        }
+        if (body.visitType !== undefined) fields.visitType = body.visitType;
+        if (body.items !== undefined) {
+            const items = parseItems(body.items);
+            if (typeof items === 'string') return res.status(400).json({ error: items });
+            fields.items = items;
+        }
 
         if (body.date != null) {
             if (!isValidDate(body.date)) return res.status(400).json({ error: 'Invalid date' });
             fields.date = body.date;
         }
-        if (body.odometerKm != null) {
-            if (!isNonNegativeInteger(body.odometerKm)) {
+        if (body.odometerKm !== undefined) {
+            if (body.odometerKm !== null && !isNonNegativeInteger(body.odometerKm)) {
                 return res.status(400).json({ error: 'Invalid odometer' });
             }
             fields.odometerKm = body.odometerKm;
@@ -90,6 +121,8 @@ router.patch('/visits/:id', async (req, res) => {
         if (!visit) return res.status(404).json({ error: 'Visit not found' });
         res.json({ ok: true, visit });
     } catch (err) {
+        if (err instanceof MissingOdometerError) return res.status(400).json({ error: err.message });
+        if (err instanceof StaleVisitItemError) return res.status(409).json({ error: err.message });
         console.error('PATCH /api/car-service/visits/:id', err);
         res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
     }
@@ -124,10 +157,6 @@ router.put('/visits/:id/items', async (req, res) => {
         }
 
         const category = isNonEmptyString(body.category) ? body.category : 'Material';
-        if (!(CAR_SERVICE_CATEGORIES as readonly string[]).includes(category) && category !== 'Other') {
-            // resolveCategory in service maps unknown → Other
-        }
-
         const item = await upsertVisitItem({
             visitId,
             category,

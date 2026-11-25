@@ -1415,10 +1415,14 @@ export interface CarServiceItem {
     amount: number;
 }
 
+export const carVisitTypes = ['Normal service', 'Accessory repair'] as const;
+export type CarVisitType = typeof carVisitTypes[number];
+
 export interface CarServiceVisit {
+    visitType: CarVisitType;
     id: number;
     date: string;
-    odometerKm: number;
+    odometerKm: number | null;
     notes: string | null;
     total: number;
     items: CarServiceItem[];
@@ -1460,8 +1464,9 @@ export function fetchCarServiceOverview() {
 }
 
 export function createCarServiceVisit(fields: {
+    visitType?: CarVisitType;
     date: string;
-    odometerKm: number;
+    odometerKm?: number | null;
     notes?: string | null;
     items?: { category: string; description: string; amount: number }[];
 }) {
@@ -1474,7 +1479,7 @@ export function createCarServiceVisit(fields: {
 
 export function updateCarServiceVisit(
     id: number,
-    fields: Partial<{ date: string; odometerKm: number; notes: string | null }>
+    fields: Partial<{ visitType: CarVisitType; date: string; odometerKm: number | null; notes: string | null; items: (Pick<CarServiceItem, 'category' | 'description' | 'amount'> & { id?: number })[] }>
 ) {
     return fetchJson<{ ok: true; visit: CarServiceVisit }>(`/api/car-service/visits/${id}`, {
         method: 'PATCH',
