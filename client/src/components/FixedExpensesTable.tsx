@@ -25,6 +25,7 @@ const EMPTY_FORM = {
     frequencyMonths: '1',
     /** 'month' = on a day of the month; 'days' = every N days from a first payment date. */
     repeat: 'month' as 'month' | 'days',
+    nextPaymentDate: '',
     intervalDays: '30',
     intervalStartDate: '',
 };
@@ -150,7 +151,7 @@ export default function FixedExpensesTable({
     const openCreate = () => {
         setModalMode('create');
         setEditingEntry(null);
-        setForm({ ...EMPTY_FORM, intervalStartDate: today });
+        setForm({ ...EMPTY_FORM, nextPaymentDate: today, intervalStartDate: today });
         setModalError(null);
     };
 
@@ -166,6 +167,7 @@ export default function FixedExpensesTable({
             amount: String(row.amount),
             dayOfMonth: String(row.dayOfMonth),
             frequencyMonths: String(row.frequencyMonths),
+            nextPaymentDate: nextDueDate(row, today) ?? today,
             repeat: row.intervalDays ? 'days' : 'month',
             intervalDays: String(row.intervalDays ?? 30),
             intervalStartDate: row.intervalStartDate ?? today,
@@ -178,6 +180,8 @@ export default function FixedExpensesTable({
         setEditingEntry(null);
         setModalError(null);
     };
+
+    const multiMonth = form.repeat === 'month' && Number(form.frequencyMonths) > 1;
 
     const handleSave = async () => {
         const amount = parseFloat(form.amount);
@@ -194,10 +198,21 @@ export default function FixedExpensesTable({
                 return;
             }
         }
-        // An every-N-days bill keeps its first date's day in the day-of-month column.
+        if (multiMonth && (!form.nextPaymentDate || form.nextPaymentDate < today)) {
+            setModalError('Choose a next payment date on or after today.');
+            return;
+        }
+        const keepSchedule = multiMonth && editingEntry && !editingEntry.intervalDays
+            && Number(form.frequencyMonths) === editingEntry.frequencyMonths
+            && form.nextPaymentDate === nextDueDate(editingEntry, today);
+        const monthlyStart = multiMonth && !keepSchedule
+            ? form.nextPaymentDate
+            : (multiMonth ? editingEntry?.intervalStartDate : null);
         const dayOfMonth = everyDays
             ? parseInt(intervalStartDate.slice(8, 10), 10)
-            : parseInt(form.dayOfMonth, 10);
+            : multiMonth && !keepSchedule
+              ? Number(form.nextPaymentDate.slice(8))
+              : Number(form.dayOfMonth);
         const frequencyMonths = everyDays ? 1 : parseInt(form.frequencyMonths, 10);
         if (
             !form.description.trim() ||
@@ -260,7 +275,7 @@ export default function FixedExpensesTable({
                 dayOfMonth,
                 frequencyMonths,
                 intervalDays: everyDays ? intervalDays : null,
-                intervalStartDate: everyDays ? intervalStartDate : null,
+                intervalStartDate: everyDays ? intervalStartDate : monthlyStart ?? null,
                 paymentMethod,
                 toInvestmentAccount: hasFundingTransfer ? toInvestmentAccount : null,
                 instrumentId,
@@ -268,7 +283,7 @@ export default function FixedExpensesTable({
             if (modalMode === 'create') {
                 await createFixedExpense({
                     ...payload,
-                    startMonth: new Date().getMonth() + 1,
+                    startMonth: Number((monthlyStart ?? today).slice(5, 7)),
                 });
             } else if (editingEntry) {
                 await updateFixedExpense(editingEntry.id, payload);
@@ -542,17 +557,30 @@ export default function FixedExpensesTable({
                 </div>
                 {form.repeat === 'month' ? (
                     <>
-                        <div className="form-field">
-                            <label htmlFor="fx-day">Day of month</label>
-                            <input
-                                id="fx-day"
-                                type="number"
-                                min="1"
-                                max="31"
-                                value={form.dayOfMonth}
-                                onChange={(e) => setForm((f) => ({ ...f, dayOfMonth: e.target.value }))}
-                            />
-                        </div>
+                        {multiMonth ? (
+                            <div className="form-field">
+                                <label htmlFor="fx-next-payment">Next payment due date</label>
+                                <input
+                                    id="fx-next-payment"
+                                    type="date"
+                                    min={today}
+                                    value={form.nextPaymentDate}
+                                    onChange={(e) => setForm((f) => ({ ...f, nextPaymentDate: e.target.value }))}
+                                />
+                            </div>
+                        ) : (
+                            <div className="form-field">
+                                <label htmlFor="fx-day">Day of month</label>
+                                <input
+                                    id="fx-day"
+                                    type="number"
+                                    min="1"
+                                    max="31"
+                                    value={form.dayOfMonth}
+                                    onChange={(e) => setForm((f) => ({ ...f, dayOfMonth: e.target.value }))}
+                                />
+                            </div>
+                        )}
                         <div className="form-field">
                             <label htmlFor="fx-frequency">Frequency (months)</label>
                             <input
