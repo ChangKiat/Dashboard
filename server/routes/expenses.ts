@@ -712,6 +712,9 @@ router.post('/fixed', async (req, res) => {
             }
             interval = { days: body.intervalDays, startDate: body.intervalStartDate };
         }
+        if (body.intervalStartDate != null && !isValidDate(body.intervalStartDate)) {
+            return res.status(400).json({ error: INTERVAL_START_ERROR });
+        }
         const dayOfMonth = interval ? parseInt(interval.startDate.slice(8, 10), 10) : body.dayOfMonth;
         const frequencyMonths = interval ? 1 : body.frequencyMonths;
         if (!isDayOfMonth(dayOfMonth)) {
@@ -796,7 +799,7 @@ router.post('/fixed', async (req, res) => {
             holding.toInvestmentAccount,
             isLoanCategory(category) ? loanParsed.loan ?? null : null,
             holding.instrumentId,
-            interval
+            interval ?? (body.intervalStartDate ? { days: null, startDate: body.intervalStartDate } : null)
         );
         res.json({ ok: true });
     } catch (err) {
@@ -1082,7 +1085,7 @@ router.patch('/fixed/:id', async (req, res) => {
             }
             fields.intervalDays = body.intervalDays;
         }
-        if (body.intervalStartDate != null && body.intervalDays !== null) {
+        if (body.intervalStartDate != null) {
             if (!isValidDate(body.intervalStartDate)) {
                 return res.status(400).json({ error: INTERVAL_START_ERROR });
             }

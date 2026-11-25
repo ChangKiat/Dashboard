@@ -1,3 +1,4 @@
+import { isMonthlyExpenseDue } from '../../../agent/services/fixedSchedule';
 import type { FixedExpenseConfig } from '../api';
 
 const AVERAGE_DAYS_PER_MONTH = 365.25 / 12;
@@ -34,13 +35,6 @@ export function frequencyLabel(row: FixedExpenseConfig) {
     return `Every ${months} months`;
 }
 
-/** Same rule as the bot's 9 am job: due when (month − start month) is a multiple of the frequency. */
-function isDueInMonth(row: FixedExpenseConfig, month: number) {
-    const freq = row.frequencyMonths || 1;
-    const diff = month - row.startMonth;
-    return ((diff % freq) + freq) % freq === 0;
-}
-
 /** The rule's day in that month, moved back to the last day for short months. */
 function dueDate(row: FixedExpenseConfig, year: number, month: number) {
     const day = Math.min(row.dayOfMonth, new Date(year, month, 0).getDate());
@@ -67,7 +61,7 @@ export function dueDatesBetween(row: FixedExpenseConfig, from: string, to: strin
     let year = parseInt(from.slice(0, 4), 10);
     let month = parseInt(from.slice(5, 7), 10);
     for (let i = 0; i < 36; i += 1) {
-        if (isDueInMonth(row, month)) {
+        if (isMonthlyExpenseDue(row, year, month)) {
             const date = dueDate(row, year, month);
             if (date > to) break;
             if (date >= from) dates.push(date);
@@ -84,6 +78,17 @@ export function dueDatesBetween(row: FixedExpenseConfig, from: string, to: strin
 
 /** The next due date on or after `today`, or null if none within three years. */
 export function nextDueDate(row: FixedExpenseConfig, today: string): string | null {
+    if (!row.intervalDays && row.intervalStartDate) {
+        const from = today > row.intervalStartDate ? today : row.intervalStartDate;
+        const [year, month] = from.split('-').map(Number);
+        const [startYear, startMonth] = row.intervalStartDate.split('-').map(Number);
+        const frequency = row.frequencyMonths || 1;
+        const elapsed = (year - startYear) * 12 + month - startMonth;
+        let offset = (frequency - elapsed % frequency) % frequency;
+        if (offset === 0 && dueDate(row, year, month) < from) offset = frequency;
+        const target = month - 1 + offset;
+        return dueDate(row, year + Math.floor(target / 12), target % 12 + 1);
+    }
     const year = parseInt(today.slice(0, 4), 10);
     return dueDatesBetween(row, today, `${year + 3}${today.slice(4)}`)[0] ?? null;
 }
