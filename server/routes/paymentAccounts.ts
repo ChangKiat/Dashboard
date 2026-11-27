@@ -13,6 +13,7 @@ import {
     listActivePaymentAccounts,
     normalizePaymentAccountName,
     normalizeRebateConfig,
+    PaymentAccountNameConflictError,
     updatePaymentAccount,
 } from '../../agent/services/paymentAccountService';
 import {
@@ -264,12 +265,11 @@ router.post('/', async (req, res) => {
         await refreshPaymentAccountsCache();
         res.json({ ok: true, id });
     } catch (err) {
-        console.error('POST /api/payment-accounts', err);
-        const message = err instanceof Error ? err.message : 'Server error';
-        if (message.includes('unique') || message.includes('duplicate')) {
-            return res.status(400).json({ error: 'An account with this name already exists' });
+        if (err instanceof PaymentAccountNameConflictError) {
+            return res.status(400).json({ error: err.message });
         }
-        res.status(500).json({ error: message });
+        console.error('POST /api/payment-accounts', err);
+        res.status(500).json({ error: 'Unable to save the payment account. Please try again.' });
     }
 });
 
