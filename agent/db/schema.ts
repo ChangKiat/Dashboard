@@ -18,6 +18,8 @@ export const expenses = pgTable('expenses', {
     category: text('category').default('Other').notNull(),
     description: text('description').notNull(),
     paymentMethod: text('payment_method'),
+    recurringId: integer('recurring_id'),
+    chargeConfirmed: boolean('charge_confirmed').default(false).notNull(),
     tripId: integer('trip_id').references(() => trips.id),
     tripLeg: text('trip_leg'),
     fxAmount: numeric('fx_amount', { precision: 12, scale: 2 }),
@@ -55,6 +57,7 @@ export const budgets = pgTable('budgets', {
 
 export const fixedExpenses = pgTable('fixed_expenses', {
     id: serial('id').primaryKey(),
+    billingPrice: jsonb('billing_price').$type<{ currency: string; amount: number }>(),
     dayOfMonth: integer('day_of_month').notNull(),
     amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
     frequencyMonths: integer('frequency_months').default(1).notNull(),

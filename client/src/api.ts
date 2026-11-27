@@ -195,6 +195,8 @@ export interface IncomeDailyResponse {
 export type LoanMethod = 'reducing' | 'flat' | 'included';
 
 export interface FixedExpenseConfig {
+    billingPrice?: { amount: number; currency: string } | null;
+    pendingCharges?: {id: number; date: string}[];
     id: number;
     description: string;
     category: string;
@@ -654,6 +656,12 @@ export function updateExpenseTransaction(
 
 export function deleteExpenseTransaction(id: number) {
     return fetchJson<{ ok: true }>(`/api/expenses/transactions/${id}`, { method: 'DELETE' });
+}
+
+export function confirmRecurringCharge(id: number, charge: number, amount: number) {
+    return fetchJson(`/api/expenses/fixed/${id}/confirm/${charge}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount })
+    });
 }
 
 export function createFixedExpense(

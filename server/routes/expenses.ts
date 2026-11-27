@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { and, desc, eq, gte, lte } from 'drizzle-orm';
 import { requireDb } from '../../agent/db/client';
-import { expenses } from '../../agent/db/schema';
+import { expenses, fixedExpenses } from '../../agent/db/schema';
 import {
     addFixedExpense,
     appendExpense,
@@ -791,6 +791,9 @@ router.post('/fixed', async (req, res) => {
             if (intervalError) return res.status(400).json({ error: intervalError });
         }
 
+        if (body.billingPrice != null && (!/^[A-Z]{3}$/.test(body.billingPrice.currency) || body.billingPrice.currency === 'MYR' || !isPositiveNumber(body.billingPrice.amount))) {
+            return res.status(400).json({ error: 'Invalid foreign currency or billing amount' });
+        }
         await addFixedExpense(
             dayOfMonth,
             body.amount,
@@ -803,7 +806,8 @@ router.post('/fixed', async (req, res) => {
             holding.toInvestmentAccount,
             isLoanCategory(category) ? loanParsed.loan ?? null : null,
             holding.instrumentId,
-            interval ?? (body.intervalStartDate ? { days: null, startDate: body.intervalStartDate } : null)
+            interval ?? (body.intervalStartDate ? { days: null, startDate: body.intervalStartDate } : null),
+            body.billingPrice
         );
         res.json({ ok: true });
     } catch (err) {
@@ -1030,13 +1034,32 @@ router.delete('/transactions/:id', async (req, res) => {
     }
 });
 
+router.post('/fixed/:id/confirm/:charge', async (req, res) => {
+    const id = parseIdParam(req.params.id);
+    const charge = parseIdParam(req.params.charge);
+    const amount = req.body?.amount;
+    if (!id || !charge || !isPositiveNumber(amount)) return res.status(400).json({ error: 'Enter a positive RM amount' });
+    const confirmed = await requireDb().transaction(async tx => {
+        const [row] = await tx.update(expenses).set({ amount: String(amount), chargeConfirmed: true })
+            .where(and(eq(expenses.id, charge), eq(expenses.recurringId, id), eq(expenses.chargeConfirmed, false))).returning({ id: expenses.id });
+        if (!row) return false;
+        await tx.update(fixedExpenses).set({ amount: String(amount) }).where(eq(fixedExpenses.id, id));
+        return true;
+    });
+    return confirmed ? res.json({ ok: true }) : res.status(409).json({ error: 'Charge already confirmed or unavailable' });
+});
+
 router.patch('/fixed/:id', async (req, res) => {
     try {
         const id = parseIdParam(req.params.id);
         if (!id) return res.status(400).json({ error: 'Invalid id' });
 
         const body = req.body ?? {};
+        if (body.billingPrice != null && (!/^[A-Z]{3}$/.test(body.billingPrice.currency) || body.billingPrice.currency === 'MYR' || !isPositiveNumber(body.billingPrice.amount))) {
+            return res.status(400).json({ error: 'Invalid foreign currency or billing amount' });
+        }
         const fields: {
+            billingPrice?: { amount: number; currency: string } | null;
             description?: string;
             category?: string;
             amount?: number;
@@ -1048,7 +1071,7 @@ router.patch('/fixed/:id', async (req, res) => {
             toInvestmentAccount?: string | null;
             instrumentId?: number | null;
             loan?: FixedExpenseLoanFields | null;
-        } = {};
+        } = { billingPrice: body.billingPrice };
 
         if (body.description != null) {
             if (!isNonEmptyString(body.description)) {

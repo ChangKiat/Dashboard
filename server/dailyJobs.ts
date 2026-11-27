@@ -163,6 +163,11 @@ function dayLabel(date: string, today: string): string {
  * uses doesn't.
  */
 async function findLoggedBillExpense(exp: DueFixedExpense): Promise<number | null> {
+    if (exp.billingPrice) {
+        const [logged] = await requireDb().select({ id: expenses.id }).from(expenses)
+            .where(and(eq(expenses.recurringId, exp.id), eq(expenses.date, exp.date)));
+        return logged?.id ?? null;
+    }
     const [row] = await requireDb()
         .select({ id: expenses.id })
         .from(expenses)
@@ -314,7 +319,7 @@ async function logFixedBill(exp: DueFixedExpense): Promise<string | null> {
             exp.description,
             exp.paymentMethod,
             undefined,
-            { keepRaw: true }
+            { keepRaw: true, recurringId: exp.billingPrice ? exp.id : undefined }
         );
     } catch (error) {
         throw new Error(

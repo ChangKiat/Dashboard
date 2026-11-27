@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull } from 'drizzle-orm';
 import { requireDb } from '../db/client';
 import { expenses, fixedExpenses, investmentEvents } from '../db/schema';
 import { getExpenseCategories, resolveCategory } from '../config/expenseCategories';
@@ -200,6 +200,7 @@ export async function getSpendingReimbursements(
 }
 
 export type AppendExpenseOptions = {
+    recurringId?: number;
     /**
      * Store an account that does not resolve as its trimmed raw text instead of null
      * (`resolvePaymentMethod(x) ?? x.trim()`), so a fixed bill stored as "Cash" or under a
@@ -233,6 +234,7 @@ export async function appendExpense(
             category: resolveCategory(category),
             description,
             paymentMethod: paymentMethodForInsert(paymentMethod, options?.keepRaw),
+            recurringId: options?.recurringId,
             tripId: trip?.tripId ?? null,
             tripLeg: trip?.tripLeg ?? null,
             fxAmount: trip?.fxAmount != null ? String(trip.fxAmount) : null,
@@ -538,7 +540,8 @@ export async function addFixedExpense(
     loan?: FixedExpenseLoanFields | null,
     instrumentId?: number | null,
     /** Repeat every `days` days from `startDate` instead of on `dayOfMonth`. */
-    interval?: { days: number | null; startDate: string } | null
+    interval?: { days: number | null; startDate: string } | null,
+    billingPrice?: { amount: number; currency: string } | null
 ) {
     const db = requireDb();
     const resolvedCategory = resolveCategory(category);
@@ -548,6 +551,7 @@ export async function addFixedExpense(
     })();
     const keepInstrument = resolvedCategory.toLowerCase() === 'investment';
     await db.insert(fixedExpenses).values({
+        billingPrice,
         dayOfMonth,
         amount: String(amount),
         currency: currency || 'MYR',
@@ -569,6 +573,7 @@ export async function addFixedExpense(
 }
 
 export type DueFixedExpense = {
+    billingPrice?: { amount: number; currency: string } | null;
     id: number;
     date: string;
     amount: number;
@@ -696,6 +701,7 @@ export async function getFixedExpensesDueOn(dateStr: string): Promise<DueFixedEx
     return due.flatMap((row): DueFixedExpense[] => {
         const base = {
             id: row.id,
+            billingPrice: row.billingPrice,
             date: dateStr,
             currency: row.currency,
             category: resolveCategory(row.category),
@@ -886,8 +892,12 @@ export async function getActiveFixedExpenses() {
         .from(fixedExpenses)
         .where(eq(fixedExpenses.active, true));
 
+    const pending = await db.select({ id: expenses.id, bill: expenses.recurringId, date: expenses.date }).from(expenses)
+        .where(and(isNotNull(expenses.recurringId), eq(expenses.chargeConfirmed, false))).orderBy(expenses.date);
     return rows.map((row) => ({
         id: row.id,
+        billingPrice: row.billingPrice,
+        pendingCharges: pending.filter(charge => charge.bill === row.id),
         description: row.description,
         category: resolveCategory(row.category),
         amount: parseFloat(row.amount),
@@ -907,6 +917,7 @@ export async function getActiveFixedExpenses() {
 export async function updateFixedExpenseById(
     id: number,
     fields: {
+        billingPrice?: { amount: number; currency: string } | null;
         description?: string;
         category?: string;
         amount?: number;
@@ -922,7 +933,8 @@ export async function updateFixedExpenseById(
     }
 ): Promise<boolean> {
     const db = requireDb();
-    const set: Record<string, string | number | null> = {};
+    const set: Record<string, string | number | null | { amount: number; currency: string }> = {};
+    if (fields.billingPrice !== undefined) set.billingPrice = fields.billingPrice;
 
     const nextCategory =
         fields.category != null ? resolveCategory(fields.category) : undefined;

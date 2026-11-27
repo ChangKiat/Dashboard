@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 
 import type { FixedExpenseConfig } from '../api';
-import { createFixedExpense, deleteFixedExpense, updateFixedExpense } from '../api';
+import { confirmRecurringCharge, createFixedExpense, deleteFixedExpense, updateFixedExpense } from '../api';
 import { usePagination } from '../hooks/usePagination';
 import { usePaymentAccounts } from '../hooks/usePaymentAccounts';
 import { isInvestmentCategory, isOtherCategory, requiresAccountTransfer, resolveOtherAccountFields } from '../utils/expenseCategories';
@@ -16,6 +16,8 @@ type ModalMode = 'closed' | 'create' | 'edit';
 
 const EMPTY_FORM = {
     description: '',
+    billingCurrency: 'MYR',
+    billingAmount: '',
     category: '',
     paymentMethod: '',
     toInvestmentAccount: '',
@@ -160,6 +162,8 @@ export default function FixedExpensesTable({
         setEditingEntry(row);
         setForm({
             description: row.description,
+            billingCurrency: row.billingPrice?.currency ?? 'MYR',
+            billingAmount: String(row.billingPrice?.amount ?? ''),
             category: row.category,
             paymentMethod: row.paymentMethod ?? '',
             toInvestmentAccount: row.toInvestmentAccount ?? '',
@@ -270,6 +274,7 @@ export default function FixedExpensesTable({
         try {
             const payload = {
                 description: form.description.trim(),
+                billingPrice: form.billingCurrency === 'MYR' ? null : { currency: form.billingCurrency, amount: Number(form.billingAmount) },
                 category: form.category.trim(),
                 amount,
                 dayOfMonth,
@@ -386,11 +391,19 @@ export default function FixedExpensesTable({
                                     </span>
                                 </span>
                                 <span className="recurring-figures">
-                                    <span className="recurring-amount">{formatAmount(row.amount)}</span>
+                                    <span className="recurring-amount">{row.billingPrice && `${row.billingPrice.currency} ${row.billingPrice.amount} · Estimated `}{formatAmount(row.amount)}</span>
                                     <span className="recurring-sub">
                                         {work ? `${work} of work a year` : `${formatAmount(yearly)} a year`}
                                     </span>
                                 </span>
+                                {row.pendingCharges?.map(charge => <button type="button" key={charge.id} onClick={async () => {
+                                    const input = window.prompt(`Posted RM amount for ${row.description} on ${charge.date}`);
+                                    if (input === null) return;
+                                    try {
+                                        await confirmRecurringCharge(row.id, charge.id, Number(input));
+                                        await onChanged();
+                                    } catch (error) { setActionError(error instanceof Error ? error.message : 'Confirmation failed'); }
+                                }}>Confirm RM amount · {charge.date}</button>)}
                                 <RowActions
                                     onEdit={() => openEdit(row)}
                                     onDelete={() => handleDelete(row)}
@@ -532,7 +545,15 @@ export default function FixedExpensesTable({
                     </div>
                 )}
                 <div className="form-field">
-                    <label htmlFor="fx-amount">Amount</label>
+                    <label htmlFor="fx-currency">Billing currency</label>
+                    <select id="fx-currency" value={form.billingCurrency} onChange={e => setForm({...form, billingCurrency: e.target.value})}>
+                        {['MYR','USD','SGD','EUR','GBP','AUD','JPY'].map(c => <option key={c}>{c}</option>)}
+                    </select>
+                    {form.billingCurrency !== 'MYR' && <>
+                        <label htmlFor="fx-original">Amount in {form.billingCurrency}</label>
+                        <input id="fx-original" type="number" min="0.01" step="0.01" required value={form.billingAmount} onChange={e => setForm({...form, billingAmount:e.target.value})}/>
+                    </>}
+                    <label htmlFor="fx-amount">{form.billingCurrency === 'MYR' ? 'Amount' : 'Estimated amount (RM)'}</label>
                     <input
                         id="fx-amount"
                         type="number"
