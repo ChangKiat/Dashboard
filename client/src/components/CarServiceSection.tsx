@@ -1,10 +1,23 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { carVisitTypes, createCarServiceVisit, deleteCarServiceVisit, fetchCarServiceOverview, updateCarServiceVisit } from '../api';
 import type { CarVisitType, CarServiceCategory, CarServiceOverview, CarServiceVisit } from '../api';
 import { useFormatMYR } from '../hooks/useAmountVisibility';
 import { useRefreshSignal } from '../hooks/useRefreshSignal';
+import { CarIcon, ReceiptIcon, TagIcon } from './icons';
+import ExportPdfButton from './ExportPdfButton';
+import { carServiceReport } from '../utils/dashboardReports';
 import './CarServiceSection.css';
+
+const dayHeading = new Intl.DateTimeFormat('en-MY', { dateStyle: 'full', timeZone: 'UTC' });
+
+function ServiceIcon({ type, small = false }: { type: CarVisitType | 'All'; small?: boolean }) {
+    const Icon = type === 'All' ? ReceiptIcon : type === 'Normal service' ? CarIcon : TagIcon;
+    const tone = type === 'All' ? 'neutral' : type === 'Normal service' ? 'blue' : 'amber';
+    return <span aria-hidden="true" className={`category-icon category-icon--${small ? 'sm' : 'md'} category-icon--${tone}`}>
+        <Icon size={small ? 16 : 18} />
+    </span>;
+}
 
 const categories: CarServiceCategory[] = ['Material', 'Lubricants', 'Labour', 'Other'];
 const dateFormatter = new Intl.DateTimeFormat('en-MY', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
@@ -81,8 +94,8 @@ function VisitEditor({ visit, initialType = 'Normal service', data, onClose, onS
         }
     }
 
-    return <form className="service-editor" onSubmit={save}>
-        <fieldset disabled={busy}>
+    return <form className="trips-form service-editor" onSubmit={save}>
+        <fieldset className="span-full" disabled={busy}>
             <legend>{visit ? 'Edit visit' : 'New visit'}</legend>
             <div className="service-fields">
                 <label>Visit type<select value={visitType} onChange={(e) => setVisitType(e.target.value as CarVisitType)}>
@@ -109,7 +122,7 @@ function VisitEditor({ visit, initialType = 'Normal service', data, onClose, onS
                 <strong>Total {money(lines.reduce((sum, row) => sum + Number(row.amount), 0))}</strong>
             </div>
             {error && <p role="alert" className="error">{error}</p>}
-            <div className="service-controls">
+            <div className="trips-form-actions service-controls">
                 {visit && <button type="button" className="btn-link btn-danger-link" onClick={removeVisit}>Delete visit</button>}
                 <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
                 <button className="btn-primary" type="submit">{busy ? 'Saving…' : 'Save visit'}</button>
@@ -158,53 +171,94 @@ export default function CarServiceSection() {
             ...visit.items.flatMap((item) => [item.description, item.category])]
             .some((value) => value?.toLowerCase().includes(term)));
     const next = data?.summary.nextService;
-    return <section className="panel service-log">
-        <header className="service-top">
-            <div><h2>Service history</h2>{data && <p>{data.summary.visitCount} visits
-                {data.summary.latestOdometerKm !== null && ' · ' + km(data.summary.latestOdometerKm)}</p>}</div>
-            <button type="button" className="btn-primary" disabled={!data || editor !== null || refreshing} onClick={() => setEditor('new')}>+ Add visit</button>
+    const days = new Map<string, CarServiceVisit[]>();
+    for (const visit of visits) {
+        const group = days.get(visit.date);
+        if (group) group.push(visit);
+        else days.set(visit.date, [visit]);
+    }
+
+    return <section className="card expenses-variable-table service-log">
+        <header className="variable-expenses-header">
+            <div className="variable-expenses-stats">
+                {next && <div className="mini-stat">
+                    <span className="mini-stat-label">Next service</span>
+                    <strong className="mini-stat-value">{dateLabel(next.byDate)} or {km(next.byOdometerKm)}</strong>
+                    <span className="mini-stat-sub">Whichever comes first{next.limitingFactor === 'km' && ' · Estimated ' + dateLabel(next.predictedDate)}</span>
+                </div>}
+            </div>
+            <div className="variable-expenses-stats">
+                <ExportPdfButton sensitive disabled={!visits.length || !!error || refreshing || editor !== null}
+                    build={() => carServiceReport(visits, typeFilter, query, money)} />
+                <button type="button" className="btn-primary" disabled={!data || editor !== null || refreshing} onClick={() => setEditor('new')}>+ Add visit</button>
+            </div>
         </header>
-        {data && <div className="service-spend" role="group" aria-label="Spending and visit filters">
+        {data && <div className="variable-expense-list" role="group" aria-label="Spending and visit filters">
             {(['All', ...carVisitTypes] as const).map((type) => {
-                const total = type === 'All' ? data.summary.lifetimeTotal
-                    : data.visits.reduce((sum, visit) => sum + (visit.visitType === type ? visit.total : 0), 0);
-                return <button type="button" key={type} aria-pressed={typeFilter === type} disabled={editor !== null}
-                    onClick={() => setTypeFilter(type)}>
-                    <span>{type === 'All' ? 'Total spend' : type}</span><strong>{money(total)}</strong>
+                const group = type === 'All' ? data.visits : data.visits.filter((visit) => visit.visitType === type);
+                const total = group.reduce((sum, visit) => sum + visit.total, 0);
+                const share = data.summary.lifetimeTotal ? Math.round(total / data.summary.lifetimeTotal * 100) : 0;
+                return <button type="button" key={type}
+                    className={`variable-expense-card variable-expense-card--clickable service-spend-card${typeFilter === type ? ' selected' : ''}`}
+                    data-visit-type={type} aria-pressed={typeFilter === type} disabled={editor !== null} onClick={() => setTypeFilter(type)}>
+                    <div className="variable-expense-card-header">
+                        <ServiceIcon type={type} />
+                        <div className="variable-expense-card-title">
+                            <h4>{type === 'All' ? 'Total spend' : type}</h4>
+                            <span className="variable-expense-card-amount">{money(total)}</span>
+                        </div>
+                    </div>
+                    <div className="variable-expense-card-meta">
+                        <span><span className="variable-expense-meta-label">Visits</span>{group.length}</span>
+                        <span><span className="variable-expense-meta-label">Average per visit</span>{group.length ? money(total / group.length) : '—'}</span>
+                    </div>
+                    <div className="budget-usage" aria-label={share + '% of total spend'} title="Share of total spend">
+                        <div className="budget-usage-bar"><div className="budget-usage-fill service-share" style={{width: share + '%'}} /></div>
+                        <span className="budget-usage-pct">{share}% of spend</span>
+                    </div>
                 </button>;
             })}
-        </div>}
-        {next && <div className="service-next"><strong>Next service</strong>
-            <span>{dateLabel(next.byDate)} or {km(next.byOdometerKm)}, whichever comes first</span>
-            {next.limitingFactor === 'km' && <span>Estimated {dateLabel(next.predictedDate)}</span>}
         </div>}
         {error && <p role="alert" className="error">{error} <button className="btn-link" onClick={reload}>Retry</button></p>}
         {!data && !error && <p>Loading visits…</p>}
         {data && <>
             {editor === 'new' && <VisitEditor initialType={typeFilter === 'All' ? 'Normal service' : typeFilter} data={data} onClose={() => setEditor(null)} onSaved={saved} />}
-            {data.visits.length > 0 && <input className="service-search" type="search" aria-label="Search visits" placeholder="Search by item, date or mileage" value={query} disabled={editor !== null} onChange={(e) => setQuery(e.target.value)} />}
-            {visits.map((visit) => <Fragment key={visit.id}>
-                <div className="service-record">
-                    <button className="service-row" aria-expanded={expanded === visit.id || editor === visit.id} disabled={editor !== null}
-                        onClick={() => setExpanded(expanded === visit.id ? null : visit.id)}>
-                        <span aria-hidden="true" className="service-chevron">{expanded === visit.id || editor === visit.id ? '▾' : '▸'}</span>
-                        <span className="service-date">
-                            <strong>{dateLabel(visit.date)}</strong>
-                            {visit.visitType === 'Normal service' && visit.odometerKm != null && <small>{km(visit.odometerKm)}</small>}
-                        </span>
-                        <span className="service-preview"><b className="service-type">{visit.visitType}</b>{visit.items.map((item) => item.description).join(' · ') || visit.notes || 'No items recorded'}</span>
-                        <strong className="service-cost">{money(visit.total)}</strong>
-                    </button>
-                    <button type="button" className="btn-link service-edit" aria-label={'Edit visit on ' + dateLabel(visit.date)} disabled={editor !== null || refreshing} onClick={() => setEditor(visit.id)}>Edit</button>
+            <section className="variable-txns" aria-labelledby="service-history-title">
+                <div className="variable-txns-header">
+                    <div><h3 id="service-history-title">{typeFilter === 'All' ? 'All service visits' : typeFilter + ' visits'}</h3>
+                        <p className="variable-expenses-sub">{visits.length} {visits.length === 1 ? 'visit' : 'visits'} · {money(visits.reduce((sum, visit) => sum + visit.total, 0))}</p></div>
+                    {data.visits.length > 0 && <div className="variable-txns-tools"><input type="search" aria-label="Search visits" placeholder="Search item, date or mileage" value={query} disabled={editor !== null} onChange={(e) => setQuery(e.target.value)} /></div>}
                 </div>
-                {editor === visit.id ? <VisitEditor visit={visit} data={data} onClose={() => setEditor(null)} onSaved={saved} />
-                    : expanded === visit.id && <div className="service-detail">
-                        {visit.items.map((item) => <div key={item.id}><span>{item.category}</span><strong>{item.description}</strong><span>{money(item.amount)}</span></div>)}
-                        {!visit.items.length && <p>No items recorded.</p>}
-                        {visit.notes && <p>{visit.notes}</p>}
-                    </div>}
-            </Fragment>)}
-            {!visits.length && editor !== 'new' && <p className="muted">{term || typeFilter !== 'All' ? 'No visits match this filter.' : 'Add your first service visit to start the log.'}</p>}
+                {Array.from(days, ([date, group]) => <div key={date} className="trip-day">
+                    <p className="trip-day-heading">{dayHeading.format(new Date(date + 'T00:00:00Z'))}</p>
+                    <ul className="variable-txn-list">{group.map((visit) => <li key={visit.id}>
+                        <div className="service-record">
+                            <button type="button" className="variable-txn variable-txn--with-icon variable-txn--clickable" aria-expanded={expanded === visit.id || editor === visit.id} disabled={editor !== null}
+                                onClick={() => setExpanded(expanded === visit.id ? null : visit.id)}>
+                                <ServiceIcon type={visit.visitType} small />
+                                <span className="variable-txn-main">
+                                    <span className="variable-txn-title">{visit.items.map((item) => item.description).join(' · ') || visit.notes || visit.visitType}</span>
+                                    <span className="variable-txn-meta">{visit.visitType}{visit.visitType === 'Normal service' && visit.odometerKm != null && ' · ' + km(visit.odometerKm)}</span>
+                                </span>
+                                <span className="variable-txn-amount">{money(visit.total)}</span>
+                            </button>
+                            <button type="button" className="btn-link service-edit" aria-label={'Edit visit on ' + dateLabel(visit.date)} disabled={editor !== null || refreshing} onClick={() => setEditor(visit.id)}>Edit</button>
+                        </div>
+                        {editor === visit.id ? <VisitEditor visit={visit} data={data} onClose={() => setEditor(null)} onSaved={saved} />
+                            : expanded === visit.id && <div className="service-detail">
+                                {visit.items.length > 0 && <table className="data-table trips-expenses-table" aria-label={'Visit items for ' + dateLabel(visit.date)}>
+                                    <thead><tr><th scope="col">Item</th><th scope="col">Category</th><th scope="col" className="trips-col-num">Amount</th></tr></thead>
+                                    <tbody>{visit.items.map((item) => <tr key={item.id}>
+                                        <td>{item.description}</td><td>{item.category}</td><td className="trips-col-num">{money(item.amount)}</td>
+                                    </tr>)}</tbody>
+                                </table>}
+                                {!visit.items.length && <p>No items recorded.</p>}
+                                {visit.notes && <p>{visit.notes}</p>}
+                            </div>}
+                    </li>)}</ul>
+                </div>)}
+                {!visits.length && editor !== 'new' && <p className="muted">{term || typeFilter !== 'All' ? 'No visits match this filter.' : 'Add your first service visit to start the log.'}</p>}
+            </section>
         </>}
     </section>;
 }

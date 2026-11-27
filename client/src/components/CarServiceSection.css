@@ -1,59 +1,27 @@
 .service-log { min-width: 0; container-type: inline-size; }
-.service-top, .service-next, .service-editor-subtotal, .service-controls {
-  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-}
-.service-top, .service-editor-subtotal { justify-content: space-between; }
-.service-top h2 { margin: 0; }
-.service-top p, .service-date small, .service-preview, .service-detail div > :first-child {
-  color: var(--text-muted);
-}
-.service-top p { margin: 3px 0 0; font-size: .85rem; }
-.service-spend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
-.service-spend button {
-  flex: 1 1 100px; padding: 8px 12px; text-align: left; border: 1px solid var(--border);
-  background: var(--surface); color: var(--text); border-radius: 8px; font: inherit; cursor: pointer;
-}
-.service-spend button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
-.service-spend span { display: block; color: var(--text-muted); font-size: .8rem; }
-.service-spend strong { display: block; margin-top: 2px; font-variant-numeric: tabular-nums; }
-.service-spend button:first-child strong { font-size: 1.15rem; }
-.service-type { margin-right: 8px; font-weight: 600; color: var(--text); }
-.service-next {
-  margin-top: 14px; padding: 8px 12px; border-inline-start: 3px solid var(--accent);
-  background: var(--surface-2); font-size: .85rem; gap: 4px 12px;
-}
-.service-log input, .service-editor select {
-  box-sizing: border-box; min-width: 0; max-width: 100%; border: 1px solid var(--border);
-  background: var(--surface); color: var(--text); border-radius: 6px; padding: 7px 9px; font: inherit;
-}
-.service-log .service-search { margin: 14px 0 8px; width: min(100%, 340px); font-size: .86rem; }
-.service-record { display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--border); }
-.service-row {
-  display: grid; grid-template-columns: 12px minmax(105px, .6fr) minmax(0, 2fr) auto;
-  align-items: center; gap: 12px; flex: 1; min-width: 0; padding: 9px 0;
-  text-align: left; font: inherit; background: transparent; border: 0; color: inherit; cursor: pointer;
-}
-.service-row:hover:enabled { background: var(--surface-hover); }
-.service-chevron, .service-edit { color: var(--accent-text); }
-.service-date small { display: block; font-size: .78rem; }
-.service-preview { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .86rem; }
-.service-cost, .service-detail div > :last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.service-log .variable-expenses-stats { align-items: center; }
+.service-log .variable-expense-list { grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr)); }
+.service-log .service-spend-card { --spend-color: var(--series-teal); border-inline-start: 3px solid var(--spend-color); }
+.service-spend-card[data-visit-type="Normal service"] { --spend-color: var(--series-blue); }
+.service-spend-card[data-visit-type="Accessory repair"] { --spend-color: var(--series-amber); }
+.service-share { background: var(--spend-color); }
+.service-spend-card .variable-expense-card-meta { grid-template-columns: auto auto; }
+.service-record { display: flex; align-items: center; border-bottom: 1px solid var(--border); }
+.service-record .variable-txn { min-width: 0; flex: 1; border-bottom: 0; }
 .service-edit { padding: 8px; }
-.service-detail, .service-editor {
-  margin: 0 0 10px; background: var(--surface-2); border-radius: 8px; padding: 10px 14px;
-}
-.service-detail div { display: grid; grid-template-columns: 80px 1fr auto; gap: 10px; align-items: baseline; padding: 4px 0; font-size: .86rem; }
-.service-detail strong, .service-detail p { overflow-wrap: anywhere; }
+.service-detail { padding-inline-start: 24px; }
+.service-detail table { table-layout: auto; }
+.service-detail td:first-child, .service-detail p { overflow-wrap: anywhere; }
 .service-detail p { margin: 6px 0; white-space: pre-wrap; }
-.service-editor { margin-top: 10px; }
+.service-editor-subtotal { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 .service-editor fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .service-editor legend { font-weight: 700; padding: 0 0 8px; }
 .service-fields, .service-line { display: grid; gap: 8px; align-items: end; }
 .service-fields { grid-template-columns: 1.2fr 1fr 1fr 1.5fr; }
 .service-line { grid-template-columns: minmax(94px, 1fr) minmax(120px, 2.5fr) minmax(85px, .9fr) auto; margin-bottom: 8px; }
 .service-line button { align-self: end; min-height: 34px; }
-.service-editor label { display: grid; gap: 3px; min-width: 0; font-size: .8rem; color: var(--text-muted); }
-.service-editor input, .service-editor select { width: 100%; font-size: .9rem; }
+.service-editor label { min-width: 0; }
+.service-editor input, .service-editor select { width: 100%; min-width: 0; box-sizing: border-box; }
 .service-editor h4 { margin: 14px 0 6px; }
 .service-controls { justify-content: flex-end; border-top: 1px solid var(--border); margin-top: 10px; padding-top: 10px; }
 .service-controls .btn-danger-link { margin-right: auto; }
@@ -61,10 +29,7 @@
   .service-fields, .service-line { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .service-line { border-top: 1px solid var(--border); padding-top: 6px; }
   .service-line button { justify-self: end; }
-  .service-row { grid-template-columns: 8px 1fr auto; gap: 2px 8px; }
-  .service-preview { grid-column: 2 / -1; grid-row: 2; }
-  .service-cost { grid-column: 3; grid-row: 1; }
-  .service-record { gap: 5px; }
-  .service-detail div { grid-template-columns: 1fr auto; gap: 0 8px; }
-  .service-detail div > :first-child { grid-column: 1 / -1; font-size: .75rem; }
+  .service-record .variable-txn-main { flex-direction: column; align-items: stretch; gap: 2px; }
+  .service-detail { padding-inline-start: 0; }
+  .service-detail th, .service-detail td { padding-inline: 6px; }
 }

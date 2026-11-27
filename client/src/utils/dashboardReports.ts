@@ -1,5 +1,5 @@
 import { categoryExpenseChart, fixedExpensePie } from './expenseReportCharts';
-import type { ExpenseOverviewResponse, ExpenseTransaction, IncomeTransaction, MonthlyCashflowPoint, TripSummary } from '../api';
+import type { CarServiceVisit, CarVisitType, ExpenseOverviewResponse, ExpenseTransaction, IncomeTransaction, MonthlyCashflowPoint, TripSummary } from '../api';
 import type { HealthData, HealthStats } from '../hooks/useHealthData';
 import { transferFeesToExpenseEntries } from './bankCharges';
 import { bars, cards, comboChart, columnChart, comparisonBars, escapeHtml, note, table, type Report } from './pdfReport';
@@ -62,6 +62,26 @@ export function cashflowReport(year: string, series: MonthlyCashflowPoint[], mon
         bars('Savings rate by month', rows.filter(p=>p.income>0).map(p=>[p.month,(p.income-p.spending)/p.income*100]), n=>`${n.toFixed(1)}%`) +
         note('Savings rate = (income - spending) / income. Months with no income are omitted from this chart. Negative rates indicate spending above income.') +
         table('Monthly details', ['Month', 'Income', 'Spending', 'Net'], rows.map((p) => [p.month, money(p.income), money(p.spending), money(p.net)])) };
+}
+
+export function carServiceReport(visits: CarServiceVisit[], filter: CarVisitType | 'All', query: string, money: Money): Report {
+    const totalFor = (type: CarVisitType) => sum(visits.filter((visit) => visit.visitType === type), (visit) => visit.total);
+    const details = visits.map((visit) => {
+        const heading = [visit.date, visit.visitType, money(visit.total)].join(' · ');
+        const mileage = visit.visitType === 'Normal service' && visit.odometerKm != null
+            ? visit.odometerKm.toLocaleString('en-MY') + ' km' : '';
+        const metadata = [mileage, visit.notes].filter(Boolean).join(' · ');
+        const rows = visit.items.map((item) => [item.description, item.category, money(item.amount)]);
+        return (rows.length ? table(heading, ['Description', 'Category', 'Amount'], rows)
+            : '<h2>' + escapeHtml(heading) + '</h2>' + note('No items recorded.')) + (metadata ? note(metadata) : '');
+    });
+    return {
+        title: 'Car service report',
+        subtitle: [filter === 'All' ? 'All service visits' : filter, query.trim()].filter(Boolean).join(' · '),
+        body: cards([['Total spend', money(sum(visits, (visit) => visit.total))],
+            ['Normal service', money(totalFor('Normal service'))], ['Accessory repair', money(totalFor('Accessory repair'))],
+            ['Visits', visits.length]]) + details.join(''),
+    };
 }
 
 export function tripReport(s: TripSummary, money: Money): Report {
