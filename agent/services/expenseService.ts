@@ -705,6 +705,7 @@ export async function getFixedExpensesDueOn(dateStr: string): Promise<DueFixedEx
             instrumentId: row.instrumentId ?? null,
         };
         const loan = loanFieldsFromRow(row);
+        if (loan.remainingPrincipal === 0) return [];
         if (!loan.loanMethod) {
             return [{ ...base, amount: parseFloat(row.amount), loan: null }];
         }

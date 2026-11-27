@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, ne, or, sql } from 'drizzle-orm';
 import { requireDb } from '../db/client';
 import { fixedExpenses, loanPayments } from '../db/schema';
 
@@ -182,7 +182,7 @@ export function loanFieldsFromRow(row: {
         return {
             loanMethod: null,
             originalPrincipal: null,
-            remainingPrincipal: null,
+            remainingPrincipal: row.remainingPrincipal != null && Number(row.remainingPrincipal) === 0 ? 0 : null,
             annualRatePct: null,
             tenureMonths: null,
             loanStartDate: null,
@@ -196,6 +196,21 @@ export function loanFieldsFromRow(row: {
         tenureMonths: row.tenureMonths ?? null,
         loanStartDate: row.loanStartDate ?? null,
     };
+}
+
+export async function completeLoan(id: number): Promise<boolean> {
+    const result = await requireDb()
+        .update(fixedExpenses)
+        .set({ remainingPrincipal: '0' })
+        .where(and(
+            eq(fixedExpenses.id, id),
+            eq(fixedExpenses.active, true),
+            or(
+                sql`lower(trim(${fixedExpenses.category})) = 'loan'`,
+                inArray(fixedExpenses.loanMethod, ['reducing', 'flat', 'included'])
+            )
+        ));
+    return (result.count ?? 0) > 0;
 }
 
 export async function getPaidLoanIdsOnDate(
@@ -273,7 +288,10 @@ export async function applyLoanPayment(fields: {
     await db
         .update(fixedExpenses)
         .set({ remainingPrincipal: String(split.remainingAfter) })
-        .where(eq(fixedExpenses.id, fields.fixedExpenseId));
+        .where(and(
+            eq(fixedExpenses.id, fields.fixedExpenseId),
+            ne(fixedExpenses.remainingPrincipal, '0')
+        ));
 
     return { ...split, skipped: false };
 }

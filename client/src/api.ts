@@ -739,6 +739,12 @@ export function logLoanPayment(id: number, date: string) {
     });
 }
 
+export function completeLoan(id: number) {
+    return fetchJson<{ ok: true }>(`/api/expenses/fixed/${id}/complete-loan`, {
+        method: 'POST',
+    });
+}
+
 let dueContributionsPromise: Promise<{ ok: true; applied: number; skipped: number }> | null = null;
 
 export function applyDueFixedContributions() {

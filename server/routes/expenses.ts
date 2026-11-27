@@ -51,6 +51,7 @@ import {
     unknownAccountError,
 } from '../validation';
 import {
+    completeLoan,
     parseLoanMethod,
     type FixedExpenseLoanFields,
 } from '../../agent/services/loanService';
@@ -1288,6 +1289,18 @@ router.post('/fixed/:id/loan-payment', async (req, res) => {
         res.json({ ok: true, ...logged });
     } catch (err) {
         console.error('POST /api/expenses/fixed/:id/loan-payment', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
+    }
+});
+
+router.post('/fixed/:id/complete-loan', async (req, res) => {
+    try {
+        const id = parseIdParam(req.params.id);
+        if (!id) return res.status(400).json({ error: 'Invalid id' });
+        if (!(await completeLoan(id))) return res.status(404).json({ error: 'Loan not found' });
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('POST /api/expenses/fixed/:id/complete-loan', err);
         res.status(500).json({ error: err instanceof Error ? err.message : 'Server error' });
     }
 });

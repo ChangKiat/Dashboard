@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 
 import type { FixedExpenseConfig, LoanMethod } from '../api';
-import { createFixedExpense, deleteFixedExpense, logLoanPayment, updateFixedExpense } from '../api';
+import { completeLoan, createFixedExpense, deleteFixedExpense, logLoanPayment, updateFixedExpense } from '../api';
 import { todayInKL } from '../utils/dateRange';
 import {
     computeInstallmentSplit,
@@ -9,6 +9,7 @@ import {
     suggestedInstallmentAmount,
 } from '../utils/loanInstallment';
 import { dueDatesBetween } from '../utils/recurring';
+import ConfirmDialog from './ConfirmDialog';
 import PaymentMethodSelect from './PaymentMethodSelect';
 import RecordModal from './RecordModal';
 import RowActions from './RowActions';
@@ -74,6 +75,7 @@ interface Props {
 
 export default function LoansPanel({ rows, formatAmount, mode = 'manage', onChanged }: Props) {
     const isView = mode === 'view';
+    const [tab, setTab] = useState<'Active' | 'History'>('Active');
     const [modalMode, setModalMode] = useState<ModalMode>('closed');
     const [editingEntry, setEditingEntry] = useState<FixedExpenseConfig | null>(null);
     const [form, setForm] = useState(EMPTY_FORM);
@@ -85,13 +87,16 @@ export default function LoansPanel({ rows, formatAmount, mode = 'manage', onChan
     const [paySaving, setPaySaving] = useState(false);
     const [payError, setPayError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
+    const [completingEntry, setCompletingEntry] = useState<FixedExpenseConfig | null>(null);
+    const [completingId, setCompletingId] = useState<number | null>(null);
 
-    const sortedRows = useMemo(
+    const visibleRows = useMemo(
         () =>
-            [...rows].sort((a, b) =>
-                a.description.localeCompare(b.description, 'en-MY', { sensitivity: 'base' })
-            ),
-        [rows]
+            rows.filter((row) => (row.remainingPrincipal === 0) === (tab === 'History'))
+                .sort((a, b) =>
+                    a.description.localeCompare(b.description, 'en-MY', { sensitivity: 'base' })
+                ),
+        [rows, tab]
     );
 
     const loanMethod = parseLoanMethod(form.loanMethod);
@@ -269,14 +274,37 @@ export default function LoansPanel({ rows, formatAmount, mode = 'manage', onChan
             const logged = result.linked
                 ? `Used the expense you already logged for ${formatDay(payDate)}`
                 : `Logged ${formatAmount(p?.installment ?? payingEntry.amount)} for ${formatDay(payDate)}`;
-            const left = p ? `: ${formatAmount(p.remainingAfter)} left on ${payingEntry.description}.` : '.';
-            setNotice([`${logged}${left}`, ...result.warnings].join(' ⚠️ '));
+            let message = `${logged}.`;
+            if (p?.remainingAfter === 0) {
+                message += ` ${payingEntry.description} is paid off and now appears in History.`;
+            } else if (p) {
+                message += ` ${formatAmount(p.remainingAfter)} left on ${payingEntry.description}.`;
+            }
+            setNotice([message, ...result.warnings].join(' ⚠️ '));
             setPayingEntry(null);
             onChanged?.();
         } catch (err) {
             setPayError(err instanceof Error ? err.message : 'Failed to log payment');
         } finally {
             setPaySaving(false);
+        }
+    };
+
+    const handleComplete = async () => {
+        if (!completingEntry || completingId != null) return;
+        const { id, description } = completingEntry;
+        setCompletingEntry(null);
+        setCompletingId(id);
+        setActionError(null);
+        setNotice(null);
+        try {
+            await completeLoan(id);
+            setNotice(`${description} was marked complete and moved to History.`);
+            onChanged?.();
+        } catch (err) {
+            setActionError(err instanceof Error ? err.message : 'Failed to complete loan');
+        } finally {
+            setCompletingId(null);
         }
     };
 
@@ -297,18 +325,33 @@ export default function LoansPanel({ rows, formatAmount, mode = 'manage', onChan
             ) : (
                 <div className="section-header-row">
                     <h3>Loan interest</h3>
-                    <button type="button" className="btn-add" onClick={openCreate}>
-                        + Add
-                    </button>
+                    {tab === 'Active' && (
+                        <button type="button" className="btn-add" onClick={openCreate}>
+                            + Add
+                        </button>
+                    )}
                 </div>
             )}
+            <div className="pill-group" role="group" aria-label="Loan status">
+                {(['Active', 'History'] as const).map((status) => (
+                    <button
+                        key={status}
+                        type="button"
+                        className={tab === status ? 'pill-group-btn active' : 'pill-group-btn'}
+                        aria-pressed={tab === status}
+                        onClick={() => setTab(status)}
+                    >
+                        {status}
+                    </button>
+                ))}
+            </div>
             {actionError && <p className="error">{actionError}</p>}
-            {notice && <p className="muted">{notice}</p>}
-            {sortedRows.length === 0 ? (
-                <p className="muted">No loans yet.</p>
+            {notice && <p className="muted" role="status">{notice}</p>}
+            {visibleRows.length === 0 ? (
+                <p className="muted">{tab === 'History' ? 'No completed loans yet.' : 'No active loans.'}</p>
             ) : (
                 <ul className="payment-accounts-list">
-                    {sortedRows.map((row) => {
+                    {visibleRows.map((row) => {
                         const remaining = row.remainingPrincipal ?? 0;
                         const split = nextSplit(row);
                         return (
@@ -368,12 +411,32 @@ export default function LoansPanel({ rows, formatAmount, mode = 'manage', onChan
                                                 Log payment
                                             </button>
                                         )}
+                                        {tab === 'Active' && (
+                                            <button
+                                                type="button"
+                                                className="btn-link"
+                                                disabled={completingId != null}
+                                                onClick={() => setCompletingEntry(row)}
+                                            >
+                                                {completingId === row.id ? 'Completing…' : 'Complete'}
+                                            </button>
+                                        )}
                                     </RowActions>
                                 )}
                             </li>
                         );
                     })}
                 </ul>
+            )}
+            {completingEntry && (
+                <ConfirmDialog
+                    open
+                    title="Complete this loan?"
+                    message={`Mark “${completingEntry.description}” paid off. The remaining principal will be set to zero and the loan will move to History.`}
+                    confirmLabel="Complete"
+                    onConfirm={handleComplete}
+                    onCancel={() => setCompletingEntry(null)}
+                />
             )}
             {!isView && (
             <RecordModal
