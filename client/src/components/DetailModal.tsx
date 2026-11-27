@@ -23,8 +23,8 @@ export default function DetailModal({ title, open, onClose, className, children 
     const modalClass = ['record-modal', 'detail-modal', className].filter(Boolean).join(' ');
 
     return (
-        <div className="record-modal-backdrop" onClick={onClose}>
-            <div className={modalClass} onClick={(e) => e.stopPropagation()}>
+        <div className="record-modal-backdrop" onClick={(e) => e.stopPropagation()}>
+            <div className={modalClass}>
                 <div className="detail-modal-header">
                     <h4>{title}</h4>
                     <button type="button" className="detail-modal-close" onClick={onClose} aria-label="Close">

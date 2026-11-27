@@ -329,8 +329,8 @@ export default function AccountActivityModal({
     const available = accountData?.available ?? (accountData?.balance ?? 0) - fdLocked;
 
     return (
-        <div className="record-modal-backdrop" onClick={onClose}>
-            <div className="record-modal account-activity-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="record-modal-backdrop" onClick={(e) => e.stopPropagation()}>
+            <div className="record-modal account-activity-modal">
                 <div className="account-activity-header">
                     <div className="account-activity-header-top">
                         <h4 className="account-activity-title">

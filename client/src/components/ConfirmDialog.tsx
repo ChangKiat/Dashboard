@@ -34,13 +34,12 @@ export default function ConfirmDialog({
     if (!open) return null;
 
     return (
-        <div className="record-modal-backdrop" onClick={onCancel}>
+        <div className="record-modal-backdrop" onClick={(e) => e.stopPropagation()}>
             <div
                 className="record-modal confirm-dialog"
                 role="alertdialog"
                 aria-labelledby="confirm-dialog-title"
                 aria-describedby="confirm-dialog-message"
-                onClick={(e) => e.stopPropagation()}
             >
                 <h4 id="confirm-dialog-title">{title}</h4>
                 <p id="confirm-dialog-message" className="confirm-dialog-message">

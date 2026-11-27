@@ -583,10 +583,9 @@ export default function PortfolioModal({
 
     return (
         <>
-            <div className="record-modal-backdrop" onClick={onClose}>
+            <div className="record-modal-backdrop" onClick={(e) => e.stopPropagation()}>
                 <div
                     className="record-modal account-activity-modal portfolio-modal"
-                    onClick={(e) => e.stopPropagation()}
                 >
                     <div className="account-activity-header">
                         <div className="account-activity-header-top">

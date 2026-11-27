@@ -447,7 +447,6 @@ export default function LoansPanel({ rows, formatAmount, mode = 'manage', onChan
                 onClose={closeModal}
                 onSave={handleSave}
                 className="loan-form-modal"
-                closeOnBackdrop={false}
             >
                 <div className="loan-form-grid">
                     <div className="form-field span-full">
