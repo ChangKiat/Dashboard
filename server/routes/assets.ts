@@ -13,6 +13,7 @@ const columns = {
     id: assets.id,
     name: assets.name,
     category: assets.category,
+    status: assets.status,
     purchaseDate: assets.purchaseDate,
     purchaseValue: assets.purchaseValue,
     currentValue: assets.currentValue,
@@ -23,16 +24,20 @@ const columns = {
 const isValue = (value: unknown): value is number => isNonNegativeNumber(value) && value <= MAX_VALUE;
 
 /** The columns to write, or an error message. */
-function parseFields(body: Record<string, unknown>) {
-    const { name, category, purchaseDate, purchaseValue, currentValue, notes } = body;
+function parseFields(body: Record<string, unknown>): Omit<typeof assets.$inferInsert, 'id' | 'image' | 'imageMime' | 'imageVersion' | 'createdAt'> | string {
+    const { name, category, status, purchaseDate, purchaseValue, currentValue, notes } = body;
     if (!isNonEmptyString(name)) return 'Enter a name';
     if (!isNonEmptyString(category)) return 'Choose a category';
+    if (status !== undefined && status !== 'active' && status !== 'sold' && status !== 'broken') {
+        return 'Invalid asset status';
+    }
     if (!isValidDate(purchaseDate)) return 'Invalid purchase date';
     if (!isValue(purchaseValue)) return 'Invalid purchase value';
     if (currentValue != null && !isValue(currentValue)) return 'Invalid current value';
     return {
         name: name.trim().slice(0, 200),
         category: category.trim().slice(0, 60),
+        status,
         purchaseDate,
         purchaseValue: purchaseValue.toFixed(2),
         currentValue: isValue(currentValue) ? currentValue.toFixed(2) : null,

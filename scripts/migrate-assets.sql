@@ -13,3 +13,6 @@ CREATE TABLE IF NOT EXISTS assets (
     image_version integer NOT NULL DEFAULT 0,
     created_at timestamp DEFAULT now() NOT NULL
 );
+
+ALTER TABLE assets ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active', 'sold', 'broken'));

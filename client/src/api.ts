@@ -1700,10 +1700,13 @@ export function saveSchedulerSettings(jobs: SchedulerJob[]) {
     });
 }
 
+export type AssetStatus = 'active' | 'sold' | 'broken';
+
 export interface Asset {
     id: number;
     name: string;
     category: string;
+    status: AssetStatus;
     purchaseDate: string;
     purchaseValue: number;
     currentValue: number | null;

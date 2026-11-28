@@ -1,4 +1,5 @@
 .assets-filter { flex-wrap: wrap; }
+.asset-views { width: fit-content; margin-bottom: 12px; }
 
 .asset-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
 .asset-grid li { display: flex; min-width: 0; }

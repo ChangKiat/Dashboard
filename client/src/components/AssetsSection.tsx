@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { assetImageUrl, deleteAsset, fetchAssets, saveAsset, uploadAssetImage } from '../api';
-import type { Asset, AssetFields } from '../api';
+import type { Asset, AssetFields, AssetStatus } from '../api';
 import { useFormatMYR } from '../hooks/useAmountVisibility';
 import { useRefreshSignal } from '../hooks/useRefreshSignal';
 import AssetPhotoPicker from './AssetPhotoPicker';
@@ -13,6 +13,7 @@ import SummaryCard from './SummaryCard';
 import './AssetsSection.css';
 
 const CATEGORIES = ['Computer', 'Accessory', 'Phone & tablet', 'Car', 'Appliance', 'Furniture', 'Other'];
+const STATUS_LABELS: Record<AssetStatus, string> = { active: 'Active', sold: 'Sold', broken: 'Broken' };
 
 const dateFormatter = new Intl.DateTimeFormat('en-MY', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 const dateLabel = (iso: string) => dateFormatter.format(new Date(iso + 'T00:00:00Z'));
@@ -33,10 +34,11 @@ function AssetModal({ asset, initialCategory, onClose, onSaved }: {
     asset?: Asset;
     initialCategory: string;
     onClose: () => void;
-    onSaved: () => void;
+    onSaved: (status?: AssetStatus) => void;
 }) {
     const [name, setName] = useState(asset?.name ?? '');
     const [category, setCategory] = useState(asset?.category ?? initialCategory);
+    const [status, setStatus] = useState<AssetStatus>(asset?.status ?? 'active');
     const [purchaseDate, setPurchaseDate] = useState(asset?.purchaseDate ?? today());
     const [purchaseValue, setPurchaseValue] = useState(asset?.purchaseValue.toString() ?? '');
     const [currentValue, setCurrentValue] = useState(asset?.currentValue?.toString() ?? '');
@@ -47,6 +49,7 @@ function AssetModal({ asset, initialCategory, onClose, onSaved }: {
     const [confirmDelete, setConfirmDelete] = useState(false);
     /** Set once a new asset exists, so saving again after a failed picture upload does not add it twice. */
     const savedId = useRef<number | null>(asset?.id ?? null);
+    const savedStatus = useRef<AssetStatus | undefined>(undefined);
 
     async function save() {
         if (busy) return;
@@ -60,13 +63,14 @@ function AssetModal({ asset, initialCategory, onClose, onSaved }: {
         setBusy(true);
         setError(null);
         const fields: AssetFields = {
-            name: name.trim(), category, purchaseDate, purchaseValue: bought,
+            name: name.trim(), category, status, purchaseDate, purchaseValue: bought,
             currentValue: worth, notes: notes.trim() || null,
         };
         try {
             savedId.current = (await saveAsset(savedId.current, fields)).id;
+            savedStatus.current = status;
             if (picture.image) await uploadAssetImage(savedId.current, picture.image);
-            onSaved();
+            onSaved(status);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Could not save the asset.');
         } finally {
@@ -97,7 +101,7 @@ function AssetModal({ asset, initialCategory, onClose, onSaved }: {
     return <>
         <RecordModal className="asset-modal" title={asset ? 'Edit asset' : 'Add asset'} open saving={busy}
             error={error} onSave={() => void save()}
-            onClose={() => (savedId.current != null && !asset ? onSaved() : onClose())}>
+            onClose={() => (savedStatus.current ? onSaved(savedStatus.current) : onClose())}>
             <form className="asset-form" onSubmit={submit} noValidate>
                 <AssetPhotoPicker disabled={busy} onChange={setPicture}
                     currentImageUrl={asset?.imageVersion ? assetImageUrl(asset) : null} />
@@ -117,6 +121,10 @@ function AssetModal({ asset, initialCategory, onClose, onSaved }: {
                     <label className="form-field"><span>Current value (RM, optional)</span>
                         <input type="number" inputMode="decimal" min="0" step="0.01" value={currentValue} disabled={busy}
                             onChange={(e) => setCurrentValue(e.target.value)} /></label>
+                    <label className="form-field"><span>Status</span>
+                        <select value={status} disabled={busy} onChange={(e) => setStatus(e.target.value as AssetStatus)}>
+                            {Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                        </select></label>
                     <label className="form-field asset-field-wide"><span>Notes (optional)</span>
                         <textarea maxLength={2000} placeholder="Model, serial number, warranty…" value={notes} disabled={busy}
                             onChange={(e) => setNotes(e.target.value)} /></label>
@@ -138,6 +146,7 @@ export default function AssetsSection() {
     const [data, setData] = useState<Asset[] | null>(null);
     const [error, setError] = useState('');
     const [filter, setFilter] = useState('All');
+    const [showHistory, setShowHistory] = useState(false);
     const [editor, setEditor] = useState<number | 'new' | null>(null);
     const request = useRef(0);
     const reload = useCallback(async () => {
@@ -152,17 +161,19 @@ export default function AssetsSection() {
     useEffect(() => { void reload(); return () => { request.current++; }; }, [reload]);
     useRefreshSignal(reload);
 
-    function saved() {
+    function saved(status?: AssetStatus) {
         setEditor(null);
         setFilter('All');
+        if (status) setShowHistory(status !== 'active');
         void reload();
     }
 
     const all = data ?? [];
-    const used = CATEGORIES.filter((category) => all.some((asset) => asset.category === category));
+    const assetsInView = all.filter((asset) => (asset.status !== 'active') === showHistory);
+    const used = CATEGORIES.filter((category) => assetsInView.some((asset) => asset.category === category));
     const active = used.includes(filter) ? filter : 'All';
     // Newest purchase first.
-    const shown = all.filter((asset) => active === 'All' || asset.category === active).reverse();
+    const shown = assetsInView.filter((asset) => active === 'All' || asset.category === active).reverse();
     const paid = shown.reduce((sum, asset) => sum + asset.purchaseValue, 0);
     const worth = shown.reduce((sum, asset) => sum + (asset.currentValue ?? asset.purchaseValue), 0);
     const unvalued = shown.filter((asset) => asset.currentValue == null).length;
@@ -170,6 +181,14 @@ export default function AssetsSection() {
     const addButton = <button type="button" className="btn-primary" disabled={!data} onClick={() => setEditor('new')}>+ Add asset</button>;
 
     return <section className="panel assets-page">
+        <div className="pill-group asset-views" role="group" aria-label="Asset view">
+            {[false, true].map((history) => <button key={String(history)} type="button"
+                aria-pressed={showHistory === history}
+                className={showHistory === history ? 'pill-group-btn active' : 'pill-group-btn'}
+                onClick={() => { setShowHistory(history); setFilter('All'); }}>
+                {history ? 'History' : 'Active'}
+            </button>)}
+        </div>
         <div className="page-toolbar">
             <div className="page-toolbar-group">
                 {used.length > 0 && <div className="pill-group assets-filter" role="group" aria-label="Category">
@@ -183,13 +202,13 @@ export default function AssetsSection() {
         {error && <p role="alert" className="error">{error} <button type="button" className="btn-link" onClick={reload}>Retry</button></p>}
         {!data && !error && <p className="muted">Loading assets…</p>}
         {data && <div className="expenses-layout">
-            <div className="budgets-summary-grid">
+            {!showHistory && <div className="budgets-summary-grid">
                 <SummaryCard tone="net" icon={<BoxIcon size={26} />} label={active === 'All' ? 'Items owned' : active}
                     value={count(shown.length)} />
                 <SummaryCard tone="spend" icon={<WalletIcon size={26} />} label="Total paid" value={money(paid)} />
                 <SummaryCard tone="income" icon={<TrendUpIcon size={26} />} label="Worth now" value={money(worth)}
                     sub={unvalued ? `${count(unvalued)} without a current value, counted at the price paid` : undefined} />
-            </div>
+            </div>}
             {shown.length > 0
                 ? <ul className="asset-grid">{shown.map((asset) => <li key={asset.id}>
                     <button type="button" className="asset-card" onClick={() => setEditor(asset.id)}>
@@ -199,15 +218,16 @@ export default function AssetsSection() {
                                 : <BoxIcon size={48} />}
                         </span>
                         <span className="asset-card-name">{asset.name}</span>
-                        <span className="asset-card-meta">{asset.category} · {dateLabel(asset.purchaseDate)} · {ownedFor(asset.purchaseDate)}</span>
+                        <span className="asset-card-meta">{asset.category} · {dateLabel(asset.purchaseDate)}{!showHistory && ` · ${ownedFor(asset.purchaseDate)}`}</span>
+                        {showHistory && <span className="asset-card-meta">{STATUS_LABELS[asset.status]}</span>}
                         <span className="asset-card-value">{money(asset.purchaseValue)}</span>
-                        {asset.currentValue != null && <span className="asset-card-meta">Worth now {money(asset.currentValue)}</span>}
+                        {!showHistory && asset.currentValue != null && <span className="asset-card-meta">Worth now {money(asset.currentValue)}</span>}
                     </button>
                 </li>)}</ul>
                 : <div className="card asset-empty">
                     <span className="category-icon category-icon--blue" aria-hidden="true"><BoxIcon size={18} /></span>
-                    <p className="muted">Add your first item, such as a laptop, mouse or car.</p>
-                    {addButton}
+                    <p className="muted">{showHistory ? 'Sold and broken assets appear here.' : 'No active assets.'}</p>
+                    {!showHistory && addButton}
                 </div>}
         </div>}
         {data && (editor === 'new' || editing) && <AssetModal key={editor} asset={editing}

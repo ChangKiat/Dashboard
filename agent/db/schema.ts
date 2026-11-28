@@ -314,6 +314,7 @@ export const assets = pgTable('assets', {
     id: serial('id').primaryKey(),
     name: text('name').notNull(),
     category: text('category').notNull(),
+    status: text('status', { enum: ['active', 'sold', 'broken'] }).notNull().default('active'),
     purchaseDate: text('purchase_date').notNull(),
     purchaseValue: numeric('purchase_value', { precision: 12, scale: 2 }).notNull(),
     currentValue: numeric('current_value', { precision: 12, scale: 2 }),
