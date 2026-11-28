@@ -308,3 +308,19 @@ export const taxReliefDocuments = pgTable('tax_relief_documents', {
     fileName: text('file_name').notNull(),
     data: bytea('data').notNull(),
 });
+
+/** Personal belongings. The picture is a cut-out sticker with a transparent background. */
+export const assets = pgTable('assets', {
+    id: serial('id').primaryKey(),
+    name: text('name').notNull(),
+    category: text('category').notNull(),
+    purchaseDate: text('purchase_date').notNull(),
+    purchaseValue: numeric('purchase_value', { precision: 12, scale: 2 }).notNull(),
+    currentValue: numeric('current_value', { precision: 12, scale: 2 }),
+    notes: text('notes'),
+    image: bytea('image'),
+    imageMime: text('image_mime'),
+    /** Goes up with every new picture so the page fetches it again; 0 means no picture. */
+    imageVersion: integer('image_version').notNull().default(0),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+});

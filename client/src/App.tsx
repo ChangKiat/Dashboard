@@ -2,6 +2,7 @@ import SchedulerSection from './components/SchedulerSection';
 import { useCallback, useEffect, useState } from 'react';
 import { fetchHealth, getAuthMe, logoutAuth } from './api';
 import AppHeader from './components/AppHeader';
+import AssetsSection from './components/AssetsSection';
 import BudgetsSection from './components/BudgetsSection';
 import CalendarSection from './components/CalendarSection';
 import CashflowSection from './components/CashflowSection';
@@ -107,6 +108,7 @@ export default function App() {
                                 {activeTab === 'workouts' && <WorkoutsSection />}
                                 {activeTab === 'meals' && <MealsSection />}
                                 {activeTab === 'car' && <CarServiceSection />}
+                                {activeTab === 'assets' && <AssetsSection />}
                                 {activeTab === 'tax' && <TaxReliefSection />}
                                 {activeTab === 'budgets' && <BudgetsSection />}
                                 {activeTab === 'recurring' && <SetupSection view="recurring" />}

@@ -224,6 +224,15 @@ export function ActivityIcon(props: IconProps) {
     );
 }
 
+export function BoxIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="M21 8 12 3 3 8v8l9 5 9-5z" />
+            <path d="M3 8l9 5 9-5M12 13v8" />
+        </Icon>
+    );
+}
+
 export function CarIcon(props: IconProps) {
     return (
         <Icon {...props}>

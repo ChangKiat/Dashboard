@@ -9,6 +9,7 @@ export type TabId =
     | 'workouts'
     | 'meals'
     | 'car'
+    | 'assets'
     | 'tax'
     | 'budgets'
     | 'recurring'
@@ -23,7 +24,7 @@ const STORAGE_KEY = 'dashboard-active-tab';
 
 /** Sidebar groups, top to bottom. A null label means no heading. */
 export const TAB_GROUPS: { label: string | null; tabs: TabId[] }[] = [
-    { label: null, tabs: ['cashflow', 'calendar', 'variable', 'car', 'tax'] },
+    { label: null, tabs: ['cashflow', 'calendar', 'variable', 'car', 'assets', 'tax'] },
     { label: 'Health', tabs: ['health', 'healthCalendar', 'workouts', 'meals'] },
     { label: 'Planning', tabs: ['budgets', 'recurring', 'loans', 'interest', 'mealGoals'] },
     { label: 'Organize', tabs: ['accounts', 'trips', 'scheduler'] },
@@ -58,6 +59,7 @@ export const TAB_LABELS: Record<TabId, string> = {
     workouts: 'Workouts',
     meals: 'Meals',
     car: 'Car',
+    assets: 'Assets',
     tax: 'Tax Relief',
     budgets: 'Budgets',
     recurring: 'Recurring',
@@ -78,6 +80,7 @@ export const TAB_SUBTITLES: Record<TabId, string> = {
     workouts: 'Sessions, lifts and personal records',
     meals: 'Calories and protein against your targets',
     car: 'Service visits and maintenance costs',
+    assets: 'What you own, when you bought it and what it’s worth',
     tax: 'Claims toward this year’s tax relief',
     budgets: 'A monthly limit for each spending category',
     recurring: 'Bills and subscriptions that repeat',

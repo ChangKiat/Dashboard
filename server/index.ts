@@ -22,6 +22,7 @@ import investmentsRouter from './routes/investments';
 import interestSchedulesRouter from './routes/interestSchedules';
 import carServiceRouter from './routes/carService';
 import taxReliefRouter from './routes/taxRelief';
+import assetsRouter from './routes/assets';
 import schedulerRouter from './routes/scheduler';
 import { isSchedulerEnabled, startScheduler } from './dailyJobs';
 
@@ -60,6 +61,7 @@ app.use('/api/sync-status', requireAuth, syncRouter);
 app.use('/api/trips', requireAuth, tripsRouter);
 app.use('/api/car-service', requireAuth, carServiceRouter);
 app.use('/api/tax-relief', requireAuth, taxReliefRouter);
+app.use('/api/assets', requireAuth, assetsRouter);
 // Bearer SCHEDULER_SECRET instead of the session cookie: called by a cron service, not the browser.
 app.use('/api/scheduler', schedulerRouter);
 

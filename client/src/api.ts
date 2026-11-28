@@ -1699,3 +1699,45 @@ export function saveSchedulerSettings(jobs: SchedulerJob[]) {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jobs }),
     });
 }
+
+export interface Asset {
+    id: number;
+    name: string;
+    category: string;
+    purchaseDate: string;
+    purchaseValue: number;
+    currentValue: number | null;
+    notes: string | null;
+    /** 0 when there is no picture. */
+    imageVersion: number;
+}
+
+export type AssetFields = Omit<Asset, 'id' | 'imageVersion'>;
+
+export function fetchAssets() {
+    return fetchJson<Asset[]>('/api/assets');
+}
+
+/** A null id adds a new asset. */
+export function saveAsset(id: number | null, fields: AssetFields) {
+    return fetchJson<{ id: number }>(id == null ? '/api/assets' : `/api/assets/${id}`, {
+        method: id == null ? 'POST' : 'PUT',
+        body: JSON.stringify(fields),
+    });
+}
+
+export function deleteAsset(id: number) {
+    return fetchJson<{ ok: true }>(`/api/assets/${id}`, { method: 'DELETE' });
+}
+
+export function uploadAssetImage(id: number, image: Blob) {
+    return fetchJson<{ ok: true }>(`/api/assets/${id}/image`, {
+        method: 'PUT',
+        headers: { 'Content-Type': image.type },
+        body: image,
+    });
+}
+
+export function assetImageUrl(asset: Pick<Asset, 'id' | 'imageVersion'>) {
+    return `/api/assets/${asset.id}/image?v=${asset.imageVersion}`;
+}

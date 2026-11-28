@@ -3,6 +3,7 @@ import { TAB_GROUPS, TAB_LABELS, type TabId } from '../hooks/useSectionTab';
 import {
     ActivityIcon,
     BarsIcon,
+    BoxIcon,
     CalendarCheckIcon,
     CalendarIcon,
     CardIcon,
@@ -29,6 +30,7 @@ const TAB_ICONS: Record<TabId, ReactNode> = {
     workouts: <DumbbellIcon />,
     meals: <UtensilsIcon />,
     car: <CarIcon />,
+    assets: <BoxIcon />,
     tax: <ReceiptIcon />,
     budgets: <PieIcon />,
     recurring: <RepeatIcon />,
