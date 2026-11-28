@@ -68,7 +68,7 @@ export function carServiceReport(visits: CarServiceVisit[], filter: CarVisitType
     const totalFor = (type: CarVisitType) => sum(visits.filter((visit) => visit.visitType === type), (visit) => visit.total);
     const details = visits.map((visit) => {
         const heading = [visit.date, visit.visitType, money(visit.total)].join(' · ');
-        const mileage = visit.visitType === 'Normal service' && visit.odometerKm != null
+        const mileage = visit.odometerKm != null
             ? visit.odometerKm.toLocaleString('en-MY') + ' km' : '';
         const metadata = [mileage, visit.notes].filter(Boolean).join(' · ');
         const rows = visit.items.map((item) => [item.description, item.category, money(item.amount)]);

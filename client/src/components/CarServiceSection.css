@@ -1,35 +1,48 @@
-.service-log { min-width: 0; container-type: inline-size; }
-.service-log .variable-expenses-stats { align-items: center; }
-.service-log .variable-expense-list { grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr)); }
-.service-log .service-spend-card { --spend-color: var(--series-teal); border-inline-start: 3px solid var(--spend-color); }
-.service-spend-card[data-visit-type="Normal service"] { --spend-color: var(--series-blue); }
-.service-spend-card[data-visit-type="Accessory repair"] { --spend-color: var(--series-amber); }
-.service-share { background: var(--spend-color); }
-.service-spend-card .variable-expense-card-meta { grid-template-columns: auto auto; }
-.service-record { display: flex; align-items: center; border-bottom: 1px solid var(--border); }
-.service-record .variable-txn { min-width: 0; flex: 1; border-bottom: 0; }
-.service-edit { padding: 8px; }
-.service-detail { padding-inline-start: 24px; }
-.service-detail table { table-layout: auto; }
-.service-detail td:first-child, .service-detail p { overflow-wrap: anywhere; }
-.service-detail p { margin: 6px 0; white-space: pre-wrap; }
-.service-editor-subtotal { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
-.service-editor fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
-.service-editor legend { font-weight: 700; padding: 0 0 8px; }
-.service-fields, .service-line { display: grid; gap: 8px; align-items: end; }
-.service-fields { grid-template-columns: 1.2fr 1fr 1fr 1.5fr; }
-.service-line { grid-template-columns: minmax(94px, 1fr) minmax(120px, 2.5fr) minmax(85px, .9fr) auto; margin-bottom: 8px; }
-.service-line button { align-self: end; min-height: 34px; }
-.service-editor label { min-width: 0; }
-.service-editor input, .service-editor select { width: 100%; min-width: 0; box-sizing: border-box; }
-.service-editor h4 { margin: 14px 0 6px; }
-.service-controls { justify-content: flex-end; border-top: 1px solid var(--border); margin-top: 10px; padding-top: 10px; }
-.service-controls .btn-danger-link { margin-right: auto; }
-@container (max-width: 580px) {
-  .service-fields, .service-line { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .service-line { border-top: 1px solid var(--border); padding-top: 6px; }
-  .service-line button { justify-self: end; }
-  .service-record .variable-txn-main { flex-direction: column; align-items: stretch; gap: 2px; }
-  .service-detail { padding-inline-start: 0; }
-  .service-detail th, .service-detail td { padding-inline: 6px; }
+.service-log { min-width: 0; }
+
+/* History rows */
+.variable-txn.service-row { grid-template-columns: auto minmax(0, 1fr) auto auto; padding-block: 10px; }
+.service-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+/* An opened visit shows its whole title. */
+.service-row[aria-expanded="true"] .variable-txn-title { white-space: normal; overflow-wrap: anywhere; }
+.service-chevron { display: inline-flex; color: var(--text-dim); transition: transform 0.15s; }
+.service-row[aria-expanded="true"] .service-chevron { transform: rotate(90deg); }
+.service-detail { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; margin: 8px 0 12px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.service-detail ul { align-self: stretch; margin: 0; padding: 0; list-style: none; }
+.service-detail li { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+.service-detail li:last-child { border-bottom: 0; }
+.service-detail li > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.service-detail li > span:last-child { white-space: nowrap; }
+.service-detail small { margin-left: 8px; color: var(--text-muted); font-size: 0.75rem; }
+.service-detail p { margin: 0; font-size: 0.875rem; }
+.service-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 28px 12px; text-align: center; }
+.service-empty p { margin: 0; }
+
+/* The layout already spaces its rows. */
+.service-log .summary-grid-4 { margin-bottom: 0; }
+
+/* Add / edit modal */
+.record-modal.service-modal { max-width: 620px; container-type: inline-size; }
+.service-form fieldset { display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.service-form .pill-group { align-self: flex-start; flex-shrink: 0; }
+.service-form .form-field > span { font-size: 0.8rem; color: var(--text-muted); }
+.service-form input, .service-form select { width: 100%; min-width: 0; height: 38px; box-sizing: border-box; }
+.service-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.service-field-wide { grid-column: 1 / -1; }
+.service-items-title { margin: 4px 0 0; font-size: 0.875rem; color: var(--text-heading); }
+.service-line { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 2fr) minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+.service-line .trip-txn-action { height: 38px; font-size: 1.2rem; }
+.service-form .show-more-btn { margin-top: 0; }
+.service-tyre-note { margin: 0; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--surface); font-size: 0.8rem; color: var(--text-muted); }
+.service-total { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+
+/* Phones: item name on its own line, above category and amount */
+@container (max-width: 460px) {
+  .service-line { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+  .service-line-name { grid-column: 1 / -1; grid-row: 1; }
+}
+
+@media (max-width: 480px) {
+  .variable-txn.service-row { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .service-chevron { display: none; }
 }

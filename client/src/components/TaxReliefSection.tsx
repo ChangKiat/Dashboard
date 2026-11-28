@@ -18,7 +18,11 @@ import {
 import { useFormatMYR } from '../hooks/useAmountVisibility';
 import { useRefreshSignal } from '../hooks/useRefreshSignal';
 import ConfirmDialog from './ConfirmDialog';
+import { ReceiptIcon, ShieldIcon, WalletIcon } from './icons';
+import RecordModal from './RecordModal';
 import RowActions from './RowActions';
+import SummaryCard from './SummaryCard';
+import './TaxReliefSection.css';
 
 const MAX_RECEIPT_BYTES = 10 * 1024 * 1024;
 const ACCEPTED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic'];
@@ -124,10 +128,12 @@ function TaxReliefDocuments({ year }: { year: number }) {
     }
 
     return (
-        <section className="tax-relief-block tax-documents" aria-labelledby="tax-documents-title">
-            <div className="tax-relief-block-header">
-                <h3 id="tax-documents-title">Tax documents for {year}</h3>
-                <span className="muted tax-documents-limit">PDF · Up to 10 MB per file</span>
+        <section className="card tax-documents" aria-labelledby="tax-documents-title">
+            <div className="tax-card-header">
+                <div>
+                    <h3 id="tax-documents-title">Tax documents for {year}</h3>
+                    <p className="budgets-card-sub">PDF · Up to 10 MB per file</p>
+                </div>
             </div>
             {error && (
                 <div className="tax-document-card tax-document-header">
@@ -201,6 +207,8 @@ export default function TaxReliefSection() {
     const [actionError, setActionError] = useState<string | null>(null);
     const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
     const [showAllCategories, setShowAllCategories] = useState(false);
+    const [missingOnly, setMissingOnly] = useState(false);
+    const [query, setQuery] = useState('');
     const [receiptToDelete, setReceiptToDelete] = useState<TaxReliefReceipt | null>(null);
     const attachInputRef = useRef<HTMLInputElement>(null);
     const [attachClaimId, setAttachClaimId] = useState<number | null>(null);
@@ -247,10 +255,22 @@ export default function TaxReliefSection() {
 
     const selectedCategory = categoryById.get(form.category);
 
-    const visibleClaims = useMemo(
-        () => (data?.claims ?? []).filter((c) => !categoryFilter || c.category === categoryFilter),
-        [data?.claims, categoryFilter]
+    const isMissingReceipt = useCallback(
+        (claim: TaxReliefClaim) => claim.receipts.length === 0 && categoryById.get(claim.category)?.receipt !== false,
+        [categoryById]
     );
+
+    const visibleClaims = useMemo(() => {
+        const term = query.trim().toLowerCase();
+        return (data?.claims ?? []).filter(
+            (c) =>
+                (!categoryFilter || c.category === categoryFilter) &&
+                (!missingOnly || isMissingReceipt(c)) &&
+                [c.description, c.notes, categoryById.get(c.category)?.label, formatDate(c.date)].some((value) =>
+                    value?.toLowerCase().includes(term)
+                )
+        );
+    }, [data?.claims, categoryFilter, missingOnly, query, categoryById, isMissingReceipt]);
 
     const visibleCategories = useMemo(
         () => (data?.byCategory ?? []).filter((c) => showAllCategories || c.claimCount > 0),
@@ -270,9 +290,25 @@ export default function TaxReliefSection() {
         setFormFiles([]);
     };
 
+    const clearFilters = () => {
+        setCategoryFilter(null);
+        setMissingOnly(false);
+        setQuery('');
+    };
+
+    const selectYear = (next: number) => {
+        if (next === year) return;
+        closeForm();
+        setActionError(null);
+        clearFilters();
+        setLoading(true);
+        selectedYear.current = next;
+        setYear(next);
+    };
+
     const openCreate = () => {
         setEditingId(null);
-        setForm(emptyForm(year));
+        setForm({ ...emptyForm(year), ...(categoryFilter ? { category: categoryFilter } : {}) });
         setFormFiles([]);
         setActionError(null);
         setShowForm(true);
@@ -293,6 +329,7 @@ export default function TaxReliefSection() {
     };
 
     const handleSubmit = async () => {
+        if (saving) return;
         const amount = parseFloat(form.amount);
         if (!form.date || !form.description.trim() || !Number.isFinite(amount) || amount <= 0) {
             setActionError('Enter a date, description and amount.');
@@ -306,6 +343,7 @@ export default function TaxReliefSection() {
 
         setSaving(true);
         setActionError(null);
+        let claimId = editingId;
         try {
             const fields = {
                 date: form.date,
@@ -314,7 +352,6 @@ export default function TaxReliefSection() {
                 amount,
                 notes: form.notes.trim() || null,
             };
-            let claimId = editingId;
             if (claimId != null) {
                 await updateTaxReliefClaim(claimId, fields);
             } else {
@@ -322,13 +359,20 @@ export default function TaxReliefSection() {
             }
             for (const file of formFiles) {
                 await uploadTaxReliefReceipt(claimId, file);
+                // A retry after a failed upload must not send this one again.
+                setFormFiles((files) => files.filter((other) => other !== file));
             }
             closeForm();
+            clearFilters();
             const claimYear = parseInt(form.date.slice(0, 4), 10);
-            if (claimYear !== year) setYear(claimYear);
-            else await loadData();
+            if (claimYear !== year) {
+                selectedYear.current = claimYear;
+                setYear(claimYear);
+            } else await loadData();
         } catch (err) {
             setActionError(err instanceof Error ? err.message : 'Failed to save claim');
+            // The claim may already be saved: edit it on the next try instead of adding it twice.
+            if (claimId != null) setEditingId(claimId);
             await loadData().catch(() => undefined);
         } finally {
             setSaving(false);
@@ -340,7 +384,6 @@ export default function TaxReliefSection() {
         setActionError(null);
         try {
             await deleteTaxReliefClaim(claim.id);
-            if (editingId === claim.id) closeForm();
             await loadData();
         } catch (err) {
             setActionError(err instanceof Error ? err.message : 'Failed to delete claim');
@@ -394,102 +437,311 @@ export default function TaxReliefSection() {
     };
 
     const toolbar = (
-        <div className="car-service-toolbar">
-            <label className="tax-relief-year">
-                <span className="muted">Year of assessment</span>
-                <select value={year} onChange={(e) => {
-                    closeForm();
-                    setActionError(null);
-                    setCategoryFilter(null);
-                    setLoading(true);
-                    selectedYear.current = Number(e.target.value);
-                    setYear(selectedYear.current);
-                }} disabled={saving || loading}>
-                    {yearOptions.map((y) => (
-                        <option key={y} value={y}>
+        <div className="page-toolbar">
+            <div className="page-toolbar-group">
+                <span className="muted tax-year-label">Year of assessment</span>
+                <div className="pill-group" role="group" aria-label="Year of assessment">
+                    {[...yearOptions].reverse().map((y) => (
+                        <button
+                            key={y}
+                            type="button"
+                            className={y === year ? 'pill-group-btn active' : 'pill-group-btn'}
+                            aria-pressed={y === year}
+                            disabled={saving || loading}
+                            onClick={() => selectYear(y)}
+                        >
                             {y}
-                        </option>
+                        </button>
                     ))}
-                </select>
-            </label>
-            <div className="car-service-toolbar-actions">
-                <button type="button" className="btn-primary" onClick={openCreate} disabled={saving || loading}>
-                    Add claim
+                </div>
+            </div>
+            <div className="page-toolbar-group">
+                <button type="button" className="btn-primary" onClick={openCreate} disabled={saving || loading || !data}>
+                    + Add claim
                 </button>
             </div>
         </div>
     );
 
-    if (loading && !data) return <section className="panel"><p className="muted">Loading tax relief…</p></section>;
+    if (loading && !data) return <section className="panel">{toolbar}<p className="muted">Loading tax relief…</p></section>;
     if (error || !data) {
         return (
             <section className="panel">
                 {toolbar}
-                <p className="error">{error ?? 'Failed to load'}</p>
+                <p className="error" role="alert">
+                    {error ?? 'Failed to load'}{' '}
+                    <button
+                        type="button"
+                        className="btn-link"
+                        onClick={() => {
+                            setError(null);
+                            void loadData().catch((err: Error) => setError(err.message));
+                        }}
+                    >
+                        Retry
+                    </button>
+                </p>
             </section>
         );
     }
 
-    if (loading || data.year !== year) return <section className="panel">{toolbar}<p>Loading tax relief…</p></section>;
+    if (loading || data.year !== year) return <section className="panel">{toolbar}<p className="muted">Loading tax relief…</p></section>;
 
     const { summary } = data;
+    const missing = summary.missingReceiptCount;
+    const filtered = Boolean(categoryFilter || missingOnly || query.trim());
+
+    // How much of the picked category's limit is still free, not counting the claim being edited.
+    let limitNote: string | null = null;
+    if (selectedCategory?.limit != null && form.date.startsWith(String(year))) {
+        const claimed = data.byCategory.find((c) => c.category === form.category)?.claimed ?? 0;
+        const original = data.claims.find((c) => c.id === editingId);
+        const left = selectedCategory.limit - claimed + (original?.category === form.category ? original.amount : 0);
+        limitNote =
+            left > 0
+                ? `${formatMYR(left)} of ${formatMYR(selectedCategory.limit)} still claimable`
+                : `The ${formatMYR(selectedCategory.limit)} limit is already reached`;
+    }
 
     return (
-        <section className="panel car-service-section tax-relief-section">
+        <section className="panel">
             {toolbar}
-            <TaxReliefDocuments key={year} year={year} />
-            {year !== 2025 && year !== 2026 && (
-                <p className="muted">Relief estimates use the {year < 2025 ? 2025 : 2026} rules for reference.</p>
-            )}
+            <div className="expenses-layout">
+                {year !== 2025 && year !== 2026 && (
+                    <p className="muted tax-note">Relief estimates use the {year < 2025 ? 2025 : 2026} rules for reference.</p>
+                )}
 
-            <div className="trips-summary-strip">
-                <div className="trips-summary-item trips-summary-item--spent">
-                    <span className="trips-summary-label">Relief claimable</span>
-                    <span className="trips-summary-value">{formatMYR(summary.totalEligible)}</span>
-                    <span className="trips-summary-sub muted">
-                        incl. {formatMYR(summary.individualRelief)} individual relief
-                    </span>
+                <div className="budgets-summary-grid">
+                    <SummaryCard
+                        tone="income"
+                        icon={<ShieldIcon size={26} />}
+                        label="Relief claimable"
+                        value={formatMYR(summary.totalEligible)}
+                        sub={`Includes ${formatMYR(summary.individualRelief)} individual relief`}
+                    />
+                    <SummaryCard
+                        tone="spend"
+                        icon={<WalletIcon size={26} />}
+                        label="Total spent"
+                        value={formatMYR(summary.totalClaimed)}
+                        sub={`${summary.claimCount} ${summary.claimCount === 1 ? 'claim' : 'claims'}`}
+                    />
+                    <SummaryCard
+                        tone="net"
+                        icon={<ReceiptIcon size={26} />}
+                        label="Missing receipts"
+                        value={String(missing)}
+                        variant={missing > 0 ? 'warning' : 'default'}
+                        sub={`${summary.receiptCount} attached${missing > 0 ? ' · Add the rest before filing' : ''}`}
+                    />
                 </div>
-                <div className="trips-summary-item">
-                    <span className="trips-summary-label">Total spent</span>
-                    <span className="trips-summary-value">{formatMYR(summary.totalClaimed)}</span>
-                </div>
-                <div className="trips-summary-item">
-                    <span className="trips-summary-label">Claims</span>
-                    <span className="trips-summary-value">{summary.claimCount}</span>
-                </div>
-                <div className="trips-summary-item">
-                    <span className="trips-summary-label">Receipts</span>
-                    <span className="trips-summary-value">{summary.receiptCount}</span>
-                </div>
-                <div className="trips-summary-item">
-                    <span className="trips-summary-label">Missing receipts</span>
-                    <span
-                        className={`trips-summary-value${summary.missingReceiptCount > 0 ? ' tax-relief-warn' : ''}`}
-                    >
-                        {summary.missingReceiptCount}
-                    </span>
-                </div>
+
+                {actionError && !showForm && <p className="error" role="alert">{actionError}</p>}
+
+                <section className="card" aria-labelledby="tax-claims-title">
+                    <div className="variable-txns-header">
+                        <div>
+                            <h3 id="tax-claims-title">
+                                {categoryFilter ? `Claims · ${categoryById.get(categoryFilter)?.label}` : 'Claims'}
+                            </h3>
+                            <p className="budgets-card-sub">
+                                {visibleClaims.length} {visibleClaims.length === 1 ? 'claim' : 'claims'} ·{' '}
+                                {formatMYR(visibleClaims.reduce((total, c) => total + c.amount, 0))}
+                            </p>
+                        </div>
+                        {data.claims.length > 0 && (
+                            <div className="variable-txns-tools">
+                                {(missing > 0 || missingOnly) && (
+                                    <button
+                                        type="button"
+                                        className={missingOnly ? 'btn-primary' : 'btn-secondary'}
+                                        aria-pressed={missingOnly}
+                                        onClick={() => setMissingOnly((v) => !v)}
+                                    >
+                                        Missing receipts ({missing})
+                                    </button>
+                                )}
+                                {filtered && (
+                                    <button type="button" className="btn-link" onClick={clearFilters}>
+                                        Clear filters
+                                    </button>
+                                )}
+                                <input
+                                    type="search"
+                                    aria-label="Search claims"
+                                    placeholder="Search claims"
+                                    value={query}
+                                    onChange={(e) => setQuery(e.target.value)}
+                                />
+                            </div>
+                        )}
+                    </div>
+
+                    {visibleClaims.length === 0 ? (
+                        <div className="tax-empty">
+                            <p className="muted">
+                                {data.claims.length === 0
+                                    ? `No claims for ${year} yet. Add a purchase and attach its receipt.`
+                                    : 'No claims match this filter.'}
+                            </p>
+                            <button type="button" className="btn-secondary" onClick={openCreate} disabled={saving}>
+                                + Add claim
+                            </button>
+                        </div>
+                    ) : (
+                        <ul className="variable-txn-list">
+                            {visibleClaims.map((claim) => (
+                                <li key={claim.id} className="tax-claim">
+                                    <span
+                                        aria-hidden="true"
+                                        className={`category-icon category-icon--sm category-icon--${isMissingReceipt(claim) ? 'amber' : 'teal'}`}
+                                    >
+                                        <ReceiptIcon size={16} />
+                                    </span>
+                                    <div className="tax-claim-main">
+                                        <span className="tax-claim-title">{claim.description}</span>
+                                        <span className="tax-claim-meta">
+                                            {formatDate(claim.date)} · {categoryById.get(claim.category)?.label ?? claim.category}
+                                            {claim.notes ? ` · ${claim.notes}` : ''}
+                                        </span>
+                                        <div className="tax-relief-receipts">
+                                            {claim.receipts.map((r) => (
+                                                <span key={r.id} className="tax-relief-receipt">
+                                                    <a
+                                                        href={taxReliefReceiptUrl(r.id)}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        title={`${r.fileName} · ${formatBytes(r.sizeBytes)}`}
+                                                    >
+                                                        {r.fileName}
+                                                    </a>
+                                                    <button
+                                                        type="button"
+                                                        className="tax-relief-receipt-remove"
+                                                        aria-label={`Remove ${r.fileName}`}
+                                                        onClick={() => setReceiptToDelete(r)}
+                                                        disabled={saving}
+                                                    >
+                                                        ×
+                                                    </button>
+                                                </span>
+                                            ))}
+                                            {claim.receipts.length === 0 &&
+                                                (isMissingReceipt(claim) ? (
+                                                    <span className="budget-badge budget-badge--warning">Receipt missing</span>
+                                                ) : (
+                                                    <span className="tax-claim-meta">No receipt needed</span>
+                                                ))}
+                                            <button
+                                                type="button"
+                                                className="btn-add"
+                                                aria-label={`Attach a receipt to ${claim.description}`}
+                                                onClick={() => startAttach(claim.id)}
+                                                disabled={saving}
+                                            >
+                                                + Attach
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <span className="variable-txn-amount tax-claim-amount">{formatMYR(claim.amount)}</span>
+                                    <RowActions
+                                        onEdit={() => openEdit(claim)}
+                                        onDelete={() => void handleDeleteClaim(claim)}
+                                        deleteLabel={claim.description}
+                                        confirmTitle="Delete claim?"
+                                        confirmMessage={`"${claim.description}" and its ${claim.receipts.length} receipt(s) will be permanently removed.`}
+                                    />
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </section>
+
+                <section className="card" aria-labelledby="tax-categories-title">
+                    <div className="tax-card-header">
+                        <div>
+                            <h3 id="tax-categories-title">Relief by category</h3>
+                            <p className="budgets-card-sub">Select a category to see only its claims.</p>
+                        </div>
+                        <button type="button" className="btn-link" onClick={() => setShowAllCategories((v) => !v)}>
+                            {showAllCategories ? 'Hide unused' : 'Show all categories'}
+                        </button>
+                    </div>
+                    {visibleCategories.length === 0 ? (
+                        <p className="muted">No claims for {year} yet.</p>
+                    ) : (
+                        <div className="tax-relief-categories">
+                            {visibleCategories.map((c) => {
+                                const pct = c.limit ? Math.min(100, (c.claimed / c.limit) * 100) : 0;
+                                const full = c.limit != null && c.claimed >= c.limit;
+                                const active = categoryFilter === c.category;
+                                return (
+                                    <button
+                                        key={c.category}
+                                        type="button"
+                                        className={`tax-relief-category${active ? ' active' : ''}${
+                                            c.claimCount === 0 ? ' unused' : ''
+                                        }`}
+                                        onClick={() => setCategoryFilter(active ? null : c.category)}
+                                        aria-pressed={active}
+                                    >
+                                        <span className="tax-relief-category-label">{c.label}</span>
+                                        <span className="tax-relief-category-amount">
+                                            {formatMYR(c.claimed)}
+                                            {c.limit != null && <span className="muted"> / {formatMYR(c.limit)}</span>}
+                                        </span>
+                                        {c.limit != null && (
+                                            <span className="tax-relief-bar">
+                                                <span
+                                                    className={`tax-relief-bar-fill${full ? ' full' : ''}`}
+                                                    style={{ width: `${pct}%` }}
+                                                />
+                                            </span>
+                                        )}
+                                        <span className="tax-relief-category-meta muted">
+                                            {full
+                                                ? c.claimed > c.limit!
+                                                    ? `Limit reached · ${formatMYR(c.claimed - c.limit!)} over`
+                                                    : 'Limit reached'
+                                                : c.limit != null
+                                                  ? `${formatMYR(c.limit - c.claimed)} left`
+                                                  : categoryById.get(c.category)?.hint}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+                </section>
+
+                <TaxReliefDocuments key={year} year={year} />
+
+                <p className="muted tax-note">
+                    Limits follow LHDN individual reliefs for YA {Math.min(Math.max(year, 2025), 2026)}. Check the
+                    latest Budget before filing; keep receipts for 7 years.
+                </p>
             </div>
 
-            {actionError && <p className="error">{actionError}</p>}
-
-            {showForm && (
-                <div className="trips-form tax-relief-form">
-                    <div className="span-full tax-relief-form-title">
-                        {editingId != null ? 'Edit claim' : 'New claim'}
-                    </div>
-                    <label>
-                        Date
-                        <input
-                            type="date"
-                            value={form.date}
-                            onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
-                        />
-                    </label>
-                    <label>
-                        Category
+            <RecordModal
+                title={editingId != null ? 'Edit claim' : 'Add claim'}
+                open={showForm}
+                saving={saving}
+                error={actionError}
+                onClose={closeForm}
+                onSave={() => void handleSubmit()}
+            >
+                <form
+                    className="tax-form"
+                    noValidate
+                    onSubmit={(e) => {
+                        e.preventDefault();
+                        void handleSubmit();
+                    }}
+                >
+                    <div className="form-field">
+                        <label htmlFor="tax-category">Category</label>
                         <select
+                            id="tax-category"
                             value={form.category}
                             onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
                         >
@@ -504,226 +756,74 @@ export default function TaxReliefSection() {
                                 </optgroup>
                             ))}
                         </select>
-                    </label>
-                    <label>
-                        Amount (RM)
+                        {selectedCategory && (
+                            <span className="muted form-hint">
+                                {selectedCategory.hint}
+                                {!selectedCategory.receipt && ' · No receipt needed'}
+                            </span>
+                        )}
+                        {limitNote && <span className="form-hint tax-limit-note">{limitNote}</span>}
+                    </div>
+                    <div className="form-field">
+                        <label htmlFor="tax-description">Description</label>
                         <input
-                            type="number"
-                            min={0}
-                            step={0.01}
-                            value={form.amount}
-                            onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
-                        />
-                    </label>
-                    {selectedCategory && (
-                        <p className="span-full muted tax-relief-hint">
-                            {selectedCategory.hint}
-                            {!selectedCategory.receipt && ' · No receipt needed'}
-                        </p>
-                    )}
-                    <label className="span-full">
-                        Description
-                        <input
+                            id="tax-description"
+                            autoFocus
                             type="text"
                             value={form.description}
                             onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                             placeholder="e.g. MPH Bookstore, Fitness First membership"
                         />
-                    </label>
-                    <label className="span-full">
-                        Notes
+                    </div>
+                    <div className="tax-form-row">
+                        <div className="form-field">
+                            <label htmlFor="tax-date">Date</label>
+                            <input
+                                id="tax-date"
+                                type="date"
+                                value={form.date}
+                                onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+                            />
+                        </div>
+                        <div className="form-field">
+                            <label htmlFor="tax-amount">Amount (RM)</label>
+                            <input
+                                id="tax-amount"
+                                type="number"
+                                inputMode="decimal"
+                                min={0}
+                                step={0.01}
+                                value={form.amount}
+                                onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+                            />
+                        </div>
+                    </div>
+                    <div className="form-field">
+                        <label htmlFor="tax-notes">Notes</label>
                         <input
+                            id="tax-notes"
                             type="text"
                             value={form.notes}
                             onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
                             placeholder="Optional"
                         />
-                    </label>
-                    <label className="span-full">
-                        {editingId != null ? 'Add more receipts' : 'Receipts'}
+                    </div>
+                    <div className="form-field">
+                        <label htmlFor="tax-receipts">{editingId != null ? 'Add more receipts' : 'Receipts'}</label>
                         <input
+                            id="tax-receipts"
                             type="file"
                             multiple
+                            disabled={saving}
                             accept={ACCEPTED_TYPES.join(',')}
                             onChange={(e) => setFormFiles(Array.from(e.target.files ?? []))}
                         />
-                        <span className="tax-relief-hint">PDF or image, up to 10 MB each.</span>
-                    </label>
-                    <div className="trips-form-actions span-full">
-                        <button type="button" className="btn-secondary" onClick={closeForm} disabled={saving}>
-                            Cancel
-                        </button>
-                        <button
-                            type="button"
-                            className="btn-primary"
-                            onClick={() => void handleSubmit()}
-                            disabled={saving}
-                        >
-                            {saving ? 'Saving…' : editingId != null ? 'Save changes' : 'Add claim'}
-                        </button>
+                        <span className="muted form-hint">PDF or image, up to 10 MB each.</span>
                     </div>
-                </div>
-            )}
-
-            <div className="tax-relief-block">
-                <div className="tax-relief-block-header">
-                    <h3>By category</h3>
-                    <button
-                        type="button"
-                        className="btn-link"
-                        onClick={() => setShowAllCategories((v) => !v)}
-                    >
-                        {showAllCategories ? 'Hide unused' : 'Show all categories'}
-                    </button>
-                </div>
-                {visibleCategories.length === 0 ? (
-                    <p className="muted">No claims for {year} yet.</p>
-                ) : (
-                    <div className="tax-relief-categories">
-                        {visibleCategories.map((c) => {
-                            const pct = c.limit ? Math.min(100, (c.claimed / c.limit) * 100) : 0;
-                            const full = c.limit != null && c.claimed >= c.limit;
-                            const active = categoryFilter === c.category;
-                            return (
-                                <button
-                                    key={c.category}
-                                    type="button"
-                                    className={`tax-relief-category${active ? ' active' : ''}${
-                                        c.claimCount === 0 ? ' unused' : ''
-                                    }`}
-                                    onClick={() => setCategoryFilter(active ? null : c.category)}
-                                    aria-pressed={active}
-                                >
-                                    <span className="tax-relief-category-label">{c.label}</span>
-                                    <span className="tax-relief-category-amount">
-                                        {formatMYR(c.claimed)}
-                                        {c.limit != null && (
-                                            <span className="muted"> / {formatMYR(c.limit)}</span>
-                                        )}
-                                    </span>
-                                    {c.limit != null && (
-                                        <span className="tax-relief-bar">
-                                            <span
-                                                className={`tax-relief-bar-fill${full ? ' full' : ''}`}
-                                                style={{ width: `${pct}%` }}
-                                            />
-                                        </span>
-                                    )}
-                                    <span className="tax-relief-category-meta muted">
-                                        {full
-                                            ? c.claimed > c.limit!
-                                                ? `Limit reached · ${formatMYR(c.claimed - c.limit!)} over`
-                                                : 'Limit reached'
-                                            : c.limit != null
-                                              ? `${formatMYR(c.limit - c.claimed)} left`
-                                              : categoryById.get(c.category)?.hint}
-                                    </span>
-                                </button>
-                            );
-                        })}
-                    </div>
-                )}
-            </div>
-
-            <div className="tax-relief-block">
-                <div className="tax-relief-block-header">
-                    <h3>
-                        Claims
-                        {categoryFilter && (
-                            <span className="muted"> · {categoryById.get(categoryFilter)?.label}</span>
-                        )}
-                    </h3>
-                    {categoryFilter && (
-                        <button type="button" className="btn-link" onClick={() => setCategoryFilter(null)}>
-                            Clear filter
-                        </button>
-                    )}
-                </div>
-                {visibleClaims.length === 0 ? (
-                    <p className="muted">Nothing here yet. Use Add claim to record a purchase and its receipt.</p>
-                ) : (
-                    <div className="trips-table-wrap">
-                        <table className="data-table trips-expenses-table tax-relief-table">
-                            <thead>
-                                <tr>
-                                    <th className="tax-relief-col-date">Date</th>
-                                    <th>Item</th>
-                                    <th className="trips-col-num tax-relief-col-amount">Amount</th>
-                                    <th className="tax-relief-col-receipts">Receipts</th>
-                                    <th className="actions-col" />
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {visibleClaims.map((claim) => (
-                                    <tr key={claim.id}>
-                                        <td>{formatDate(claim.date)}</td>
-                                        <td>
-                                            <div>{claim.description}</div>
-                                            <div className="muted tax-relief-sub">
-                                                {categoryById.get(claim.category)?.label ?? claim.category}
-                                                {claim.notes ? ` · ${claim.notes}` : ''}
-                                            </div>
-                                        </td>
-                                        <td className="trips-col-num">{formatMYR(claim.amount)}</td>
-                                        <td>
-                                            <div className="tax-relief-receipts">
-                                                {claim.receipts.map((r) => (
-                                                    <span key={r.id} className="tax-relief-receipt">
-                                                        <a
-                                                            href={taxReliefReceiptUrl(r.id)}
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            title={`${r.fileName} · ${formatBytes(r.sizeBytes)}`}
-                                                        >
-                                                            {r.fileName}
-                                                        </a>
-                                                        <button
-                                                            type="button"
-                                                            className="tax-relief-receipt-remove"
-                                                            aria-label={`Remove ${r.fileName}`}
-                                                            onClick={() => setReceiptToDelete(r)}
-                                                            disabled={saving}
-                                                        >
-                                                            ×
-                                                        </button>
-                                                    </span>
-                                                ))}
-                                                {claim.receipts.length === 0 &&
-                                                    (categoryById.get(claim.category)?.receipt === false ? (
-                                                        <span className="muted tax-relief-sub">Not needed</span>
-                                                    ) : (
-                                                        <span className="tax-relief-missing">Missing</span>
-                                                    ))}
-                                                <button
-                                                    type="button"
-                                                    className="btn-link"
-                                                    onClick={() => startAttach(claim.id)}
-                                                    disabled={saving}
-                                                >
-                                                    + Attach
-                                                </button>
-                                            </div>
-                                        </td>
-                                        <td className="actions-col">
-                                            <RowActions
-                                                onEdit={() => openEdit(claim)}
-                                                onDelete={() => void handleDeleteClaim(claim)}
-                                                deleteLabel={claim.description}
-                                                confirmMessage={`"${claim.description}" and its ${claim.receipts.length} receipt(s) will be permanently removed.`}
-                                            />
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
-
-            <p className="muted tax-relief-footnote">
-                Limits follow LHDN individual reliefs for YA {Math.min(Math.max(year, 2025), 2026)}. Check the
-                latest Budget before filing; keep receipts for 7 years.
-            </p>
+                    {/* Lets Enter save from any field. */}
+                    <button type="submit" hidden />
+                </form>
+            </RecordModal>
 
             <input
                 ref={attachInputRef}
